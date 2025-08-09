@@ -35,5 +35,8 @@ func (msg *ServerHello) Write(body []byte) []byte {
 	body = append(body, 0) // legacy_session_id
 	body = binary.BigEndian.AppendUint16(body, msg.CipherSuite)
 	body = append(body, 0) // legacy_compression_methods
-	return msg.Extensions.Write(body, false)
+	body, mark := MarkUin16Offset(body)
+	body = msg.Extensions.Write(body, false, true, msg.IsHelloRetryRequest())
+	FillUin16Offset(body, mark)
+	return body
 }

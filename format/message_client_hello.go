@@ -46,7 +46,7 @@ func (msg *ClientHello) Parse(body []byte) (err error) {
 	if offset, extensionsBody, err = ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
-	if err = msg.Extensions.Parse(extensionsBody, false); err != nil {
+	if err = msg.Extensions.Parse(extensionsBody, false, false, false); err != nil {
 		return err
 	}
 	return ParserReadFinish(body, offset)

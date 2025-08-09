@@ -3,6 +3,7 @@ package format
 import (
 	"encoding/binary"
 	"errors"
+	"math"
 )
 
 type PlaintextRecordHeader struct {
@@ -34,7 +35,7 @@ func (hdr *PlaintextRecordHeader) Parse(datagram []byte) (n int, body []byte, er
 		return 0, nil, ErrPlaintextRecordHeaderTooShort
 	}
 	hdr.ContentType = datagram[0] // checked elsewhere
-	if datagram[1] != 254 || datagram[2] != 253 {
+	if datagram[1] != 0xFE || datagram[2] != 0xFD {
 		return 0, nil, ErrPlaintextRecordWrongLegacyRecordVersion
 	}
 	hdr.Epoch = binary.BigEndian.Uint16(datagram[3:5])
@@ -44,6 +45,17 @@ func (hdr *PlaintextRecordHeader) Parse(datagram []byte) (n int, body []byte, er
 		return 0, nil, ErrPlaintextRecordBodyTooShort
 	}
 	return endOffset, datagram[13:endOffset], nil
+}
+
+func (hdr *PlaintextRecordHeader) Write(datagram []byte, length int) []byte {
+	datagram = append(datagram, hdr.ContentType, 0xFE, 0xFD)
+	datagram = binary.BigEndian.AppendUint16(datagram, hdr.Epoch)
+	datagram = AppendUint48(datagram, hdr.SequenceNumber)
+	if length < 0 || length > math.MaxUint16 {
+		panic("length of plaintext record out of range")
+	}
+	datagram = binary.BigEndian.AppendUint16(datagram, uint16(length))
+	return datagram
 }
 
 type CiphertextRecordHeader struct {

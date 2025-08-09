@@ -86,3 +86,12 @@ func (hdr *MessageHandshakeHeader) Parse(record []byte) (n int, body []byte, err
 	}
 	return endOffset, record[12:endOffset], nil
 }
+
+func (hdr *MessageHandshakeHeader) Write(datagram []byte) []byte {
+	datagram = append(datagram, hdr.HandshakeType)
+	datagram = AppendUint24(datagram, hdr.Length)
+	datagram = binary.BigEndian.AppendUint16(datagram, hdr.MessageSeq)
+	datagram = AppendUint24(datagram, hdr.FragmentOffset)
+	datagram = AppendUint24(datagram, hdr.FragmentLength)
+	return datagram
+}

@@ -46,3 +46,8 @@ func (msg *SignatureAlgorithmsSet) Parse(body []byte) (err error) {
 	}
 	return ParserReadFinish(body, offset)
 }
+
+func (msg *SignatureAlgorithmsSet) Write(body []byte) []byte {
+	// TODO
+	return body
+}

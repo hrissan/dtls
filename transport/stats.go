@@ -33,6 +33,7 @@ type Stats interface {
 	ErrorClientHelloUnsupportedParams(msg format.ClientHello, addr netip.AddrPort, err error)
 	ClientHelloMessage(msg format.ClientHello, addr netip.AddrPort)
 	ServerHelloMessage(msg format.ServerHello, addr netip.AddrPort)
+	ServerHelloRetryRequestQueueOverloaded(addr netip.AddrPort)
 	CookieCreated(addr netip.AddrPort)
 	CookieChecked(valid bool, addr netip.AddrPort)
 }
@@ -140,6 +141,13 @@ func (s *StatsLog) ServerHelloMessage(msg format.ServerHello, addr netip.AddrPor
 		return
 	}
 	log.Printf("dtls: message %s addr=%v: %+v", msg.MessageName(), addr, msg)
+}
+
+func (s *StatsLog) ServerHelloRetryRequestQueueOverloaded(addr netip.AddrPort) {
+	if !s.printMessages.Load() {
+		return
+	}
+	log.Printf("dtls: server hello retry request queue size overloaded addr=%v", addr)
 }
 
 func (s *StatsLog) CookieCreated(addr netip.AddrPort) {

@@ -31,6 +31,7 @@ type Transport struct {
 	// hello retry request is stateless.
 	// we limit (options.HelloRetryQueueSize) how many such datagrams we wish to store
 	helloRetryQueue []OutgoingDatagram
+	helloRetryPool  [][]byte
 
 	socket *net.UDPConn // TODO: move to another layer, so Transport does not depend on UDP
 
@@ -147,6 +148,7 @@ func (t *Transport) processPlaintextRecord(hdr format.PlaintextRecordHeader, rec
 		switch hdr.ContentType {
 		case format.PlaintextContentTypeAlert:
 			log.Printf("dtls: got alert %v from %v, record(hex): %x", hdr, addr, record)
+			return // TODO - more checks
 		case format.PlaintextContentTypeHandshake:
 			log.Printf("dtls: got handshake %v from %v, record(hex): %x", hdr, addr, record)
 			var handshakeHdr format.MessageHandshakeHeader
@@ -180,7 +182,7 @@ func (t *Transport) processPlaintextRecord(hdr format.PlaintextRecordHeader, rec
 					continue
 				}
 				if err := msg.Parse(body); err != nil {
-					//t.stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
+					t.stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
 					//TODO: alert here
 					continue
 				}
@@ -191,6 +193,7 @@ func (t *Transport) processPlaintextRecord(hdr format.PlaintextRecordHeader, rec
 			}
 		case format.PlaintextContentTypeAck:
 			log.Printf("dtls: got ack %v from %v, record(hex): %x", hdr, addr, record)
+			return // TODO - more checks
 		default:
 			panic("unknown content type")
 		}
@@ -199,4 +202,25 @@ func (t *Transport) processPlaintextRecord(hdr format.PlaintextRecordHeader, rec
 
 func (t *Transport) processCiphertextRecord(hdr format.CiphertextRecordHeader, cid []byte, body []byte, addr netip.AddrPort) {
 	log.Printf("dtls: got ciphertext %v cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, body)
+}
+
+func (t *Transport) popHelloRetryDatagram() ([]byte, bool) {
+	t.sendMu.Lock()
+	defer t.sendMu.Unlock()
+	if len(t.helloRetryQueue) >= t.options.HelloRetryQueueMaxSize {
+		return nil, false
+	}
+	var result []byte
+	if pos := len(t.helloRetryPool) - 1; pos >= 0 {
+		result = t.helloRetryPool[pos][:0]
+		t.helloRetryPool = t.helloRetryPool[:pos]
+	}
+	return result, true
+}
+
+func (t *Transport) SendHelloRetryDatagram(datagram []byte, addr netip.AddrPort) {
+	t.sendMu.Lock()
+	defer t.sendMu.Unlock()
+	t.helloRetryQueue = append(t.helloRetryQueue, OutgoingDatagram{data: datagram, addr: addr})
+	t.sendCond.Signal()
 }

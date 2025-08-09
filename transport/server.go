@@ -45,18 +45,29 @@ func IsSupportedClientHello(msg *format.ClientHello) error {
 	if !msg.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 {
 		return ErrSupportOnlyTLS_AES_128_GCM_SHA256
 	}
+	if !msg.Extensions.SupportedGroups.X25519 {
+		return ErrSupportOnlyX25519
+	}
 	if !msg.Extensions.KeyShare.X25519PublicKeySet {
 		return ErrSupportOnlyX25519
 	}
+	return nil
 }
 
 func (s *Server) OnClientHello(msg format.ClientHello, addr netip.AddrPort) {
+	// TODO - if client KeyShare
 	if err := IsSupportedClientHello(&msg); err != nil {
 		s.t.stats.ErrorClientHelloUnsupportedParams(msg, addr, err)
 		// TODO - generate alert
 		return
 	}
 	if !msg.Extensions.CookieSet {
+		datagram, ok := s.t.popHelloRetryDatagram()
+		if !ok {
+			s.t.stats.ServerHelloRetryRequestQueueOverloaded(addr)
+			// Prohibited sending alert here
+			return
+		}
 		s.t.stats.CookieCreated(addr)
 		ck := s.cookieState.CreateCookie(msg.Random, addr, time.Now())
 		helloRetryRequest := format.ServerHello{
@@ -64,12 +75,36 @@ func (s *Server) OnClientHello(msg format.ClientHello, addr netip.AddrPort) {
 			CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
 		}
 		helloRetryRequest.SetHelloRetryRequest()
+		helloRetryRequest.Extensions.SupportedVersionsSet = true
+		helloRetryRequest.Extensions.SupportedVersions.SelectedVersion = format.DTLS_VERSION_13
 		helloRetryRequest.Extensions.CookieSet = true
 		helloRetryRequest.Extensions.Cookie = ck[:] // allocation
-		helloRetryRequest.Extensions.SupportedVersions.DTLS_13 = true
 
-		helloRetryRequest.Write(nil)
-		// TODO - send HelloRetryRequest
+		recordHdr := format.PlaintextRecordHeader{
+			ContentType:    format.PlaintextContentTypeHandshake,
+			Epoch:          0,
+			SequenceNumber: 0,
+		}
+		msgHeader := format.MessageHandshakeHeader{
+			HandshakeType:  format.HandshakeTypeServerHello,
+			Length:         0,
+			MessageSeq:     0,
+			FragmentOffset: 0,
+			FragmentLength: 0,
+		}
+		// first reserve space for headers by writing with not all variables set
+		datagram = recordHdr.Write(datagram, 0) // reserve space
+		recordHeaderSize := len(datagram)
+		datagram = msgHeader.Write(datagram) // reserve space
+		msgHeaderSize := len(datagram) - recordHeaderSize
+		datagram = helloRetryRequest.Write(datagram)
+		msgBodySize := len(datagram) - recordHeaderSize - msgHeaderSize
+		msgHeader.Length = uint32(msgBodySize)
+		msgHeader.FragmentLength = msgHeader.Length
+		// now overwrite reserved space
+		_ = recordHdr.Write(datagram[:0], msgHeaderSize+msgBodySize)
+		_ = msgHeader.Write(datagram[recordHeaderSize:recordHeaderSize])
+		s.t.SendHelloRetryDatagram(datagram, addr)
 		return
 	}
 	valid := s.cookieState.IsCookieValidBytes(msg.Random, addr, msg.Extensions.Cookie)

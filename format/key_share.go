@@ -51,41 +51,40 @@ func (msg *KeyShareSet) parseInside(body []byte) (err error) {
 
 func (msg *KeyShareSet) Parse(body []byte, isHelloRetryRequest bool) (err error) {
 	offset := 0
+	if isHelloRetryRequest {
+		if offset, msg.KeyShareHRRSelectedGroup, err = ParserReadUint16(body, offset); err != nil {
+			return err
+		}
+		return ParserReadFinish(body, offset)
+	}
 	var insideBody []byte
 	if offset, insideBody, err = ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
-	if isHelloRetryRequest {
-		if len(insideBody) != 2 {
-			return ErrKeyShareHRRWrongFormat
-		}
-		msg.KeyShareHRRSelectedGroup = binary.BigEndian.Uint16(insideBody)
-	} else {
-		if err := msg.parseInside(insideBody); err != nil {
-			return err
-		}
+	if err := msg.parseInside(insideBody); err != nil {
+		return err
 	}
 	return ParserReadFinish(body, offset)
 }
 
 func (msg *KeyShareSet) Write(body []byte, isHelloRetryRequest bool) []byte {
-	body, mark := MarkUin16Offset(body)
 	if isHelloRetryRequest {
 		body = binary.BigEndian.AppendUint16(body, msg.KeyShareHRRSelectedGroup)
-	} else {
-		if msg.X25519PublicKeySet {
-			body = binary.BigEndian.AppendUint16(body, SupportedGroup_X25519)
-			body, mark = MarkUin16Offset(body)
-			body = append(body, msg.X25519PublicKey[:]...)
-			FillUin16Offset(body, mark)
-		}
-		if msg.SECP256R1PublicKeySet {
-			body = binary.BigEndian.AppendUint16(body, SupportedGroup_SECP256R1)
-			body, mark = MarkUin16Offset(body)
-			body = append(body, 4)
-			body = append(body, msg.SECP256R1PublicKey[:]...)
-			FillUin16Offset(body, mark)
-		}
+		return body
+	}
+	body, mark := MarkUin16Offset(body)
+	if msg.X25519PublicKeySet {
+		body = binary.BigEndian.AppendUint16(body, SupportedGroup_X25519)
+		body, mark = MarkUin16Offset(body)
+		body = append(body, msg.X25519PublicKey[:]...)
+		FillUin16Offset(body, mark)
+	}
+	if msg.SECP256R1PublicKeySet {
+		body = binary.BigEndian.AppendUint16(body, SupportedGroup_SECP256R1)
+		body, mark = MarkUin16Offset(body)
+		body = append(body, 4)
+		body = append(body, msg.SECP256R1PublicKey[:]...)
+		FillUin16Offset(body, mark)
 	}
 	FillUin16Offset(body, mark)
 	return body

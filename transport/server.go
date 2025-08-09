@@ -48,9 +48,6 @@ func IsSupportedClientHello(msg *format.ClientHello) error {
 	if !msg.Extensions.SupportedGroups.X25519 {
 		return ErrSupportOnlyX25519
 	}
-	if !msg.Extensions.KeyShare.X25519PublicKeySet {
-		return ErrSupportOnlyX25519
-	}
 	return nil
 }
 
@@ -79,7 +76,10 @@ func (s *Server) OnClientHello(msg format.ClientHello, addr netip.AddrPort) {
 		helloRetryRequest.Extensions.SupportedVersions.SelectedVersion = format.DTLS_VERSION_13
 		helloRetryRequest.Extensions.CookieSet = true
 		helloRetryRequest.Extensions.Cookie = ck[:] // allocation
-
+		if !msg.Extensions.KeyShare.X25519PublicKeySet {
+			helloRetryRequest.Extensions.KeyShareSet = true
+			helloRetryRequest.Extensions.KeyShare.KeyShareHRRSelectedGroup = format.SupportedGroup_X25519
+		}
 		recordHdr := format.PlaintextRecordHeader{
 			ContentType:    format.PlaintextContentTypeHandshake,
 			Epoch:          0,
@@ -105,6 +105,12 @@ func (s *Server) OnClientHello(msg format.ClientHello, addr netip.AddrPort) {
 		_ = recordHdr.Write(datagram[:0], msgHeaderSize+msgBodySize)
 		_ = msgHeader.Write(datagram[recordHeaderSize:recordHeaderSize])
 		s.t.SendHelloRetryDatagram(datagram, addr)
+		return
+	}
+	if !msg.Extensions.KeyShare.X25519PublicKeySet {
+		// we asked for this key_share above, but client disrespected our demand
+		s.t.stats.ErrorClientHelloUnsupportedParams(msg, addr, ErrSupportOnlyX25519)
+		// TODO - generate alert
 		return
 	}
 	valid := s.cookieState.IsCookieValidBytes(msg.Random, addr, msg.Extensions.Cookie)

@@ -1,18 +1,20 @@
 package format
 
-import "errors"
+import (
+	"errors"
+)
 
 var ErrClientHelloTooShort = errors.New("client hello too short")
 var ErrClientHelloLegacyVersion = errors.New("client hello wrong legacy version")
 var ErrClientHelloLegacySessionCookie = errors.New("client hello wrong legacy session or cookie")
-var ErrClientHelloExcessBytes = errors.New("client hello excess bytes")
+var ErrClientHelloLegacyCompressionMethod = errors.New("client hello wrong legacy compression method")
 
 type ClientHello struct {
 	// ProtocolVersion is checked but not stored
 	Random [32]byte
 	// legacy_session_id is checked but not stored
 	// legacy_cookie is checked but not stored
-	CypherSuites []uint16 // TODO - fixed size
+	CipherSuites CipherSuitesSet
 	// legacy_compression_methods is checked but not stored
 	Extension []byte // TODO - fixed size
 }
@@ -20,23 +22,31 @@ type ClientHello struct {
 func (msg *ClientHello) MessageKind() string { return "handshake" }
 func (msg *ClientHello) MessageName() string { return "client_hello" }
 
-func (msg *ClientHello) Parse(body []byte) error {
-	if len(body) < 36 {
-		return ErrClientHelloTooShort
+func (msg *ClientHello) Parse(body []byte) (err error) {
+	offset := 0
+	if offset, err = ParserEnsureUint16(body, offset, 0xFEFD, ErrClientHelloLegacyVersion); err != nil {
+		return err
 	}
-	if body[0] != 254 || body[1] != 253 {
-		return ErrClientHelloLegacyVersion
+	if offset, err = ParserCopyBytes(body, offset, msg.Random[:]); err != nil {
+		return err
 	}
-	copy(msg.Random[:], body[2:2+32])
-	if body[34] != 0 || body[35] != 0 {
-		return ErrClientHelloLegacySessionCookie
+	if offset, err = ParserEnsureUint16(body, offset, 0, ErrClientHelloLegacySessionCookie); err != nil {
+		return err
 	}
-	offset := 36
-	// TODO - parse cipher_suites
-	// TODO - parse legacy_compression_methods
-	// TODO - parse extensions
-	if offset != len(body) {
-		return ErrClientHelloExcessBytes
+	offset, cipherSuitesBody, err := ParserUint16Length(body, offset)
+	if err != nil {
+		return err
 	}
-	return nil
+	if err = msg.CipherSuites.Parse(cipherSuitesBody); err != nil {
+		return err
+	}
+	if offset, err = ParserEnsureUint16(body, offset, 0x0100, ErrClientHelloLegacyCompressionMethod); err != nil {
+		return err
+	}
+	offset, extensionsBody, err := ParserUint16Length(body, offset)
+	if err != nil {
+		return err
+	}
+	msg.Extension = extensionsBody
+	return ParserFinish(body, offset)
 }

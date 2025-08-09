@@ -40,6 +40,14 @@ type StatsLog struct {
 	printMessages  atomic.Bool
 }
 
+func NewStatsLogVerbose() *StatsLog {
+	s := &StatsLog{}
+	s.level.Store(1)
+	s.printDatagrams.Store(true)
+	s.printMessages.Store(true)
+	return s
+}
+
 func (s *StatsLog) SocketReadError(n int, addr netip.AddrPort, err error) {
 	if s.level.Load() < 0 {
 		return

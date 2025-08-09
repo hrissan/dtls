@@ -20,7 +20,7 @@ func main() {
 		log.Fatalf("cannot listen to udp address %s: %v", address, err)
 	}
 
-	stats := &transport.StatsLog{}
+	stats := transport.NewStatsLogVerbose()
 	opts := transport.DefaultTransportOptions()
 	s := transport.NewServer(opts, stats, socket)
 

@@ -8,21 +8,21 @@ import (
 var ErrMessageBodyTooShort = errors.New("message body too short")
 var ErrMessageBodyExcessBytes = errors.New("client hello excess bytes")
 
-func ParserFinish(body []byte, offset int) error {
+func ParserReadFinish(body []byte, offset int) error {
 	if offset != len(body) {
 		return ErrMessageBodyExcessBytes
 	}
 	return nil
 }
 
-func ParserByte(body []byte, offset int) (_ int, value byte, err error) {
+func ParserReadByte(body []byte, offset int) (_ int, value byte, err error) {
 	if len(body) < offset+1 {
 		return offset, 0, ErrMessageBodyTooShort
 	}
 	return offset + 1, body[offset], nil
 }
 
-func ParserEnsureByte(body []byte, offset int, value byte, err error) (_ int, _ error) {
+func ParserReadByteConst(body []byte, offset int, value byte, err error) (_ int, _ error) {
 	if len(body) < offset+1 {
 		return offset, ErrMessageBodyTooShort
 	}
@@ -32,7 +32,7 @@ func ParserEnsureByte(body []byte, offset int, value byte, err error) (_ int, _ 
 	return offset + 1, nil
 }
 
-func ParserByteLength(body []byte, offset int) (_ int, value []byte, err error) {
+func ParserReadByteLength(body []byte, offset int) (_ int, value []byte, err error) {
 	if len(body) < offset+1 {
 		return offset, nil, ErrMessageBodyTooShort
 	}
@@ -43,14 +43,14 @@ func ParserByteLength(body []byte, offset int) (_ int, value []byte, err error) 
 	return endOffset, body[offset+1 : endOffset], nil
 }
 
-func ParserUint16(body []byte, offset int) (_ int, value uint16, err error) {
+func ParserReadUint16(body []byte, offset int) (_ int, value uint16, err error) {
 	if len(body) < offset+2 {
 		return offset, 0, ErrMessageBodyTooShort
 	}
 	return offset + 2, binary.BigEndian.Uint16(body[offset:]), nil
 }
 
-func ParserEnsureUint16(body []byte, offset int, value uint16, err error) (_ int, _ error) {
+func ParserReadUint16Const(body []byte, offset int, value uint16, err error) (_ int, _ error) {
 	if len(body) < offset+2 {
 		return offset, ErrMessageBodyTooShort
 	}
@@ -60,7 +60,7 @@ func ParserEnsureUint16(body []byte, offset int, value uint16, err error) (_ int
 	return offset + 2, nil
 }
 
-func ParserUint16Length(body []byte, offset int) (_ int, value []byte, err error) {
+func ParserReadUint16Length(body []byte, offset int) (_ int, value []byte, err error) {
 	if len(body) < offset+2 {
 		return offset, nil, ErrMessageBodyTooShort
 	}
@@ -71,7 +71,7 @@ func ParserUint16Length(body []byte, offset int) (_ int, value []byte, err error
 	return endOffset, body[offset+2 : endOffset], nil
 }
 
-func ParserCopyBytes(body []byte, offset int, value []byte) (_ int, _ error) {
+func ParserReadFixedBytes(body []byte, offset int, value []byte) (_ int, _ error) {
 	if len(body) < offset+len(value) {
 		return offset, ErrMessageBodyTooShort
 	}

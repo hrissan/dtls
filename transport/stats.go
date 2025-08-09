@@ -29,9 +29,12 @@ type Stats interface {
 	MustBeEncrypted(kind string, message string, addr netip.AddrPort, header format.MessageHandshakeHeader)
 
 	// logic layer
+	ErrorServerReceivedServerHello(addr netip.AddrPort)
+	ErrorClientHelloUnsupportedParams(msg format.ClientHello, addr netip.AddrPort, err error)
 	ClientHelloMessage(msg format.ClientHello, addr netip.AddrPort)
 	ServerHelloMessage(msg format.ServerHello, addr netip.AddrPort)
-	ServerReceivedServerHello(addr netip.AddrPort)
+	CookieCreated(addr netip.AddrPort)
+	CookieChecked(valid bool, addr netip.AddrPort)
 }
 
 type StatsLog struct {
@@ -111,11 +114,18 @@ func (s *StatsLog) MustBeEncrypted(kind string, message string, addr netip.AddrP
 	log.Printf("dtls: message %s %s must be encrypted %v addr=%v", kind, message, header, addr)
 }
 
-func (s *StatsLog) ServerReceivedServerHello(addr netip.AddrPort) {
+func (s *StatsLog) ErrorServerReceivedServerHello(addr netip.AddrPort) {
 	if s.level.Load() < 0 {
 		return
 	}
 	log.Printf("dtls: server received server hello addr=%v", addr)
+}
+
+func (s *StatsLog) ErrorClientHelloUnsupportedParams(msg format.ClientHello, addr netip.AddrPort, err error) {
+	if !s.printMessages.Load() {
+		return
+	}
+	log.Printf("dtls: message %s has unsupported params addr=%v: %+v: %v", msg.MessageName(), addr, msg, err)
 }
 
 func (s *StatsLog) ClientHelloMessage(msg format.ClientHello, addr netip.AddrPort) {
@@ -130,4 +140,18 @@ func (s *StatsLog) ServerHelloMessage(msg format.ServerHello, addr netip.AddrPor
 		return
 	}
 	log.Printf("dtls: message %s addr=%v: %+v", msg.MessageName(), addr, msg)
+}
+
+func (s *StatsLog) CookieCreated(addr netip.AddrPort) {
+	if !s.printMessages.Load() {
+		return
+	}
+	log.Printf("dtls: cookie created for addr=%v", addr)
+}
+
+func (s *StatsLog) CookieChecked(valid bool, addr netip.AddrPort) {
+	if !s.printMessages.Load() {
+		return
+	}
+	log.Printf("dtls: cookie checked valid=%v for addr=%v", valid, addr)
 }

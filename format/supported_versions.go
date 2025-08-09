@@ -8,7 +8,7 @@ func (msg *SupportedVersionsSet) parseInside(body []byte) (err error) {
 	offset := 0
 	for offset < len(body) {
 		var version uint16
-		if offset, version, err = ParserUint16(body, offset); err != nil {
+		if offset, version, err = ParserReadUint16(body, offset); err != nil {
 			return err
 		}
 		switch version { // skip unknown
@@ -22,11 +22,11 @@ func (msg *SupportedVersionsSet) parseInside(body []byte) (err error) {
 func (msg *SupportedVersionsSet) Parse(body []byte) (err error) {
 	offset := 0
 	var insideBody []byte
-	if offset, insideBody, err = ParserByteLength(body, offset); err != nil {
+	if offset, insideBody, err = ParserReadByteLength(body, offset); err != nil {
 		return err
 	}
 	if err := msg.parseInside(insideBody); err != nil {
 		return err
 	}
-	return ParserFinish(body, offset)
+	return ParserReadFinish(body, offset)
 }

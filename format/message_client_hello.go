@@ -4,7 +4,6 @@ import (
 	"errors"
 )
 
-var ErrClientHelloTooShort = errors.New("client hello too short")
 var ErrClientHelloLegacyVersion = errors.New("client hello wrong legacy version")
 var ErrClientHelloLegacySessionCookie = errors.New("client hello wrong legacy session or cookie")
 var ErrClientHelloLegacyCompressionMethod = errors.New("client hello wrong legacy compression method")
@@ -24,31 +23,31 @@ func (msg *ClientHello) MessageName() string { return "client_hello" }
 
 func (msg *ClientHello) Parse(body []byte) (err error) {
 	offset := 0
-	if offset, err = ParserEnsureUint16(body, offset, 0xFEFD, ErrClientHelloLegacyVersion); err != nil {
+	if offset, err = ParserReadUint16Const(body, offset, 0xFEFD, ErrClientHelloLegacyVersion); err != nil {
 		return err
 	}
-	if offset, err = ParserCopyBytes(body, offset, msg.Random[:]); err != nil {
+	if offset, err = ParserReadFixedBytes(body, offset, msg.Random[:]); err != nil {
 		return err
 	}
-	if offset, err = ParserEnsureUint16(body, offset, 0, ErrClientHelloLegacySessionCookie); err != nil {
+	if offset, err = ParserReadUint16Const(body, offset, 0, ErrClientHelloLegacySessionCookie); err != nil {
 		return err
 	}
 	var cipherSuitesBody []byte
-	if offset, cipherSuitesBody, err = ParserUint16Length(body, offset); err != nil {
+	if offset, cipherSuitesBody, err = ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
 	if err = msg.CipherSuites.Parse(cipherSuitesBody); err != nil {
 		return err
 	}
-	if offset, err = ParserEnsureUint16(body, offset, 0x0100, ErrClientHelloLegacyCompressionMethod); err != nil {
+	if offset, err = ParserReadUint16Const(body, offset, 0x0100, ErrClientHelloLegacyCompressionMethod); err != nil {
 		return err
 	}
 	var extensionsBody []byte
-	if offset, extensionsBody, err = ParserUint16Length(body, offset); err != nil {
+	if offset, extensionsBody, err = ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
-	if err = msg.Extensions.Parse(extensionsBody); err != nil {
+	if err = msg.Extensions.Parse(extensionsBody, false); err != nil {
 		return err
 	}
-	return ParserFinish(body, offset)
+	return ParserReadFinish(body, offset)
 }

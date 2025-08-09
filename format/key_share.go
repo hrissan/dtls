@@ -16,11 +16,11 @@ func (msg *KeyShareSet) parseInside(body []byte) (err error) {
 	offset := 0
 	for offset < len(body) {
 		var keyShareType uint16
-		if offset, keyShareType, err = ParserUint16(body, offset); err != nil {
+		if offset, keyShareType, err = ParserReadUint16(body, offset); err != nil {
 			return err
 		}
 		var keyShareBody []byte
-		if offset, keyShareBody, err = ParserUint16Length(body, offset); err != nil {
+		if offset, keyShareBody, err = ParserReadUint16Length(body, offset); err != nil {
 			return err
 		}
 		switch keyShareType { // skip unknown
@@ -44,11 +44,11 @@ func (msg *KeyShareSet) parseInside(body []byte) (err error) {
 func (msg *KeyShareSet) Parse(body []byte) (err error) {
 	offset := 0
 	var insideBody []byte
-	if offset, insideBody, err = ParserUint16Length(body, offset); err != nil {
+	if offset, insideBody, err = ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
 	if err := msg.parseInside(insideBody); err != nil {
 		return err
 	}
-	return ParserFinish(body, offset)
+	return ParserReadFinish(body, offset)
 }

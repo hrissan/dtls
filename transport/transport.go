@@ -180,8 +180,8 @@ func (t *Transport) processPlaintextRecord(hdr format.PlaintextRecordHeader, rec
 					continue
 				}
 				if err := msg.Parse(body); err != nil {
-					t.stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
-					// TODO: alert here
+					//t.stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
+					//TODO: alert here
 					continue
 				}
 				t.stats.ServerHelloMessage(msg, addr)

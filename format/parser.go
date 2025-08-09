@@ -32,6 +32,17 @@ func ParserEnsureByte(body []byte, offset int, value byte, err error) (_ int, _ 
 	return offset + 1, nil
 }
 
+func ParserByteLength(body []byte, offset int) (_ int, value []byte, err error) {
+	if len(body) < offset+1 {
+		return offset, nil, ErrMessageBodyTooShort
+	}
+	endOffset := offset + 1 + int(body[offset])
+	if len(body) < endOffset {
+		return offset, nil, ErrMessageBodyTooShort
+	}
+	return endOffset, body[offset+1 : endOffset], nil
+}
+
 func ParserUint16(body []byte, offset int) (_ int, value uint16, err error) {
 	if len(body) < offset+2 {
 		return offset, 0, ErrMessageBodyTooShort

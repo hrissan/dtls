@@ -16,7 +16,7 @@ type ClientHello struct {
 	// legacy_cookie is checked but not stored
 	CipherSuites CipherSuitesSet
 	// legacy_compression_methods is checked but not stored
-	Extension []byte // TODO - fixed size
+	Extensions ExtensionsSet
 }
 
 func (msg *ClientHello) MessageKind() string { return "handshake" }
@@ -33,8 +33,8 @@ func (msg *ClientHello) Parse(body []byte) (err error) {
 	if offset, err = ParserEnsureUint16(body, offset, 0, ErrClientHelloLegacySessionCookie); err != nil {
 		return err
 	}
-	offset, cipherSuitesBody, err := ParserUint16Length(body, offset)
-	if err != nil {
+	var cipherSuitesBody []byte
+	if offset, cipherSuitesBody, err = ParserUint16Length(body, offset); err != nil {
 		return err
 	}
 	if err = msg.CipherSuites.Parse(cipherSuitesBody); err != nil {
@@ -43,10 +43,12 @@ func (msg *ClientHello) Parse(body []byte) (err error) {
 	if offset, err = ParserEnsureUint16(body, offset, 0x0100, ErrClientHelloLegacyCompressionMethod); err != nil {
 		return err
 	}
-	offset, extensionsBody, err := ParserUint16Length(body, offset)
-	if err != nil {
+	var extensionsBody []byte
+	if offset, extensionsBody, err = ParserUint16Length(body, offset); err != nil {
 		return err
 	}
-	msg.Extension = extensionsBody
+	if err = msg.Extensions.Parse(extensionsBody); err != nil {
+		return err
+	}
 	return ParserFinish(body, offset)
 }

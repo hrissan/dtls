@@ -122,12 +122,12 @@ func (s *StatsLog) ClientHelloMessage(msg format.ClientHello, addr netip.AddrPor
 	if !s.printMessages.Load() {
 		return
 	}
-	log.Printf("dtls: message %s addr=%v: %v", msg.MessageName(), addr, msg)
+	log.Printf("dtls: message %s addr=%v: %+v", msg.MessageName(), addr, msg)
 }
 
 func (s *StatsLog) ServerHelloMessage(msg format.ServerHello, addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}
-	log.Printf("dtls: message %s addr=%v: %v", msg.MessageName(), addr, msg)
+	log.Printf("dtls: message %s addr=%v: %+v", msg.MessageName(), addr, msg)
 }

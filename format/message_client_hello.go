@@ -2,6 +2,11 @@ package format
 
 import "errors"
 
+var ErrClientHelloTooShort = errors.New("client hello too short")
+var ErrClientHelloLegacyVersion = errors.New("client hello wrong legacy version")
+var ErrClientHelloLegacySessionCookie = errors.New("client hello wrong legacy session or cookie")
+var ErrClientHelloExcessBytes = errors.New("client hello excess bytes")
+
 type ClientHello struct {
 	// ProtocolVersion is checked but not stored
 	Random [32]byte
@@ -9,17 +14,11 @@ type ClientHello struct {
 	// legacy_cookie is checked but not stored
 	CypherSuites []uint16 // TODO - fixed size
 	// legacy_compression_methods is checked but not stored
-	Extension []byte
+	Extension []byte // TODO - fixed size
 }
 
-func (msg *ClientHello) MessageName() string {
-	return "client_hello"
-}
-
-var ErrClientHelloTooShort = errors.New("client hello too short")
-var ErrClientHelloLegacyVersion = errors.New("client hello wrong legacy version")
-var ErrClientHelloLegacySessionCookie = errors.New("client hello wrong legacy session or cookie")
-var ErrClientHelloExcessBytes = errors.New("client hello excess bytes")
+func (msg *ClientHello) MessageKind() string { return "handshake" }
+func (msg *ClientHello) MessageName() string { return "client_hello" }
 
 func (msg *ClientHello) Parse(body []byte) error {
 	if len(body) < 36 {

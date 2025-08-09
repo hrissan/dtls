@@ -5,35 +5,26 @@ import (
 	"errors"
 )
 
-type MessageHandshakeHeader struct {
-	HandshakeType  byte
-	Length         uint32
-	MessageSeq     uint16
-	FragmentOffset uint32
-	FragmentLength uint32
-}
+var ErrMessageHandshakeTooShort = errors.New("message handshake too short")
 
-func (hdr *MessageHandshakeHeader) IsFragmented() bool {
-	return hdr.FragmentOffset != 0 || hdr.FragmentLength != hdr.Length
-}
-
-const HandshakeTypeClientHello = 1
-const HandshakeTypeServerHello = 2
-
-// HelloRetryRequest message uses the same structure as the ServerHello, but with Random set to the special value
-// SHA-256 of "HelloRetryRequest": CF 21 AD 74 E5 9A 61 11 BE 1D 8C 02 1E 65 B8 91 C2 A2 11 16 7A BB 8C 5E 07 9E 09 E2 C8 A8 33 9C
-// [rfc8446:4.1.3]
-const HandshakeTypeNewSessionTicket = 4
-const HandshakeTypeEndOfEarlyData = 5
-const HandshakeTypeEncryptedExtensions = 8
-const HandshakeTypeRequestConnectionID = 9
-const HandshakeTypeNewConnectionID = 10
-const HandshakeTypeCertificate = 11
-const HandshakeTypeCertificateRequest = 13
-const HandshakeTypeCertificateVerify = 15
-const HandshakeTypeFinished = 20
-const HandshakeTypeKeyUpdate = 24
-const HandshakeTypeMessageHash = 254 // synthetic message, never transmitted [rfc9147:5.1]
+const (
+	HandshakeTypeClientHello = 1
+	HandshakeTypeServerHello = 2
+	// HelloRetryRequest message uses the same structure as the ServerHello, but with Random set to the special value
+	// SHA-256 of "HelloRetryRequest": CF 21 AD 74 E5 9A 61 11 BE 1D 8C 02 1E 65 B8 91 C2 A2 11 16 7A BB 8C 5E 07 9E 09 E2 C8 A8 33 9C
+	// [rfc8446:4.1.3]
+	HandshakeTypeNewSessionTicket    = 4
+	HandshakeTypeEndOfEarlyData      = 5
+	HandshakeTypeEncryptedExtensions = 8
+	HandshakeTypeRequestConnectionID = 9
+	HandshakeTypeNewConnectionID     = 10
+	HandshakeTypeCertificate         = 11
+	HandshakeTypeCertificateRequest  = 13
+	HandshakeTypeCertificateVerify   = 15
+	HandshakeTypeFinished            = 20
+	HandshakeTypeKeyUpdate           = 24
+	HandshakeTypeMessageHash         = 254 // synthetic message, never transmitted [rfc9147:5.1]
+)
 
 func HandshakeTypeToName(t byte) string {
 	switch t {
@@ -68,7 +59,17 @@ func HandshakeTypeToName(t byte) string {
 	}
 }
 
-var ErrMessageHandshakeTooShort = errors.New("message handshake too short")
+type MessageHandshakeHeader struct {
+	HandshakeType  byte
+	Length         uint32
+	MessageSeq     uint16
+	FragmentOffset uint32
+	FragmentLength uint32
+}
+
+func (hdr *MessageHandshakeHeader) IsFragmented() bool {
+	return hdr.FragmentOffset != 0 || hdr.FragmentLength != hdr.Length
+}
 
 func (hdr *MessageHandshakeHeader) Parse(record []byte) (n int, body []byte, err error) {
 	if len(record) < 12 {
@@ -79,8 +80,9 @@ func (hdr *MessageHandshakeHeader) Parse(record []byte) (n int, body []byte, err
 	hdr.MessageSeq = binary.BigEndian.Uint16(record[4:6])
 	hdr.FragmentOffset = binary.BigEndian.Uint32(record[5:9]) & 0xFFFFFF
 	hdr.FragmentLength = binary.BigEndian.Uint32(record[8:12]) & 0xFFFFFF
-	if len(record) < 12+int(hdr.FragmentLength) {
+	endOffset := 12 + int(hdr.FragmentLength)
+	if len(record) < endOffset {
 		return 0, nil, ErrMessageHandshakeTooShort
 	}
-	return 12, body[12 : 12+int(hdr.FragmentLength)], nil
+	return endOffset, record[12:endOffset], nil
 }

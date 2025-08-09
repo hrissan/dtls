@@ -4,5 +4,5 @@ import "net/netip"
 
 type OutgoingDatagram struct {
 	data []byte
-	addr netip.Addr
+	addr netip.AddrPort
 }

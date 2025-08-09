@@ -15,11 +15,9 @@ type Transport struct {
 	stats   Stats
 	options TransportOptions
 
-	shutdown     bool
-	cookieSecret [32]byte // [rfc9147:5.1]
-	cIDLength    int      // We use fixed size connection ID, so we can parse ciphertext records easily [rfc9147:9.1]
+	cIDLength int // We use fixed size connection ID, so we can parse ciphertext records easily [rfc9147:9.1]
 
-	handshakesMu sync.RWMutex
+	handshakesConnectionsMu sync.RWMutex
 	// TODO - limit on max number of parallel handshakes, clear items by LRU
 	// only ClientHello with correct cookie replaces previous handshake here [rfc9147:5.11]
 	handshakes map[netip.AddrPort]*HandshakeContext
@@ -27,6 +25,9 @@ type Transport struct {
 	// we move handshake here, once it is finished
 	connections map[netip.AddrPort]*Connection
 
+	sendMu       sync.Mutex
+	sendCond     *sync.Cond
+	sendShutdown bool
 	// hello retry request is stateless.
 	// we limit (options.HelloRetryQueueSize) how many such datagrams we wish to store
 	helloRetryQueue []OutgoingDatagram
@@ -37,11 +38,63 @@ type Transport struct {
 	OnServerHello func(msg format.ServerHello, addr netip.AddrPort)
 }
 
-func (t *Transport) goRead() {
+func NewTransport(opts TransportOptions, stats Stats, socket *net.UDPConn) *Transport {
+	t := &Transport{
+		stats:       stats,
+		options:     opts,
+		socket:      socket,
+		handshakes:  map[netip.AddrPort]*HandshakeContext{},
+		connections: map[netip.AddrPort]*Connection{},
+	}
+	t.sendCond = sync.NewCond(&t.sendMu)
+	return t
+}
+
+func (t *Transport) Close() {
+	t.sendMu.Lock()
+	t.sendShutdown = true
+	t.sendMu.Unlock()
+	t.sendCond.Broadcast()
+
+	_ = t.socket.Close()
+}
+
+func (t *Transport) goWrite(wg *sync.WaitGroup) {
+	defer wg.Done()
+	var helloRetryQueue []OutgoingDatagram
+	t.sendMu.Lock()
+	for {
+		if !t.sendShutdown && len(t.helloRetryQueue) == 0 {
+			t.sendCond.Wait()
+		}
+		helloRetryQueue, t.helloRetryQueue = t.helloRetryQueue, helloRetryQueue[:0]
+		sendShutdown := t.sendShutdown
+		t.sendMu.Unlock()
+		if sendShutdown {
+			return
+		}
+		for _, od := range helloRetryQueue {
+			t.stats.SocketWriteDatagram(od.data, od.addr)
+			n, err := t.socket.WriteToUDPAddrPort(od.data, od.addr)
+			if err != nil {
+				if errors.Is(err, net.ErrClosed) {
+					return
+				}
+				t.stats.SocketWriteError(n, od.addr, err)
+				time.Sleep(t.options.SocketWriteErrorDelay)
+			}
+		}
+		t.sendMu.Lock()
+	}
+}
+
+func (t *Transport) goRead(wg *sync.WaitGroup) {
+	defer wg.Done()
 	datagram := make([]byte, 65536)
 	for {
 		n, addr, err := t.socket.ReadFromUDPAddrPort(datagram)
 		if n != 0 { // do not check for an error here
+			t.stats.SocketReadDatagram(datagram[:n], addr)
 			t.processDatagram(datagram[:n], addr)
 		}
 		if err != nil {
@@ -108,28 +161,30 @@ func (t *Transport) processPlaintextRecord(hdr format.PlaintextRecordHeader, rec
 			case format.HandshakeTypeClientHello:
 				var msg format.ClientHello
 				if handshakeHdr.IsFragmented() {
-					t.stats.MustNotBeFragmented("handshake", msg.MessageName(), addr, handshakeHdr)
+					t.stats.MustNotBeFragmented(msg.MessageKind(), msg.MessageName(), addr, handshakeHdr)
 					// TODO: alert here
 					continue
 				}
 				if err := msg.Parse(body); err != nil {
-					t.stats.BadMessage("handshake", msg.MessageName(), addr, err)
+					t.stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
 					// TODO: alert here
 					continue
 				}
+				t.stats.ClientHelloMessage(msg, addr)
 				t.OnClientHello(msg, addr)
 			case format.HandshakeTypeServerHello:
 				var msg format.ServerHello
 				if handshakeHdr.IsFragmented() {
-					t.stats.MustNotBeFragmented("handshake", msg.MessageName(), addr, handshakeHdr)
+					t.stats.MustNotBeFragmented(msg.MessageKind(), msg.MessageName(), addr, handshakeHdr)
 					// TODO: alert here
 					continue
 				}
 				if err := msg.Parse(body); err != nil {
-					t.stats.BadMessage("handshake", msg.MessageName(), addr, err)
+					t.stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
 					// TODO: alert here
 					continue
 				}
+				t.stats.ServerHelloMessage(msg, addr)
 				t.OnServerHello(msg, addr)
 			default:
 				t.stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)

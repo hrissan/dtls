@@ -4,6 +4,7 @@ import (
 	"log"
 	"net"
 
+	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/transport"
 )
 
@@ -22,7 +23,8 @@ func main() {
 
 	stats := transport.NewStatsLogVerbose()
 	opts := transport.DefaultTransportOptions()
-	s := transport.NewServer(opts, stats, socket)
+	rnd := dtlsrand.CryptoRand()
+	s := transport.NewServer(opts, stats, rnd, socket)
 
 	s.Run()
 }

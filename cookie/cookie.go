@@ -1,12 +1,13 @@
 package cookie
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
 	"math"
 	"net/netip"
 	"time"
+
+	"github.com/hrissan/tinydtls/dtlsrand"
 )
 
 const MaxTranscriptHashLength = 64
@@ -15,21 +16,19 @@ const saltLength = 24
 
 type CookieState struct {
 	cookieSecret [32]byte // [rfc9147:5.1]
+	rnd          dtlsrand.Rand
 }
 
 type Cookie [saltLength + 8 + MaxTranscriptHashLength + cookieHashLength]byte // salt | unixNano | ...
 
-func (c *CookieState) SetRandomSecret() {
-	if _, err := rand.Read(c.cookieSecret[:]); err != nil {
-		panic("failed to read cookie secret crypto rand: " + err.Error())
-	}
+func (c *CookieState) SetRand(rnd dtlsrand.Rand) {
+	c.rnd = rnd
+	rnd.Read(c.cookieSecret[:])
 }
 
 func (c *CookieState) CreateCookie(transcriptHash [MaxTranscriptHashLength]byte, addr netip.AddrPort, now time.Time) Cookie {
 	var cookie Cookie
-	if _, err := rand.Read(cookie[:saltLength]); err != nil {
-		panic("failed to read random salt: " + err.Error())
-	}
+	c.rnd.Read(cookie[:saltLength])
 	unixNano := uint64(now.UnixNano())
 	binary.BigEndian.PutUint64(cookie[saltLength:], unixNano)
 	copy(cookie[saltLength+8:], transcriptHash[:])

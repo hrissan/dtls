@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hrissan/tinydtls/cookie"
+	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/format"
 )
 
@@ -17,8 +18,8 @@ type Server struct {
 	t *Transport
 }
 
-func NewServer(opts TransportOptions, stats Stats, socket *net.UDPConn) *Server {
-	t := NewTransport(opts, stats, socket)
+func NewServer(opts TransportOptions, stats Stats, rnd dtlsrand.Rand, socket *net.UDPConn) *Server {
+	t := NewTransport(opts, stats, rnd, socket)
 	s := &Server{t: t}
 	return s
 }
@@ -136,9 +137,16 @@ func (t *Transport) OnClientHello(messageData []byte, handshakeHdr format.Messag
 		return
 	}
 	log.Printf("start handshake transcript_hash(hex): %x", tanscriptHash)
-	//hctx := s.t.handshakes[addr]
-	//if hctx == nil {
-	//}
+	hctx, ok := t.handshakes[addr]
+	if !ok {
+		hctx = &HandshakeContext{
+			LastActivity:          time.Now(),
+			ServerRandom:          [32]byte{},
+			NextMessageSeqReceive: 0,
+			NextMessageSeqSend:    0,
+		}
+		t.handshakes[addr] = hctx
+	}
 	// TODO - start Handshake
 }
 

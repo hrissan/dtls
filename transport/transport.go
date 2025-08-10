@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/hrissan/tinydtls/cookie"
+	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/format"
 )
 
 type Transport struct {
 	stats   Stats
 	options TransportOptions
+	rnd     dtlsrand.Rand
 
 	cookieState cookie.CookieState
 
@@ -39,16 +41,17 @@ type Transport struct {
 	socket *net.UDPConn // TODO: move to another layer, so Transport does not depend on UDP
 }
 
-func NewTransport(opts TransportOptions, stats Stats, socket *net.UDPConn) *Transport {
+func NewTransport(opts TransportOptions, stats Stats, rnd dtlsrand.Rand, socket *net.UDPConn) *Transport {
 	t := &Transport{
 		stats:       stats,
 		options:     opts,
+		rnd:         rnd,
 		socket:      socket,
 		handshakes:  map[netip.AddrPort]*HandshakeContext{},
 		connections: map[netip.AddrPort]*Connection{},
 	}
 	t.sendCond = sync.NewCond(&t.sendMu)
-	t.cookieState.SetRandomSecret()
+	t.cookieState.SetRand(rnd)
 	return t
 }
 

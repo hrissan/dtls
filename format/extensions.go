@@ -4,6 +4,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
+
+	"github.com/hrissan/tinydtls/cookie"
 )
 
 const (
@@ -28,7 +30,10 @@ type ExtensionsSet struct {
 	EarlyDataMaxSize       uint32
 
 	CookieSet bool
-	Cookie    []byte // warning - alias of datagram bytes, must not be retained
+	// we have fixed size cookie to avoid allocations.
+	// if actual cookie in datagram is larger or smaller, it will be truncated or padded with zeroes,
+	// this makes it invalid for crypto check, which is exactly we want.
+	Cookie cookie.Cookie
 
 	KeyShareSet bool
 	KeyShare    KeyShareSet // must be last (no idea why). TODO - add link to RFC
@@ -40,7 +45,7 @@ func (msg *ExtensionsSet) parseCookie(body []byte) (err error) {
 	if offset, insideBody, err = ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
-	msg.Cookie = insideBody
+	copy(msg.Cookie[:], insideBody)
 	return ParserReadFinish(body, offset)
 }
 
@@ -133,7 +138,7 @@ func (msg *ExtensionsSet) Write(body []byte, isNewSessionTicket bool, isServerHe
 			panic("cookie length too big")
 		}
 		body = binary.BigEndian.AppendUint16(body, uint16(len(msg.Cookie)))
-		body = append(body, msg.Cookie...)
+		body = append(body, msg.Cookie[:]...)
 		FillUin16Offset(body, mark)
 	}
 	if msg.KeyShareSet {

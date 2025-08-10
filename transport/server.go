@@ -66,7 +66,6 @@ func (s *Server) OnClientHello(msg format.ClientHello, addr netip.AddrPort) {
 			return
 		}
 		s.t.stats.CookieCreated(addr)
-		ck := s.cookieState.CreateCookie(msg.Random, addr, time.Now())
 		helloRetryRequest := format.ServerHello{
 			Random:      [32]byte{},
 			CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
@@ -75,7 +74,7 @@ func (s *Server) OnClientHello(msg format.ClientHello, addr netip.AddrPort) {
 		helloRetryRequest.Extensions.SupportedVersionsSet = true
 		helloRetryRequest.Extensions.SupportedVersions.SelectedVersion = format.DTLS_VERSION_13
 		helloRetryRequest.Extensions.CookieSet = true
-		helloRetryRequest.Extensions.Cookie = ck[:] // allocation
+		helloRetryRequest.Extensions.Cookie = s.cookieState.CreateCookie(msg.Random, addr, time.Now())
 		if !msg.Extensions.KeyShare.X25519PublicKeySet {
 			helloRetryRequest.Extensions.KeyShareSet = true
 			helloRetryRequest.Extensions.KeyShare.KeyShareHRRSelectedGroup = format.SupportedGroup_X25519
@@ -113,8 +112,11 @@ func (s *Server) OnClientHello(msg format.ClientHello, addr netip.AddrPort) {
 		// TODO - generate alert
 		return
 	}
-	valid := s.cookieState.IsCookieValidBytes(msg.Random, addr, msg.Extensions.Cookie)
-	s.t.stats.CookieChecked(valid, addr)
+	valid, age := s.cookieState.IsCookieValid(msg.Random, addr, msg.Extensions.Cookie, time.Now())
+	if age > s.t.options.CookieValidDuration {
+		valid = false
+	}
+	s.t.stats.CookieChecked(valid, age, addr)
 	if valid {
 		// TODO - start Handshake
 		return

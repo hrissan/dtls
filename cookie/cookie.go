@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"math"
 	"net/netip"
 	"time"
 )
@@ -33,23 +34,23 @@ func (c *CookieState) CreateCookie(clientRandom [32]byte, addr netip.AddrPort, n
 	return result
 }
 
-func (c *CookieState) IsCookieValidBytes(clientRandom [32]byte, addr netip.AddrPort, cookieBytes []byte) bool {
-	var cookie Cookie
-	if copy(cookie[:], cookieBytes[:]) != len(cookie) {
-		return false
-	}
-	return c.IsCookieValid(clientRandom, addr, cookie)
-}
-
-func (c *CookieState) IsCookieValid(clientRandom [32]byte, addr netip.AddrPort, cookie Cookie) bool {
+func (c *CookieState) IsCookieValid(clientRandom [32]byte, addr netip.AddrPort, cookie Cookie, now time.Time) (ok bool, age time.Duration) {
+	unixNanoNow := uint64(now.UnixNano())
 	unixNano := binary.BigEndian.Uint64(cookie[:])
+	if unixNano > unixNanoNow { // cookie from the future
+		return false, 0
+	}
+	if unixNanoNow-unixNano > math.MaxInt64 { // time.Duration overflow
+		return false, 0
+	}
+
 	var mustBeHash [32]byte
 	copy(mustBeHash[:], cookie[8:])
 
 	scratch := make([]byte, 0, scratchSize)
 	scratch = c.appendScratch(scratch, clientRandom, addr, unixNano)
 	hash := sha256.Sum256(scratch)
-	return hash == mustBeHash
+	return hash == mustBeHash, time.Duration(unixNanoNow - unixNano)
 }
 
 func (c *CookieState) appendScratch(scratch []byte, clientRandom [32]byte, addr netip.AddrPort, unixNano uint64) []byte {

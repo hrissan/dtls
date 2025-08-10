@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/netip"
 	"sync/atomic"
+	"time"
 
 	"github.com/hrissan/tinydtls/format"
 )
@@ -35,7 +36,7 @@ type Stats interface {
 	ServerHelloMessage(msg format.ServerHello, addr netip.AddrPort)
 	ServerHelloRetryRequestQueueOverloaded(addr netip.AddrPort)
 	CookieCreated(addr netip.AddrPort)
-	CookieChecked(valid bool, addr netip.AddrPort)
+	CookieChecked(valid bool, age time.Duration, addr netip.AddrPort)
 }
 
 type StatsLog struct {
@@ -157,9 +158,9 @@ func (s *StatsLog) CookieCreated(addr netip.AddrPort) {
 	log.Printf("dtls: cookie created for addr=%v", addr)
 }
 
-func (s *StatsLog) CookieChecked(valid bool, addr netip.AddrPort) {
+func (s *StatsLog) CookieChecked(valid bool, age time.Duration, addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}
-	log.Printf("dtls: cookie checked valid=%v for addr=%v", valid, addr)
+	log.Printf("dtls: cookie checked valid=%v age=%v for addr=%v", valid, age, addr)
 }

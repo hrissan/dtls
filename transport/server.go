@@ -3,6 +3,7 @@ package transport
 import (
 	"crypto/sha256"
 	"errors"
+	"hash"
 	"log"
 	"net"
 	"net/netip"
@@ -52,6 +53,51 @@ func IsSupportedClientHello(msg *format.ClientHello) error {
 	return nil
 }
 
+func (t *Transport) generateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) []byte {
+	helloRetryRequest := format.ServerHello{
+		CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
+	}
+	helloRetryRequest.SetHelloRetryRequest()
+	helloRetryRequest.Extensions.SupportedVersionsSet = true
+	helloRetryRequest.Extensions.SupportedVersions.SelectedVersion = format.DTLS_VERSION_13
+	if keyShareSet {
+		helloRetryRequest.Extensions.KeyShareSet = true
+		helloRetryRequest.Extensions.KeyShare.KeyShareHRRSelectedGroup = format.SupportedGroup_X25519
+	}
+	helloRetryRequest.Extensions.CookieSet = true
+	helloRetryRequest.Extensions.Cookie = ck
+	recordHdr := format.PlaintextRecordHeader{
+		ContentType:    format.PlaintextContentTypeHandshake,
+		Epoch:          0,
+		SequenceNumber: 0,
+	}
+	msgHeader := format.MessageHandshakeHeader{
+		HandshakeType:  format.HandshakeTypeServerHello,
+		Length:         0,
+		MessageSeq:     0,
+		FragmentOffset: 0,
+		FragmentLength: 0,
+	}
+	// first reserve space for headers by writing with not all variables set
+	datagram = recordHdr.Write(datagram, 0) // reserve space
+	recordHeaderSize := len(datagram)
+	datagram = msgHeader.Write(datagram) // reserve space
+	msgHeaderSize := len(datagram) - recordHeaderSize
+	datagram = helloRetryRequest.Write(datagram)
+	msgBodySize := len(datagram) - recordHeaderSize - msgHeaderSize
+	msgHeader.Length = uint32(msgBodySize)
+	msgHeader.FragmentLength = msgHeader.Length
+	// now overwrite reserved space
+	_ = recordHdr.Write(datagram[:0], msgHeaderSize+msgBodySize)
+	_ = msgHeader.Write(datagram[recordHeaderSize:recordHeaderSize])
+	return datagram
+}
+
+func addMessageDataTranscript(transcriptHasher hash.Hash, messageData []byte) {
+	_, _ = transcriptHasher.Write(messageData[:4])
+	_, _ = transcriptHasher.Write(messageData[12:])
+}
+
 func (t *Transport) OnClientHello(messageData []byte, handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort) {
 	if err := IsSupportedClientHello(&msg); err != nil {
 		t.stats.ErrorClientHelloUnsupportedParams(handshakeHdr, msg, addr, err)
@@ -65,56 +111,19 @@ func (t *Transport) OnClientHello(messageData []byte, handshakeHdr format.Messag
 			return
 		}
 		transcriptHasher := sha256.New()
-		_, _ = transcriptHasher.Write(messageData[:4])
-		_, _ = transcriptHasher.Write(messageData[12:])
-		var transcriptHash [cookie.MaxTranscriptHashLength]byte
-		transcriptHasher.Sum(transcriptHash[:0])
+		addMessageDataTranscript(transcriptHasher, messageData)
+		var initialHelloTranscriptHash [cookie.MaxTranscriptHashLength]byte
+		transcriptHasher.Sum(initialHelloTranscriptHash[:0])
 
-		datagram, ok := t.popHelloRetryDatagram()
-		if !ok {
-			t.stats.ServerHelloRetryRequestQueueOverloaded(addr)
-			// Prohibited sending alert here
-			return
-		}
+		keyShareSet := !msg.Extensions.KeyShare.X25519PublicKeySet
+		ck := t.cookieState.CreateCookie(initialHelloTranscriptHash, keyShareSet, addr, time.Now())
 		t.stats.CookieCreated(addr)
-		helloRetryRequest := format.ServerHello{
-			Random:      [32]byte{},
-			CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
-		}
-		helloRetryRequest.SetHelloRetryRequest()
-		helloRetryRequest.Extensions.SupportedVersionsSet = true
-		helloRetryRequest.Extensions.SupportedVersions.SelectedVersion = format.DTLS_VERSION_13
-		helloRetryRequest.Extensions.CookieSet = true
-		helloRetryRequest.Extensions.Cookie = t.cookieState.CreateCookie(transcriptHash, addr, time.Now())
-		if !msg.Extensions.KeyShare.X25519PublicKeySet {
-			helloRetryRequest.Extensions.KeyShareSet = true
-			helloRetryRequest.Extensions.KeyShare.KeyShareHRRSelectedGroup = format.SupportedGroup_X25519
-		}
-		recordHdr := format.PlaintextRecordHeader{
-			ContentType:    format.PlaintextContentTypeHandshake,
-			Epoch:          0,
-			SequenceNumber: 0,
-		}
-		msgHeader := format.MessageHandshakeHeader{
-			HandshakeType:  format.HandshakeTypeServerHello,
-			Length:         0,
-			MessageSeq:     0,
-			FragmentOffset: 0,
-			FragmentLength: 0,
-		}
-		// first reserve space for headers by writing with not all variables set
-		datagram = recordHdr.Write(datagram, 0) // reserve space
-		recordHeaderSize := len(datagram)
-		datagram = msgHeader.Write(datagram) // reserve space
-		msgHeaderSize := len(datagram) - recordHeaderSize
-		datagram = helloRetryRequest.Write(datagram)
-		msgBodySize := len(datagram) - recordHeaderSize - msgHeaderSize
-		msgHeader.Length = uint32(msgBodySize)
-		msgHeader.FragmentLength = msgHeader.Length
-		// now overwrite reserved space
-		_ = recordHdr.Write(datagram[:0], msgHeaderSize+msgBodySize)
-		_ = msgHeader.Write(datagram[recordHeaderSize:recordHeaderSize])
-		t.SendHelloRetryDatagram(datagram, addr)
+
+		hrrDatagram, _ := t.popHelloRetryDatagram()
+		hrrDatagram = t.generateStatelessHRR(hrrDatagram, ck, keyShareSet)
+		hrrHash := sha256.Sum256(hrrDatagram)
+		log.Printf("serverHRRHash: %x\n", hrrHash[:])
+		t.SendHelloRetryDatagram(hrrDatagram, addr)
 		return
 	}
 	if handshakeHdr.MessageSeq != 1 {
@@ -128,7 +137,7 @@ func (t *Transport) OnClientHello(messageData []byte, handshakeHdr format.Messag
 		// TODO - generate alert
 		return
 	}
-	valid, age, tanscriptHash := t.cookieState.IsCookieValid(addr, msg.Extensions.Cookie, time.Now())
+	valid, age, initialHelloTranscriptHash, keyShareSet := t.cookieState.IsCookieValid(addr, msg.Extensions.Cookie, time.Now())
 	if age > t.options.CookieValidDuration {
 		valid = false
 	}
@@ -137,7 +146,12 @@ func (t *Transport) OnClientHello(messageData []byte, handshakeHdr format.Messag
 		// generate alert
 		return
 	}
-	log.Printf("start handshake transcript_hash(hex): %x", tanscriptHash)
+	hrrDatagram, _ := t.popHelloRetryDatagram()
+	hrrDatagram = t.generateStatelessHRR(hrrDatagram, msg.Extensions.Cookie, keyShareSet)
+	hrrHash := sha256.Sum256(hrrDatagram)
+	log.Printf("serverHRRHash: %x\n", hrrHash[:])
+
+	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", keyShareSet, initialHelloTranscriptHash)
 	hctx, ok := t.handshakes[addr]
 	if !ok {
 		hctx = &HandshakeContext{
@@ -153,12 +167,7 @@ func (t *Transport) OnClientHello(messageData []byte, handshakeHdr format.Messag
 		}
 		t.handshakes[addr] = hctx
 
-		datagram, ok := t.popHelloRetryDatagram()
-		if !ok {
-			t.stats.ServerHelloRetryRequestQueueOverloaded(addr)
-			// Prohibited sending alert here
-			return
-		}
+		datagram, _ := t.popHelloRetryDatagram()
 		helloRetryRequest := format.ServerHello{
 			Random:      hctx.ServerRandom,
 			CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
@@ -193,6 +202,24 @@ func (t *Transport) OnClientHello(messageData []byte, handshakeHdr format.Messag
 		_ = recordHdr.Write(datagram[:0], msgHeaderSize+msgBodySize)
 		_ = msgHeader.Write(datagram[recordHeaderSize:recordHeaderSize])
 		t.SendHelloRetryDatagram(datagram, addr)
+
+		transcriptHasher := sha256.New()
+		syntheticHashData := []byte{format.HandshakeTypeMessageHash, 0, 0, sha256.Size}
+		_, _ = transcriptHasher.Write(syntheticHashData)
+		_, _ = transcriptHasher.Write(initialHelloTranscriptHash[:sha256.Size])
+		addMessageDataTranscript(transcriptHasher, hrrDatagram[13:]) // skip record header
+		addMessageDataTranscript(transcriptHasher, messageData)
+		addMessageDataTranscript(transcriptHasher, datagram[13:]) // skip record header
+
+		var handshakeTranscriptHash [cookie.MaxTranscriptHashLength]byte
+		transcriptHasher.Sum(handshakeTranscriptHash[:0])
+
+		sharedSecret, err := curve25519.X25519(hctx.x25519Secret[:], msg.Extensions.KeyShare.X25519PublicKey[:])
+		if err != nil {
+			panic("curve25519.X25519 failed")
+		}
+		computeHandshakeKeys(sharedSecret, handshakeTranscriptHash[:sha256.Size], hctx)
+
 		return
 	}
 	// TODO - start Handshake

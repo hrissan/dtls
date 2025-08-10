@@ -19,27 +19,30 @@ type CookieState struct {
 	rnd          dtlsrand.Rand
 }
 
-type Cookie [saltLength + 8 + MaxTranscriptHashLength + cookieHashLength]byte // salt | unixNano | ...
+type Cookie [saltLength + 8 + 1 + MaxTranscriptHashLength + cookieHashLength]byte // salt | unixNano | keyShareSet | ...
 
 func (c *CookieState) SetRand(rnd dtlsrand.Rand) {
 	c.rnd = rnd
 	rnd.Read(c.cookieSecret[:])
 }
 
-func (c *CookieState) CreateCookie(transcriptHash [MaxTranscriptHashLength]byte, addr netip.AddrPort, now time.Time) Cookie {
+func (c *CookieState) CreateCookie(transcriptHash [MaxTranscriptHashLength]byte, keyShareSet bool, addr netip.AddrPort, now time.Time) Cookie {
 	var cookie Cookie
 	c.rnd.Read(cookie[:saltLength])
 	unixNano := uint64(now.UnixNano())
 	binary.BigEndian.PutUint64(cookie[saltLength:], unixNano)
-	copy(cookie[saltLength+8:], transcriptHash[:])
+	if keyShareSet { // to reconstruct stateless HRR, we must remember if we asked for alternative key_share
+		cookie[saltLength+8] = 1
+	}
+	copy(cookie[saltLength+8+1:], transcriptHash[:])
 
-	hash := c.getScratchHash(cookie[:saltLength+8+MaxTranscriptHashLength], addr)
-	copy(cookie[saltLength+8+MaxTranscriptHashLength:], hash[:])
+	hash := c.getScratchHash(cookie[:saltLength+8+1+MaxTranscriptHashLength], addr)
+	copy(cookie[saltLength+8+1+MaxTranscriptHashLength:], hash[:])
 
 	return cookie
 }
 
-func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time.Time) (ok bool, age time.Duration, transcriptHash [MaxTranscriptHashLength]byte) {
+func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time.Time) (ok bool, age time.Duration, transcriptHash [MaxTranscriptHashLength]byte, keyShareSet bool) {
 	unixNanoNow := uint64(now.UnixNano())
 	unixNano := binary.BigEndian.Uint64(cookie[saltLength:])
 	if unixNano > unixNanoNow { // cookie from the future
@@ -49,23 +52,27 @@ func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time
 		return
 	}
 	age = time.Duration(unixNanoNow - unixNano)
-	copy(transcriptHash[:], cookie[saltLength+8:])
+	keyShareSet = cookie[saltLength+8] != 0
+	copy(transcriptHash[:], cookie[saltLength+8+1:])
 
 	var mustBeHash [cookieHashLength]byte
-	copy(mustBeHash[:], cookie[saltLength+8+MaxTranscriptHashLength:])
+	copy(mustBeHash[:], cookie[saltLength+8+1+MaxTranscriptHashLength:])
 
-	hash := c.getScratchHash(cookie[:saltLength+8+MaxTranscriptHashLength], addr)
+	hash := c.getScratchHash(cookie[:saltLength+8+1+MaxTranscriptHashLength], addr)
 	ok = hash == mustBeHash
 	return
 }
 
 func (c *CookieState) getScratchHash(cookieHashedBytes []byte, addr netip.AddrPort) [cookieHashLength]byte {
-	const maxScratchSize = saltLength + 8 + MaxTranscriptHashLength + 16 + 2 + cookieHashLength
+	const maxScratchSize = saltLength + 8 + 1 + MaxTranscriptHashLength + 16 + 2 + cookieHashLength
 	scratch := make([]byte, 0, maxScratchSize) // allocate on stack
 	scratch = append(scratch, cookieHashedBytes...)
 	scratch = append(scratch, c.cookieSecret[:]...) // secret in the middle. IDK if this important, but feels better.
 	b := addr.Addr().As16()
 	scratch = append(scratch, b[:]...)
 	scratch = binary.BigEndian.AppendUint16(scratch, addr.Port())
+	if len(scratch) > maxScratchSize {
+		panic("please increase maxScratchSize")
+	}
 	return sha256.Sum256(scratch)
 }

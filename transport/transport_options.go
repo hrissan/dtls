@@ -13,7 +13,7 @@ func DefaultTransportOptions() TransportOptions {
 	return TransportOptions{
 		SocketReadErrorDelay:   50 * time.Millisecond,
 		SocketWriteErrorDelay:  5 * time.Millisecond,
-		CookieValidDuration:    24 * time.Hour,
+		CookieValidDuration:    120 * time.Second, // larger value for debug
 		HelloRetryQueueMaxSize: 8192,
 	}
 }

@@ -61,10 +61,10 @@ func HandshakeTypeToName(t byte) string {
 
 type MessageHandshakeHeader struct {
 	HandshakeType  byte
-	Length         uint32
+	Length         uint32 // stored as 24-bit
 	MessageSeq     uint16
-	FragmentOffset uint32
-	FragmentLength uint32
+	FragmentOffset uint32 // stored as 24-bit
+	FragmentLength uint32 // stored as 24-bit
 }
 
 func (hdr *MessageHandshakeHeader) IsFragmented() bool {

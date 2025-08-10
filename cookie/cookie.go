@@ -9,13 +9,15 @@ import (
 	"time"
 )
 
-const scratchSize = 32 + 32 + 16 + 2 + 8
+const MaxTranscriptHashLength = 64
+const cookieHashLength = sha256.Size
+const saltLength = 24
 
 type CookieState struct {
 	cookieSecret [32]byte // [rfc9147:5.1]
 }
 
-type Cookie [40]byte
+type Cookie [saltLength + 8 + MaxTranscriptHashLength + cookieHashLength]byte // salt | unixNano | ...
 
 func (c *CookieState) SetRandomSecret() {
 	if _, err := rand.Read(c.cookieSecret[:]); err != nil {
@@ -23,43 +25,48 @@ func (c *CookieState) SetRandomSecret() {
 	}
 }
 
-func (c *CookieState) CreateCookie(clientRandom [32]byte, addr netip.AddrPort, now time.Time) Cookie {
-	scratch := make([]byte, 0, scratchSize)
-	scratch = c.appendScratch(scratch, clientRandom, addr, uint64(now.UnixNano()))
-	hash := sha256.Sum256(scratch)
+func (c *CookieState) CreateCookie(transcriptHash [MaxTranscriptHashLength]byte, addr netip.AddrPort, now time.Time) Cookie {
+	var cookie Cookie
+	if _, err := rand.Read(cookie[:saltLength]); err != nil {
+		panic("failed to read random salt: " + err.Error())
+	}
+	unixNano := uint64(now.UnixNano())
+	binary.BigEndian.PutUint64(cookie[saltLength:], unixNano)
+	copy(cookie[saltLength+8:], transcriptHash[:])
 
-	var result Cookie
-	copy(result[:], scratch[len(scratch)-8:])
-	copy(result[8:], hash[:])
-	return result
+	hash := c.getScratchHash(cookie[:saltLength+8+MaxTranscriptHashLength], addr)
+	copy(cookie[saltLength+8+MaxTranscriptHashLength:], hash[:])
+
+	return cookie
 }
 
-func (c *CookieState) IsCookieValid(clientRandom [32]byte, addr netip.AddrPort, cookie Cookie, now time.Time) (ok bool, age time.Duration) {
+func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time.Time) (ok bool, age time.Duration, transcriptHash [MaxTranscriptHashLength]byte) {
 	unixNanoNow := uint64(now.UnixNano())
-	unixNano := binary.BigEndian.Uint64(cookie[:])
+	unixNano := binary.BigEndian.Uint64(cookie[saltLength:])
 	if unixNano > unixNanoNow { // cookie from the future
-		return false, 0
+		return
 	}
 	if unixNanoNow-unixNano > math.MaxInt64 { // time.Duration overflow
-		return false, 0
+		return
 	}
+	age = time.Duration(unixNanoNow - unixNano)
+	copy(transcriptHash[:], cookie[saltLength+8:])
 
-	var mustBeHash [32]byte
-	copy(mustBeHash[:], cookie[8:])
+	var mustBeHash [cookieHashLength]byte
+	copy(mustBeHash[:], cookie[saltLength+8+MaxTranscriptHashLength:])
 
-	scratch := make([]byte, 0, scratchSize)
-	scratch = c.appendScratch(scratch, clientRandom, addr, unixNano)
-	hash := sha256.Sum256(scratch)
-	return hash == mustBeHash, time.Duration(unixNanoNow - unixNano)
+	hash := c.getScratchHash(cookie[:saltLength+8+MaxTranscriptHashLength], addr)
+	ok = hash == mustBeHash
+	return
 }
 
-func (c *CookieState) appendScratch(scratch []byte, clientRandom [32]byte, addr netip.AddrPort, unixNano uint64) []byte {
-	scratch = append(scratch, clientRandom[:]...)
-	scratch = append(scratch, c.cookieSecret[:]...)
+func (c *CookieState) getScratchHash(cookieHashedBytes []byte, addr netip.AddrPort) [cookieHashLength]byte {
+	const maxScratchSize = saltLength + 8 + MaxTranscriptHashLength + 16 + 2 + cookieHashLength
+	scratch := make([]byte, 0, maxScratchSize) // allocate on stack
+	scratch = append(scratch, cookieHashedBytes...)
+	scratch = append(scratch, c.cookieSecret[:]...) // secret in the middle. IDK if this important, but feels better.
 	b := addr.Addr().As16()
 	scratch = append(scratch, b[:]...)
 	scratch = binary.BigEndian.AppendUint16(scratch, addr.Port())
-
-	scratch = binary.BigEndian.AppendUint64(scratch, unixNano)
-	return scratch
+	return sha256.Sum256(scratch)
 }

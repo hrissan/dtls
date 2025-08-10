@@ -8,12 +8,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/format"
 )
 
 type Transport struct {
 	stats   Stats
 	options TransportOptions
+
+	cookieState cookie.CookieState
 
 	cIDLength int // We use fixed size connection ID, so we can parse ciphertext records easily [rfc9147:9.1]
 
@@ -34,9 +37,6 @@ type Transport struct {
 	helloRetryPool  [][]byte
 
 	socket *net.UDPConn // TODO: move to another layer, so Transport does not depend on UDP
-
-	OnClientHello func(msg format.ClientHello, addr netip.AddrPort)
-	OnServerHello func(msg format.ServerHello, addr netip.AddrPort)
 }
 
 func NewTransport(opts TransportOptions, stats Stats, socket *net.UDPConn) *Transport {
@@ -48,6 +48,7 @@ func NewTransport(opts TransportOptions, stats Stats, socket *net.UDPConn) *Tran
 		connections: map[netip.AddrPort]*Connection{},
 	}
 	t.sendCond = sync.NewCond(&t.sendMu)
+	t.cookieState.SetRandomSecret()
 	return t
 }
 
@@ -86,6 +87,10 @@ func (t *Transport) goWrite(wg *sync.WaitGroup) {
 			}
 		}
 		t.sendMu.Lock()
+		for i, od := range helloRetryQueue {
+			t.helloRetryPool = append(t.helloRetryPool, od.data)
+			helloRetryQueue[i] = OutgoingDatagram{}
+		}
 	}
 }
 
@@ -145,22 +150,26 @@ func (t *Transport) processDatagram(datagram []byte, addr netip.AddrPort) {
 func (t *Transport) processPlaintextRecord(hdr format.PlaintextRecordHeader, record []byte, addr netip.AddrPort) {
 	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
 	for messageOffset < len(record) {
+		messageData := record[messageOffset:]
 		switch hdr.ContentType {
 		case format.PlaintextContentTypeAlert:
-			log.Printf("dtls: got alert %v from %v, record(hex): %x", hdr, addr, record)
+			log.Printf("dtls: got alert %v from %v, message(hex): %x", hdr, addr, messageData)
 			return // TODO - more checks
 		case format.PlaintextContentTypeHandshake:
-			log.Printf("dtls: got handshake %v from %v, record(hex): %x", hdr, addr, record)
+			log.Printf("dtls: got handshake %v from %v, message(hex): %x", hdr, addr, messageData)
 			var handshakeHdr format.MessageHandshakeHeader
-			n, body, err := handshakeHdr.Parse(record)
+			n, body, err := handshakeHdr.Parse(messageData)
 			if err != nil {
 				t.stats.BadMessageHeader("handshake", messageOffset, len(record), addr, err)
 				// TODO: alert here, and we cannot continue to the next record.
 				return
 			}
+			messageData = messageData[:n]
 			messageOffset += n
 			switch handshakeHdr.HandshakeType {
 			case format.HandshakeTypeClientHello:
+				// we ignore handshakeHdr.MessageSeq here, will be 0 (initial hello) or 1 (for hello after HRR).
+				// TODO - check
 				var msg format.ClientHello
 				if handshakeHdr.IsFragmented() {
 					t.stats.MustNotBeFragmented(msg.MessageKind(), msg.MessageName(), addr, handshakeHdr)
@@ -172,9 +181,11 @@ func (t *Transport) processPlaintextRecord(hdr format.PlaintextRecordHeader, rec
 					// TODO: alert here
 					continue
 				}
-				t.stats.ClientHelloMessage(msg, addr)
-				t.OnClientHello(msg, addr)
+				t.stats.ClientHelloMessage(handshakeHdr, msg, addr)
+				t.OnClientHello(messageData, handshakeHdr, msg, addr)
 			case format.HandshakeTypeServerHello:
+				// we ignore handshakeHdr.MessageSeq here, will be 0
+				// TODO - check
 				var msg format.ServerHello
 				if handshakeHdr.IsFragmented() {
 					t.stats.MustNotBeFragmented(msg.MessageKind(), msg.MessageName(), addr, handshakeHdr)
@@ -186,13 +197,13 @@ func (t *Transport) processPlaintextRecord(hdr format.PlaintextRecordHeader, rec
 					//TODO: alert here
 					continue
 				}
-				t.stats.ServerHelloMessage(msg, addr)
-				t.OnServerHello(msg, addr)
+				t.stats.ServerHelloMessage(handshakeHdr, msg, addr)
+				t.OnServerHello(messageData, handshakeHdr, msg, addr)
 			default:
 				t.stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)
 			}
 		case format.PlaintextContentTypeAck:
-			log.Printf("dtls: got ack %v from %v, record(hex): %x", hdr, addr, record)
+			log.Printf("dtls: got ack %v from %v, message(hex): %x", hdr, addr, messageData)
 			return // TODO - more checks
 		default:
 			panic("unknown content type")
@@ -213,6 +224,7 @@ func (t *Transport) popHelloRetryDatagram() ([]byte, bool) {
 	var result []byte
 	if pos := len(t.helloRetryPool) - 1; pos >= 0 {
 		result = t.helloRetryPool[pos][:0]
+		t.helloRetryPool[pos] = nil // do not leave alias
 		t.helloRetryPool = t.helloRetryPool[:pos]
 	}
 	return result, true

@@ -9,7 +9,8 @@ Howto test with Wolfssl.
 
 wolfssl % ./autogen.sh
 
-wolfssl % ./configure --enable-dtls13 --enable-dtls --enable-tls13 --enable-session-ticket --enable-dtlscid --enable-curve25519
+add --enable-debug if you want detailed log
+wolfssl % ./configure CFLAGS="-DOPENSSL_EXTRA -DHAVE_SECRET_CALLBACK -DWOLFSSL_KEYLOG_EXPORT_WARNED -DSHOW_SECRETS -DWOLFSSL_SSLKEYLOGFILE" --enable-dtls13 --enable-dtls --enable-tls13 --enable-session-ticket --enable-dtlscid --enable-curve25519
 
 wolfssl %  sudo make install
 
@@ -19,11 +20,12 @@ edit wolfssl-examples/dtls/Makefile
 CFLAGS   = -Wall -I/home/user/devbox/wolfssl
 LIBS     = -L/home/user/devbox/wolfssl/src/.libs -lm
 
-edit wolfssl-examples/dtls/client-dtls13.c and request x25519 key share 
-    if (wolfSSL_UseKeyShare(ssl, WOLFSSL_ECC_X25519) != SSL_SUCCESS) {
-        fprintf(stderr, "unable to set x25519 key share\n");
-        goto cleanup;
-    }
+edit wolfssl-examples/dtls/client-dtls13.c and wolfssl-examples/dtls/server-dtls13.c  
+void print_secret(const WOLFSSL* ssl, const char* line) {
+    fprintf(stderr, "%s\n", line);
+}
+    wolfSSL_CTX_set_keylog_callback(ctx, print_secret);
+
 
 wolfssl-examples/dtls %  make server-dtls13 client-dtls13
 

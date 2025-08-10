@@ -10,7 +10,7 @@ type PlaintextRecordHeader struct {
 	ContentType byte
 	// Version is fixed, not stored
 	Epoch          uint16
-	SequenceNumber uint64
+	SequenceNumber uint64 // stored as 48-bit
 	// Length is checked, not stored
 }
 

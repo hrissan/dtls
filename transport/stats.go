@@ -31,9 +31,9 @@ type Stats interface {
 
 	// logic layer
 	ErrorServerReceivedServerHello(addr netip.AddrPort)
-	ErrorClientHelloUnsupportedParams(msg format.ClientHello, addr netip.AddrPort, err error)
-	ClientHelloMessage(msg format.ClientHello, addr netip.AddrPort)
-	ServerHelloMessage(msg format.ServerHello, addr netip.AddrPort)
+	ErrorClientHelloUnsupportedParams(handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort, err error)
+	ClientHelloMessage(handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort)
+	ServerHelloMessage(handshakeHdr format.MessageHandshakeHeader, msg format.ServerHello, addr netip.AddrPort)
 	ServerHelloRetryRequestQueueOverloaded(addr netip.AddrPort)
 	CookieCreated(addr netip.AddrPort)
 	CookieChecked(valid bool, age time.Duration, addr netip.AddrPort)
@@ -123,25 +123,25 @@ func (s *StatsLog) ErrorServerReceivedServerHello(addr netip.AddrPort) {
 	log.Printf("dtls: server received server hello addr=%v", addr)
 }
 
-func (s *StatsLog) ErrorClientHelloUnsupportedParams(msg format.ClientHello, addr netip.AddrPort, err error) {
+func (s *StatsLog) ErrorClientHelloUnsupportedParams(handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort, err error) {
 	if !s.printMessages.Load() {
 		return
 	}
-	log.Printf("dtls: message %s has unsupported params addr=%v: %+v: %v", msg.MessageName(), addr, msg, err)
+	log.Printf("dtls: message %s header=%+v has unsupported params addr=%v: %+v: %v", msg.MessageName(), handshakeHdr, addr, msg, err)
 }
 
-func (s *StatsLog) ClientHelloMessage(msg format.ClientHello, addr netip.AddrPort) {
+func (s *StatsLog) ClientHelloMessage(handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}
-	log.Printf("dtls: message %s addr=%v: %+v", msg.MessageName(), addr, msg)
+	log.Printf("dtls: message %s header=%+v addr=%v: %+v", msg.MessageName(), handshakeHdr, addr, msg)
 }
 
-func (s *StatsLog) ServerHelloMessage(msg format.ServerHello, addr netip.AddrPort) {
+func (s *StatsLog) ServerHelloMessage(handshakeHdr format.MessageHandshakeHeader, msg format.ServerHello, addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}
-	log.Printf("dtls: message %s addr=%v: %+v", msg.MessageName(), addr, msg)
+	log.Printf("dtls: message %s header=%+v addr=%v: %+v", msg.MessageName(), handshakeHdr, addr, msg)
 }
 
 func (s *StatsLog) ServerHelloRetryRequestQueueOverloaded(addr netip.AddrPort) {

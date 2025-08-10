@@ -144,7 +144,7 @@ func (msg *ExtensionsSet) Write(body []byte, isNewSessionTicket bool, isServerHe
 	if msg.KeyShareSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_KEY_SHARE)
 		body, mark = MarkUin16Offset(body)
-		body = msg.KeyShare.Write(body, isHelloRetryRequest)
+		body = msg.KeyShare.Write(body, isServerHello, isHelloRetryRequest)
 		FillUin16Offset(body, mark)
 	}
 	return body

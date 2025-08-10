@@ -12,6 +12,7 @@ import (
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/format"
+	"golang.org/x/crypto/curve25519"
 )
 
 type Server struct {
@@ -141,11 +142,58 @@ func (t *Transport) OnClientHello(messageData []byte, handshakeHdr format.Messag
 	if !ok {
 		hctx = &HandshakeContext{
 			LastActivity:          time.Now(),
-			ServerRandom:          [32]byte{},
-			NextMessageSeqReceive: 0,
-			NextMessageSeqSend:    0,
+			NextMessageSeqReceive: 2, // ClientHello, ClientHello
+			NextMessageSeqSend:    2, // HRR, ServerHello
+		}
+		t.rnd.Read(hctx.ServerRandom[:])
+		t.rnd.Read(hctx.x25519Secret[:])
+		x25519Public, err := curve25519.X25519(hctx.x25519Secret[:], curve25519.Basepoint)
+		if err != nil {
+			panic("curve25519.X25519 failed")
 		}
 		t.handshakes[addr] = hctx
+
+		datagram, ok := t.popHelloRetryDatagram()
+		if !ok {
+			t.stats.ServerHelloRetryRequestQueueOverloaded(addr)
+			// Prohibited sending alert here
+			return
+		}
+		helloRetryRequest := format.ServerHello{
+			Random:      hctx.ServerRandom,
+			CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
+		}
+		helloRetryRequest.Extensions.SupportedVersionsSet = true
+		helloRetryRequest.Extensions.SupportedVersions.SelectedVersion = format.DTLS_VERSION_13
+		helloRetryRequest.Extensions.KeyShareSet = true
+		helloRetryRequest.Extensions.KeyShare.X25519PublicKeySet = true
+		copy(helloRetryRequest.Extensions.KeyShare.X25519PublicKey[:], x25519Public)
+		recordHdr := format.PlaintextRecordHeader{
+			ContentType:    format.PlaintextContentTypeHandshake,
+			Epoch:          0,
+			SequenceNumber: 1,
+		}
+		msgHeader := format.MessageHandshakeHeader{
+			HandshakeType:  format.HandshakeTypeServerHello,
+			Length:         0,
+			MessageSeq:     1,
+			FragmentOffset: 0,
+			FragmentLength: 0,
+		}
+		// first reserve space for headers by writing with not all variables set
+		datagram = recordHdr.Write(datagram, 0) // reserve space
+		recordHeaderSize := len(datagram)
+		datagram = msgHeader.Write(datagram) // reserve space
+		msgHeaderSize := len(datagram) - recordHeaderSize
+		datagram = helloRetryRequest.Write(datagram)
+		msgBodySize := len(datagram) - recordHeaderSize - msgHeaderSize
+		msgHeader.Length = uint32(msgBodySize)
+		msgHeader.FragmentLength = msgHeader.Length
+		// now overwrite reserved space
+		_ = recordHdr.Write(datagram[:0], msgHeaderSize+msgBodySize)
+		_ = msgHeader.Write(datagram[recordHeaderSize:recordHeaderSize])
+		t.SendHelloRetryDatagram(datagram, addr)
+		return
 	}
 	// TODO - start Handshake
 }

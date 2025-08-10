@@ -1,11 +1,21 @@
 package transport
 
-import "time"
+import (
+	"hash"
+	"time"
+)
 
 type HandshakeContext struct {
 	LastActivity time.Time // forget handshakes based on LRU
 	ServerRandom [32]byte
-	// for transport Receive/Send is more convenient than Client/Server
+	x25519Secret [32]byte
+
+	NextMessageSeqSend uint32
+	MessagesSendQueue  [][]byte
+
 	NextMessageSeqReceive uint32
-	NextMessageSeqSend    uint32
+	MessageToReceiveSet   bool // if set, has seq == NextMessageSeqReceive-1
+	MessageToReceive      []byte
+
+	TranscriptHasher hash.Hash
 }

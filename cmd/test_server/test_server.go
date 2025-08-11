@@ -3,15 +3,17 @@ package main
 import (
 	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/transport"
+	"github.com/hrissan/tinydtls/transport/options"
+	"github.com/hrissan/tinydtls/transport/stats"
 )
 
 func main() {
 	socket := transport.OpenSocketMust("127.0.0.1:11111")
 
-	stats := transport.NewStatsLogVerbose()
-	opts := transport.DefaultTransportOptions()
+	st := stats.NewStatsLogVerbose()
 	rnd := dtlsrand.CryptoRand()
-	t := transport.NewTransport(opts, stats, rnd, socket, true)
+	opts := options.DefaultTransportOptions(true, rnd, st)
+	t := transport.NewTransport(opts)
 
-	t.Run()
+	t.GoRunUDP(socket)
 }

@@ -6,21 +6,23 @@ import (
 
 	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/transport"
+	"github.com/hrissan/tinydtls/transport/options"
+	"github.com/hrissan/tinydtls/transport/stats"
 )
 
 func main() {
 	socket := transport.OpenSocketMust("127.0.0.1:")
 
-	stats := transport.NewStatsLogVerbose()
-	opts := transport.DefaultTransportOptions()
+	st := stats.NewStatsLogVerbose()
 	rnd := dtlsrand.CryptoRand()
-	t := transport.NewTransport(opts, stats, rnd, socket, false)
+	opts := options.DefaultTransportOptions(false, rnd, st)
+	t := transport.NewTransport(opts)
 
 	peerAddr, err := netip.ParseAddrPort("127.0.0.1:11111")
 	if err != nil {
 		log.Panic("tinydtls: cannot parse peer address: ", err)
 	}
-	t.StartConnection(peerAddr)
+	_ = t.StartConnection(peerAddr)
 
-	t.Run()
+	t.GoRunUDP(socket)
 }

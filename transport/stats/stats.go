@@ -1,4 +1,4 @@
-package transport
+package stats
 
 import (
 	"log"

@@ -27,7 +27,8 @@ const PlaintextContentTypeHandshake = 22
 const PlaintextContentTypeAck = 26
 
 func IsPlaintextRecord(fb byte) bool {
-	return fb == PlaintextContentTypeAlert || fb == PlaintextContentTypeHandshake || fb == PlaintextContentTypeAck // [rfc9147:4.1]
+	// [rfc9147:4.1], but it seems acks must always be encrypted in DTLS1.3, so we do not classify them as valid here
+	return fb == PlaintextContentTypeAlert || fb == PlaintextContentTypeHandshake // || fb == PlaintextContentTypeAck
 }
 
 func (hdr *PlaintextRecordHeader) Parse(datagram []byte) (n int, body []byte, err error) {

@@ -18,13 +18,14 @@ type Transport struct {
 	options TransportOptions
 	rnd     dtlsrand.Rand
 
+	roleServer  bool
 	cookieState cookie.CookieState
 
 	cIDLength int // We use fixed size connection ID, so we can parse ciphertext records easily [rfc9147:9.1]
 
 	handshakesConnectionsMu sync.RWMutex
 	// TODO - limit on max number of parallel handshakes, clear items by LRU
-	// only ClientHello with correct cookie replaces previous handshake here [rfc9147:5.11]
+	// only ClientHello with correct cookie and larger timestamp replaces previous handshake here [rfc9147:5.11]
 	handshakes map[netip.AddrPort]*HandshakeContext
 
 	// we move handshake here, once it is finished
@@ -41,12 +42,13 @@ type Transport struct {
 	socket *net.UDPConn // TODO: move to another layer, so Transport does not depend on UDP
 }
 
-func NewTransport(opts TransportOptions, stats Stats, rnd dtlsrand.Rand, socket *net.UDPConn) *Transport {
+func NewTransport(opts TransportOptions, stats Stats, rnd dtlsrand.Rand, socket *net.UDPConn, roleServer bool) *Transport {
 	t := &Transport{
 		stats:       stats,
 		options:     opts,
 		rnd:         rnd,
 		socket:      socket,
+		roleServer:  roleServer,
 		handshakes:  map[netip.AddrPort]*HandshakeContext{},
 		connections: map[netip.AddrPort]*Connection{},
 	}

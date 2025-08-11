@@ -11,26 +11,29 @@ import (
 	"time"
 
 	"github.com/hrissan/tinydtls/cookie"
-	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/format"
 	"golang.org/x/crypto/curve25519"
 )
 
-type Server struct {
-	t *Transport
+// for tests and tools
+func OpenSocketMust(addressPort string) *net.UDPConn {
+	udpAddr, err := net.ResolveUDPAddr("udp", addressPort)
+	if err != nil {
+		log.Fatalf("tinydtls: cannot resolve local udp address %s: %v", addressPort, err)
+	}
+	socket, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		log.Fatalf("tinydtls: cannot listen to udp address %s: %v", addressPort, err)
+	}
+	log.Printf("tinydtls: opened socket for address %s localAddr %s\n", addressPort, socket.LocalAddr().String())
+	return socket
 }
 
-func NewServer(opts TransportOptions, stats Stats, rnd dtlsrand.Rand, socket *net.UDPConn) *Server {
-	t := NewTransport(opts, stats, rnd, socket)
-	s := &Server{t: t}
-	return s
-}
-
-func (s *Server) Run() {
+func (t *Transport) Run() {
 	wg := sync.WaitGroup{}
 	wg.Add(2)
-	go s.t.goRead(&wg)
-	go s.t.goWrite(&wg)
+	go t.goRead(&wg)
+	go t.goWrite(&wg)
 	wg.Wait()
 }
 

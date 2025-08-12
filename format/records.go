@@ -64,7 +64,7 @@ func (hdr *PlaintextRecordHeader) Write(datagram []byte, length int) []byte {
 type CiphertextRecordHeader struct {
 	FirstByte byte
 	// CID is variable length, not stored
-	SequenceNumberBytes [2]byte // 1 or 2 bytes (depending on FirstByte) copied from/to datagram
+	// SequenceNumberBytes [2]byte // not stored because encrypted/decrypted in place
 	// Length is checked, not stored
 }
 
@@ -78,46 +78,64 @@ func (hdr *CiphertextRecordHeader) Has16BitSeqNum() bool { return hdr.FirstByte&
 func (hdr *CiphertextRecordHeader) HasLength() bool      { return hdr.FirstByte&0b00000100 != 0 }
 func (hdr *CiphertextRecordHeader) Epoch() byte          { return hdr.FirstByte & 0b00000011 }
 
-func (hdr *CiphertextRecordHeader) SequenceNumber() uint16 { // return garbage before decryption or after encryption
-	return binary.BigEndian.Uint16(hdr.SequenceNumberBytes[:])
+func closestSequenceNumber(seq uint16, expectedSN uint64, mask uint64) uint64 {
+	expectedSN1 := (expectedSN &^ mask) | uint64(seq)
+	expectedSN2 := ((expectedSN &^ mask) | uint64(seq)) + mask + 1
+	if expectedSN1 > expectedSN {
+		panic("expected SN algorithm failure") // TODO - remove after debugging
+	}
+	if expectedSN2 < expectedSN {
+		panic("expected SN algorithm failure") // TODO - remove after debugging
+	}
+	if expectedSN-expectedSN1 < expectedSN2-expectedSN { // return whatever is closest
+		return expectedSN1
+	}
+	return expectedSN2
 }
 
-func (hdr *CiphertextRecordHeader) Parse(datagram []byte, cIDLength int) (n int, cid []byte, body []byte, err error) {
+func (hdr *CiphertextRecordHeader) ClosestSequenceNumber(seqNumData []byte, expectedSN uint64) uint64 { // return garbage before decryption or after encryption
+	if hdr.Has16BitSeqNum() {
+		seq := binary.BigEndian.Uint16(seqNumData)
+		return closestSequenceNumber(seq, expectedSN, 0xFFFF)
+	}
+	seq := seqNumData[0]
+	return closestSequenceNumber(uint16(seq), expectedSN, 0xFF)
+}
+
+func (hdr *CiphertextRecordHeader) Parse(datagram []byte, cIDLength int) (n int, cid []byte, seqNum []byte, header []byte, body []byte, err error) {
 	hdr.FirstByte = datagram[0] // !empty checked elsewhere
 	offset := 1
 	if hdr.HasCID() {
 		if len(datagram) < 1+cIDLength {
-			return 0, nil, nil, ErrCiphertextRecordTooShort
+			return 0, nil, nil, nil, nil, ErrCiphertextRecordTooShort
 		}
 		cid = datagram[1 : 1+cIDLength]
 		offset = 1 + cIDLength
 	}
 	if hdr.Has16BitSeqNum() {
 		if len(datagram) < offset+2 {
-			return 0, nil, nil, ErrCiphertextRecordTooShort
+			return 0, nil, nil, nil, nil, ErrCiphertextRecordTooShort
 		}
-		hdr.SequenceNumberBytes[0] = datagram[offset]
-		hdr.SequenceNumberBytes[1] = datagram[offset+1]
+		seqNum = datagram[offset : offset+2]
 		offset += 2
 	} else {
 		if len(datagram) < offset+1 {
-			return 0, nil, nil, ErrCiphertextRecordTooShort
+			return 0, nil, nil, nil, nil, ErrCiphertextRecordTooShort
 		}
-		hdr.SequenceNumberBytes[0] = datagram[offset]
-		hdr.SequenceNumberBytes[1] = 0
+		seqNum = datagram[offset : offset+1]
 		offset += 1
 	}
 	if !hdr.HasLength() {
-		return len(datagram), cid, datagram[offset:], nil
+		return len(datagram), cid, seqNum, datagram[:offset], datagram[offset:], nil
 	}
 	if len(datagram) < offset+2 {
-		return 0, nil, nil, ErrCiphertextRecordTooShort
+		return 0, nil, nil, nil, nil, ErrCiphertextRecordTooShort
 	}
 	length := int(binary.BigEndian.Uint16(datagram[offset:]))
 	offset += 2
 	endOffset := offset + length
 	if len(datagram) < endOffset {
-		return 0, nil, nil, ErrCiphertextRecordTooShortLength
+		return 0, nil, nil, nil, nil, ErrCiphertextRecordTooShortLength
 	}
-	return endOffset, cid, datagram[offset:endOffset], nil
+	return endOffset, cid, seqNum, datagram[:offset], datagram[offset:endOffset], nil
 }

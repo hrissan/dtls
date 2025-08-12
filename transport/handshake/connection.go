@@ -115,9 +115,9 @@ func (hctx *HandshakeConnection) constructPlaintextRecord(datagram []byte, msg f
 	recordHdr := format.PlaintextRecordHeader{
 		ContentType:    format.PlaintextContentTypeHandshake,
 		Epoch:          0,
-		SequenceNumber: hctx.Keys.NextEpoch0Sequence,
+		SequenceNumber: hctx.Keys.NextEpoch0SequenceReceive,
 	}
-	hctx.Keys.NextEpoch0Sequence++
+	hctx.Keys.NextEpoch0SequenceReceive++
 	datagram = recordHdr.Write(datagram, format.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
 	datagram = msg.Header.Write(datagram)
 	datagram = append(datagram, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)

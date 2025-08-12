@@ -77,14 +77,14 @@ func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
 		fb := datagram[recordOffset]
 		if format.IsCiphertextRecord(fb) {
 			var hdr format.CiphertextRecordHeader
-			n, cid, body, err := hdr.Parse(datagram[recordOffset:], rc.opts.CIDLength) // TODO - CID
+			n, cid, seqNum, header, body, err := hdr.Parse(datagram[recordOffset:], rc.opts.CIDLength) // TODO - CID
 			if err != nil {
 				rc.opts.Stats.BadRecord("ciphertext", recordOffset, len(datagram), addr, err)
 				// TODO: alert here, and we cannot continue to the next record.
 				return
 			}
 			recordOffset += n
-			rc.processCiphertextRecord(hdr, cid, body, addr) // errors inside do not conflict with our ability to process next record
+			rc.processCiphertextRecord(hdr, cid, seqNum, header, body, addr) // errors inside do not conflict with our ability to process next record
 			continue
 		}
 		if format.IsPlaintextRecord(fb) {

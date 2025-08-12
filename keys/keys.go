@@ -4,12 +4,12 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"hash"
 	"log"
 
 	"github.com/hrissan/tinydtls/dtlsrand"
-	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/hkdf"
 	"golang.org/x/crypto/curve25519"
 )
@@ -35,35 +35,46 @@ type Keys struct {
 
 	DoNotEncryptSequenceNumbers bool // enabled extensions and saves us 50% memory on crypto contexts
 
+	ClientWrite cipher.AEAD
+	ServerWrite cipher.AEAD
+
 	ClientSN cipher.Block
 	ServerSN cipher.Block
 
 	NextMessageSeqSend    uint32
 	NextMessageSeqReceive uint32
 
-	Epoch               uint16
-	NextSegmentSequence uint64
-	NextEpoch0Sequence  uint64 // to retransmit ServerHello we must remember separate epoch 0 sequence
+	Epoch                      uint16
+	NextSegmentSequenceReceive uint64
+	NextSegmentSequenceSend    uint64
+	NextEpoch0SequenceReceive  uint64 // to retransmit ServerHello we must remember separate epoch 0 sequence
 }
 
-func (keys *Keys) EncryptSequenceNumbers(hdr *format.CiphertextRecordHeader, cipherText []byte, roleServer bool) error {
-	if keys.DoNotEncryptSequenceNumbers {
+func (keys *Keys) EncryptSequenceNumbers(seqNum []byte, cipherText []byte, roleServer bool) error {
+	var mask [32]byte // Some space good for many ciphers, TODO - check constant mush earlier
+	if !keys.DoNotEncryptSequenceNumbers {
+		snCipher := keys.ServerSN
+		if roleServer {
+			snCipher = keys.ClientSN
+		}
+		if len(cipherText) < snCipher.BlockSize() {
+			// TODO - generate alert
+			return ErrCipherTextTooShortForSNDecryption
+		}
+		snCipher.Encrypt(mask[:], cipherText)
+	}
+	if len(seqNum) == 1 {
+		seqNum[0] ^= mask[0]
+		log.Printf("decrypted SN: %d", uint16(seqNum[0]))
 		return nil
+	} else if len(seqNum) == 2 {
+		seqNum[0] ^= mask[0]
+		seqNum[1] ^= mask[1]
+		log.Printf("decrypted SN: %d", binary.BigEndian.Uint16(seqNum))
+		return nil
+	} else {
+		panic("seqNum must have 1 or 2 bytes")
 	}
-	snCipher := keys.ServerSN
-	if roleServer {
-		snCipher = keys.ClientSN
-	}
-	if len(cipherText) < snCipher.BlockSize() {
-		// TODO - generate alert
-		return ErrCipherTextTooShortForSNDecryption
-	}
-	var mask [64]byte // Some space good for many ciphers, TODO - check constant mush earlier
-	snCipher.Encrypt(mask[:], cipherText)
-	hdr.SequenceNumberBytes[0] ^= mask[0]
-	hdr.SequenceNumberBytes[1] ^= mask[1]
-	log.Printf("decrypting SN: %x %d", hdr.SequenceNumberBytes[:], hdr.SequenceNumber())
-	return nil
 }
 
 func (keys *Keys) ComputeKeyShare(rnd dtlsrand.Rand) {
@@ -75,6 +86,22 @@ func (keys *Keys) ComputeKeyShare(rnd dtlsrand.Rand) {
 		}
 		copy(keys.X25519Public[:], x25519Public)
 	}
+}
+
+func NewAesCipher(key []byte) cipher.Block {
+	c, err := aes.NewCipher(key)
+	if err != nil {
+		panic("aes.NewCipher fails " + err.Error())
+	}
+	return c
+}
+
+func NewGCMCipher(block cipher.Block) cipher.AEAD {
+	c, err := cipher.NewGCM(block)
+	if err != nil {
+		panic("cipher.NewGCM fails " + err.Error())
+	}
+	return c
 }
 
 func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {
@@ -105,16 +132,11 @@ func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {
 	copy(keys.ClientSNKey[:], hkdf.ExpandLabel(hasher, csecret, "sn", []byte{}, len(keys.ClientSNKey)))
 	copy(keys.ServerSNKey[:], hkdf.ExpandLabel(hasher, ssecret, "sn", []byte{}, len(keys.ServerSNKey)))
 
-	c, err := aes.NewCipher(keys.ClientSNKey[:])
-	if err != nil {
-		panic("aes.NewCipher failed")
-	}
-	keys.ClientSN = c
-	c, err = aes.NewCipher(keys.ServerSNKey[:])
-	if err != nil {
-		panic("aes.NewCipher failed")
-	}
-	keys.ServerSN = c
+	keys.ClientSN = NewAesCipher(keys.ClientSNKey[:])
+	keys.ServerSN = NewAesCipher(keys.ServerSNKey[:])
+
+	keys.ClientWrite = NewGCMCipher(NewAesCipher(keys.ClientWriteKey[:]))
+	keys.ServerWrite = NewGCMCipher(NewAesCipher(keys.ServerWriteKey[:]))
 
 	keys.Epoch = 2
 	//os.Exit(1) // to compare printed keys above

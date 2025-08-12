@@ -124,6 +124,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	_ = msgHeader.Write(datagram[recordHeaderSize:recordHeaderSize])
 	rc.snd.SendHelloRetryDatagram(datagram, addr)
 
+	// [rfc8446:4.4.1] replace initial hello message with its hash if HRR was used
 	transcriptHasher := sha256.New()
 	syntheticHashData := []byte{format.HandshakeTypeMessageHash, 0, 0, sha256.Size}
 	_, _ = transcriptHasher.Write(syntheticHashData)

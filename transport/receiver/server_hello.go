@@ -1,6 +1,7 @@
 package receiver
 
 import (
+	"crypto/sha256"
 	"errors"
 	"log"
 	"net/netip"
@@ -8,6 +9,7 @@ import (
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/transport/handshake"
+	"golang.org/x/crypto/curve25519"
 )
 
 var ErrServerHRRContainsNoCookie = errors.New("server HRR contains no cookie")
@@ -47,10 +49,42 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 		if !serverHello.Extensions.CookieSet {
 			return nil, ErrServerHRRContainsNoCookie
 		}
+		if hctx.SendQueueFlight() >= handshake.MessagesFlightClientHello2 {
+			return nil, nil
+		}
+		// [rfc8446:4.4.1] replace initial hello message with its hash if HRR was used
+		var initialHelloTranscriptHash [cookie.MaxTranscriptHashLength]byte
+		hctx.TranscriptHasher.Sum(initialHelloTranscriptHash[:0])
+		hctx.TranscriptHasher.Reset()
+		syntheticHashData := []byte{format.HandshakeTypeMessageHash, 0, 0, sha256.Size}
+		_, _ = hctx.TranscriptHasher.Write(syntheticHashData)
+		_, _ = hctx.TranscriptHasher.Write(initialHelloTranscriptHash[:sha256.Size])
+
+		handshakeHdr.AddToHash(hctx.TranscriptHasher)
+		_, _ = hctx.TranscriptHasher.Write(messageBody)
+
 		clientHelloMsg := rc.generateClientHello(hctx, true, serverHello.Extensions.Cookie)
 		hctx.PushMessage(handshake.MessagesFlightClientHello2, clientHelloMsg)
 		return hctx, nil
 	}
+	if !serverHello.Extensions.KeyShare.X25519PublicKeySet {
+		return nil, ErrSupportOnlyX25519
+	}
+	if hctx.SendQueueFlight() >= handshake.MessagesFlightClientCertificate {
+		return nil, nil
+	}
+	handshakeHdr.AddToHash(hctx.TranscriptHasher)
+	_, _ = hctx.TranscriptHasher.Write(messageBody)
+
+	var handshakeTranscriptHash [cookie.MaxTranscriptHashLength]byte
+	hctx.TranscriptHasher.Sum(handshakeTranscriptHash[:0])
+
+	sharedSecret, err := curve25519.X25519(hctx.Keys.X25519Secret[:], serverHello.Extensions.KeyShare.X25519PublicKey[:])
+	if err != nil {
+		panic("curve25519.X25519 failed")
+	}
+	hctx.Keys.ComputeHandshakeKeys(sharedSecret, handshakeTranscriptHash[:sha256.Size])
+
 	log.Printf("TODO - process server hello")
 	return nil, nil
 }

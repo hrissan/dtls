@@ -19,39 +19,52 @@ type KeyShareSet struct {
 var ErrKeyShareX25519PublicKeyWrongFormat = errors.New("x25519 public key has wrong format")
 var ErrKeyShareSECP256R1PublicKeyWrongFormat = errors.New("secp256r1 public key has wrong format")
 
+func (msg *KeyShareSet) parseElement(body []byte, offset int) (_ int, err error) {
+	var keyShareType uint16
+	if offset, keyShareType, err = ParserReadUint16(body, offset); err != nil {
+		return offset, err
+	}
+	var keyShareBody []byte
+	if offset, keyShareBody, err = ParserReadUint16Length(body, offset); err != nil {
+		return offset, err
+	}
+	switch keyShareType { // skip unknown
+	case SupportedGroup_X25519:
+		if len(keyShareBody) != 32 {
+			return offset, ErrKeyShareX25519PublicKeyWrongFormat
+		}
+		msg.X25519PublicKeySet = true
+		copy(msg.X25519PublicKey[:], keyShareBody)
+	case SupportedGroup_SECP256R1:
+		if len(keyShareBody) != 65 || keyShareBody[0] != 4 {
+			return offset, ErrKeyShareSECP256R1PublicKeyWrongFormat
+		}
+		msg.SECP256R1PublicKeySet = true
+		copy(msg.SECP256R1PublicKey[:], keyShareBody[1:])
+	}
+	return offset, nil
+}
+
 func (msg *KeyShareSet) parseInside(body []byte) (err error) {
 	offset := 0
 	for offset < len(body) {
-		var keyShareType uint16
-		if offset, keyShareType, err = ParserReadUint16(body, offset); err != nil {
+		if offset, err = msg.parseElement(body, offset); err != nil {
 			return err
-		}
-		var keyShareBody []byte
-		if offset, keyShareBody, err = ParserReadUint16Length(body, offset); err != nil {
-			return err
-		}
-		switch keyShareType { // skip unknown
-		case SupportedGroup_X25519:
-			if len(keyShareBody) != 32 {
-				return ErrKeyShareX25519PublicKeyWrongFormat
-			}
-			msg.X25519PublicKeySet = true
-			copy(msg.X25519PublicKey[:], keyShareBody)
-		case SupportedGroup_SECP256R1:
-			if len(keyShareBody) != 65 || keyShareBody[0] != 4 {
-				return ErrKeyShareSECP256R1PublicKeyWrongFormat
-			}
-			msg.SECP256R1PublicKeySet = true
-			copy(msg.SECP256R1PublicKey[:], keyShareBody[1:])
 		}
 	}
 	return nil
 }
 
-func (msg *KeyShareSet) Parse(body []byte, isHelloRetryRequest bool) (err error) {
+func (msg *KeyShareSet) Parse(body []byte, isServerHello bool, isHelloRetryRequest bool) (err error) {
 	offset := 0
 	if isHelloRetryRequest {
 		if offset, msg.KeyShareHRRSelectedGroup, err = ParserReadUint16(body, offset); err != nil {
+			return err
+		}
+		return ParserReadFinish(body, offset)
+	}
+	if isServerHello {
+		if offset, err = msg.parseElement(body, offset); err != nil {
 			return err
 		}
 		return ParserReadFinish(body, offset)

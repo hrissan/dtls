@@ -23,7 +23,7 @@ type HandshakeConnection struct {
 
 	mu                      sync.Mutex
 	Keys                    keys.Keys
-	messagesFlight          byte                      // message from the next flight will ack (clear) all messages in send queue
+	sendQueueFlight         byte                      // message from the next flight will ack (clear) all messages in send queue
 	messagesSendQueue       []format.MessageHandshake // all messages here belong to the same flight.
 	SendQueueMessageOffset  int                       // offset in messagesSendQueue of the message we are sending, len(messagesSendQueue) if all sent
 	SendQueueFragmentOffset int                       // offset inside messagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(messagesSendQueue)
@@ -31,16 +31,18 @@ type HandshakeConnection struct {
 	TranscriptHasher hash.Hash // when messages are added to messagesSendQueue, they are also added to TranscriptHasher
 }
 
+func (hctx *HandshakeConnection) SendQueueFlight() byte { return hctx.sendQueueFlight }
+
 // ack (remove) all previous flights
 func (hctx *HandshakeConnection) PushMessage(flight byte, msg format.MessageHandshake) {
-	if flight < hctx.messagesFlight {
+	if flight < hctx.sendQueueFlight {
 		panic("you cannot add message from previous flight")
 	}
-	if flight > hctx.messagesFlight { // implicit ack of all previous flights
+	if flight > hctx.sendQueueFlight { // implicit ack of all previous flights
 		hctx.messagesSendQueue = hctx.messagesSendQueue[:0]
 		hctx.SendQueueMessageOffset = 0
 		hctx.SendQueueFragmentOffset = 0
-		hctx.messagesFlight = flight
+		hctx.sendQueueFlight = flight
 	}
 	if hctx.Keys.NextMessageSeqSend >= math.MaxUint16 {
 		// TODO - prevent wrapping next message seq

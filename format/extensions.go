@@ -98,7 +98,7 @@ func (msg *ExtensionsSet) Parse(body []byte, isNewSessionTicket bool, isServerHe
 			}
 			msg.CookieSet = true
 		case EXTENSION_KEY_SHARE:
-			if err := msg.KeyShare.Parse(extensionBody, isHelloRetryRequest); err != nil {
+			if err := msg.KeyShare.Parse(extensionBody, isServerHello, isHelloRetryRequest); err != nil {
 				return err
 			}
 			msg.KeyShareSet = true

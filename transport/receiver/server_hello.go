@@ -64,10 +64,10 @@ func (rc *Receiver) generateClientHello(hctx *handshake.HandshakeConnection, set
 	clientHello.Extensions.SupportedVersionsSet = true
 	clientHello.Extensions.SupportedVersions.DTLS_13 = true
 	clientHello.Extensions.SupportedGroupsSet = true
+	clientHello.Extensions.SupportedGroups.X25519 = true
 	clientHello.Extensions.SupportedGroups.SECP256R1 = false
 	clientHello.Extensions.SupportedGroups.SECP384R1 = false
 	clientHello.Extensions.SupportedGroups.SECP521R1 = false
-	clientHello.Extensions.SupportedGroups.X25519 = true
 
 	// We'd like to postpone ECC until HRR, but wolfssl requires key_share in the first client_hello
 	// TODO - offload to separate goroutine
@@ -76,14 +76,25 @@ func (rc *Receiver) generateClientHello(hctx *handshake.HandshakeConnection, set
 	clientHello.Extensions.KeyShare.X25519PublicKeySet = true
 	clientHello.Extensions.KeyShare.X25519PublicKey = hctx.Keys.X25519Public
 
-	clientHello.Extensions.SignatureAlgorithmsSet = true // TODO - set only those we actually support
+	// We need signature algorithms to sign and check certificate_verify,
+	// so we need to support lots of them.
+	// TODO - set only those we actually support
+	clientHello.Extensions.SignatureAlgorithmsSet = true
 	clientHello.Extensions.SignatureAlgorithms.ECDSA_SECP256r1_SHA256 = true
 	clientHello.Extensions.SignatureAlgorithms.ECDSA_SECP384r1_SHA384 = true
 	clientHello.Extensions.SignatureAlgorithms.ECDSA_SECP512r1_SHA512 = true
-	clientHello.Extensions.SignatureAlgorithms.ECDSA_SHA1 = false // insecure, TODO - remove from our code?
+	clientHello.Extensions.SignatureAlgorithms.RSA_PKCS1_SHA512 = true
+	clientHello.Extensions.SignatureAlgorithms.RSA_PKCS1_SHA384 = true
+	clientHello.Extensions.SignatureAlgorithms.RSA_PKCS1_SHA256 = true
+	clientHello.Extensions.SignatureAlgorithms.RSA_PSS_RSAE_SHA512 = true
+	clientHello.Extensions.SignatureAlgorithms.RSA_PSS_PSS_SHA512 = true
+	clientHello.Extensions.SignatureAlgorithms.RSA_PSS_RSAE_SHA384 = true
+	clientHello.Extensions.SignatureAlgorithms.RSA_PSS_PSS_SHA384 = true
+	clientHello.Extensions.SignatureAlgorithms.RSA_PSS_RSAE_SHA256 = true
+	clientHello.Extensions.SignatureAlgorithms.RSA_PSS_PSS_SHA256 = true
 	clientHello.Extensions.SignatureAlgorithms.ED25519 = false
 	clientHello.Extensions.SignatureAlgorithms.ED448 = false
-	// clientHello.Extensions.EncryptThenMacSet = true // not needed in DTLS1.3, but wolf sends it
+	clientHello.Extensions.EncryptThenMacSet = false // not needed in DTLS1.3, but wolf sends it
 
 	if setCookie {
 		clientHello.Extensions.CookieSet = true

@@ -28,8 +28,9 @@ type Keys struct {
 	NextMessageSeqSend    uint32
 	NextMessageSeqReceive uint32
 
-	Epoch           uint16
-	SegmentSequence uint64
+	Epoch               uint16
+	NextSegmentSequence uint64
+	NextEpoch0Sequence  uint64 // to retransmit ServerHello we must remember separate epoch 0 sequence
 }
 
 func (keys *Keys) ComputeKeyShare(rnd dtlsrand.Rand) {

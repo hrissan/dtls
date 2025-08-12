@@ -24,6 +24,9 @@ type Keys struct {
 
 	NextMessageSeqSend    uint32
 	NextMessageSeqReceive uint32
+
+	Epoch           uint16
+	SegmentSequence uint64
 }
 
 func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {

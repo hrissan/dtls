@@ -46,7 +46,7 @@ func (t *Transport) Close() {
 }
 
 func (t *Transport) StartConnection(peerAddr netip.AddrPort) error {
-	return nil
+	return t.rc.StartConnection(peerAddr)
 }
 
 // blocks until socket is closed (externally)

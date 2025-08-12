@@ -4,13 +4,17 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/transport/handshake"
 	"github.com/hrissan/tinydtls/transport/options"
 	"github.com/hrissan/tinydtls/transport/sender"
 )
+
+var ErrServerCannotStartConnection = errors.New("server can start connection")
 
 // Receiver also performs stateless logic
 
@@ -18,10 +22,27 @@ type Receiver struct {
 	opts        *options.TransportOptions
 	cookieState cookie.CookieState
 	snd         *sender.Sender
+
+	mu           sync.Mutex
+	sendCond     *sync.Cond
+	sendShutdown bool
+
+	handMu sync.Mutex
+	// TODO - limit on max number of parallel handshakes, clear items by LRU
+	// only ClientHello with correct cookie and larger timestamp replaces previous handshake here [rfc9147:5.11]
+	handshakes map[netip.AddrPort]*handshake.HandshakeConnection
+
+	// we move handshake here, once it is finished
+	//connections map[netip.AddrPort]*Connection
+
 }
 
 func NewReceiver(opts *options.TransportOptions, snd *sender.Sender) *Receiver {
-	rc := &Receiver{opts: opts, snd: snd}
+	rc := &Receiver{
+		opts:       opts,
+		snd:        snd,
+		handshakes: map[netip.AddrPort]*handshake.HandshakeConnection{},
+	}
 	rc.cookieState.SetRand(opts.Rnd)
 	return rc
 }
@@ -81,4 +102,21 @@ func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
 		// TODO: alert here, and we cannot continue to the next record.
 		return
 	}
+}
+
+func (rc *Receiver) StartConnection(peerAddr netip.AddrPort) error {
+	if rc.opts.RoleServer {
+		return ErrServerCannotStartConnection
+	}
+	rc.handMu.Lock()
+	defer rc.handMu.Unlock()
+	ha := rc.handshakes[peerAddr]
+	if ha != nil {
+		return nil // will wait for previous handshake timeout
+	}
+	ha = &handshake.HandshakeConnection{}
+	rc.handshakes[peerAddr] = ha
+
+	rc.snd.RegisterConnectionForSend(ha)
+	return nil
 }

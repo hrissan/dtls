@@ -41,8 +41,10 @@ type Keys struct {
 	ClientSN cipher.Block
 	ServerSN cipher.Block
 
-	NextMessageSeqSend    uint32
-	NextMessageSeqReceive uint32
+	FailDeprotection uint64
+
+	NextMessageSeqSend    uint16
+	NextMessageSeqReceive uint16
 
 	Epoch                      uint16
 	NextSegmentSequenceReceive uint64

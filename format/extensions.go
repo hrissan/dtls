@@ -53,6 +53,7 @@ func (msg *ExtensionsSet) parseCookie(body []byte) (err error) {
 	return ParserReadFinish(body, offset)
 }
 
+// TODO - rename to parseInside
 func (msg *ExtensionsSet) Parse(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) (err error) {
 	offset := 0
 	for offset < len(body) {
@@ -105,6 +106,18 @@ func (msg *ExtensionsSet) Parse(body []byte, isNewSessionTicket bool, isServerHe
 		}
 	}
 	return nil
+}
+
+func (msg *ExtensionsSet) ParseOutside(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) (err error) {
+	offset := 0
+	var extensionsBody []byte
+	if offset, extensionsBody, err = ParserReadUint16Length(body, offset); err != nil {
+		return err
+	}
+	if err = msg.Parse(extensionsBody, isNewSessionTicket, isServerHello, isHelloRetryRequest); err != nil {
+		return err
+	}
+	return ParserReadFinish(body, offset)
 }
 
 func (msg *ExtensionsSet) Write(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) []byte {

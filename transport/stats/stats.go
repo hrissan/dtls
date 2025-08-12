@@ -28,6 +28,7 @@ type Stats interface {
 	BadMessage(kind string, message string, addr netip.AddrPort, err error)
 	MustNotBeFragmented(kind string, message string, addr netip.AddrPort, header format.MessageHandshakeHeader)
 	MustBeEncrypted(kind string, message string, addr netip.AddrPort, header format.MessageHandshakeHeader)
+	MustNotBeEncrypted(kind string, message string, addr netip.AddrPort, header format.MessageHandshakeHeader)
 
 	// logic layer
 	ErrorServerReceivedServerHello(addr netip.AddrPort)
@@ -116,6 +117,13 @@ func (s *StatsLog) MustBeEncrypted(kind string, message string, addr netip.AddrP
 		return
 	}
 	log.Printf("tinydtls: message %s %s must be encrypted %v addr=%v", kind, message, header, addr)
+}
+
+func (s *StatsLog) MustNotBeEncrypted(kind string, message string, addr netip.AddrPort, header format.MessageHandshakeHeader) {
+	if s.level.Load() < 0 {
+		return
+	}
+	log.Printf("tinydtls: message %s %s must not be encrypted %v addr=%v", kind, message, header, addr)
 }
 
 func (s *StatsLog) ErrorServerReceivedServerHello(addr netip.AddrPort) {

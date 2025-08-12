@@ -84,7 +84,7 @@ func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
 				return
 			}
 			recordOffset += n
-			rc.processCiphertextRecord(hdr, cid, seqNum, header, body, addr) // errors inside do not conflict with our ability to process next record
+			rc.deprotectCiphertextRecord(hdr, cid, seqNum, header, body, addr) // errors inside do not conflict with our ability to process next record
 			continue
 		}
 		if format.IsPlaintextRecord(fb) {

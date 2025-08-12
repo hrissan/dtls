@@ -3,10 +3,19 @@ package format
 import (
 	"encoding/binary"
 	"errors"
-	"math"
 )
 
 const PlaintextRecordHeaderSize = 13
+const MaxPlaintextRecordLength = 16384                           // [rfc8446:5.1]
+const MaxCiphertextRecordLength = MaxPlaintextRecordLength + 256 // [rfc8446:5.2]
+
+const (
+	PlaintextContentTypeAlert           = 21
+	PlaintextContentTypeHandshake       = 22
+	PlaintextContentTypeApplicationData = 23
+	// PlaintextContentTypeHeartbeat       = 24 // [rfc6520] should not be received without negotiating extension. We choose to error on it.
+	PlaintextContentTypeAck = 26
+)
 
 type PlaintextRecordHeader struct {
 	ContentType byte
@@ -18,18 +27,25 @@ type PlaintextRecordHeader struct {
 
 var ErrPlaintextRecordHeaderTooShort = errors.New("plaintext record header too short")
 var ErrPlaintextRecordBodyTooShort = errors.New("plaintext record body too short")
+var ErrPlaintextRecordBodyTooLong = errors.New("plaintext record body exceeds 2^14")
 var ErrPlaintextRecordWrongLegacyRecordVersion = errors.New("plaintext record wrong legacy record version")
 
 func IsCiphertextRecord(fb byte) bool {
 	return fb&0b11100000 == 0b00100000
 }
 
-const PlaintextContentTypeAlert = 21
-const PlaintextContentTypeHandshake = 22
-const PlaintextContentTypeAck = 26
+func IsInnerPlaintextRecord(fb byte) bool {
+	// [rfc9147:4.1], but it seems acks must always be encrypted in DTLS1.3, so we do not classify them as valid here
+	return fb == PlaintextContentTypeAlert ||
+		fb == PlaintextContentTypeHandshake ||
+		fb == PlaintextContentTypeApplicationData ||
+		// fb == PlaintextContentTypeHeartbeat || - uncomment if we implement support
+		fb == PlaintextContentTypeAck
+}
 
 func IsPlaintextRecord(fb byte) bool {
 	// [rfc9147:4.1], but it seems acks must always be encrypted in DTLS1.3, so we do not classify them as valid here
+	// TODO - contact DTLS team
 	return fb == PlaintextContentTypeAlert || fb == PlaintextContentTypeHandshake // || fb == PlaintextContentTypeAck
 }
 
@@ -43,7 +59,11 @@ func (hdr *PlaintextRecordHeader) Parse(datagram []byte) (n int, body []byte, er
 	}
 	hdr.Epoch = binary.BigEndian.Uint16(datagram[3:5])
 	hdr.SequenceNumber = binary.BigEndian.Uint64(datagram[3:11]) & 0xFFFFFFFFFFFF
-	endOffset := PlaintextRecordHeaderSize + int(binary.BigEndian.Uint16(datagram[11:13]))
+	length := int(binary.BigEndian.Uint16(datagram[11:13]))
+	if length > MaxPlaintextRecordLength { // TODO - generate record_overflow alert
+		return 0, nil, ErrPlaintextRecordBodyTooLong
+	}
+	endOffset := PlaintextRecordHeaderSize + length
 	if len(datagram) < endOffset {
 		return 0, nil, ErrPlaintextRecordBodyTooShort
 	}
@@ -54,7 +74,7 @@ func (hdr *PlaintextRecordHeader) Write(datagram []byte, length int) []byte {
 	datagram = append(datagram, hdr.ContentType, 0xFE, 0xFD)
 	datagram = binary.BigEndian.AppendUint16(datagram, hdr.Epoch)
 	datagram = AppendUint48(datagram, hdr.SequenceNumber)
-	if length < 0 || length > math.MaxUint16 {
+	if length < 0 || length > MaxPlaintextRecordLength {
 		panic("length of plaintext record out of range")
 	}
 	datagram = binary.BigEndian.AppendUint16(datagram, uint16(length))
@@ -70,6 +90,7 @@ type CiphertextRecordHeader struct {
 
 var ErrCiphertextRecordTooShort = errors.New("cipher text record header too short")
 var ErrCiphertextRecordTooShortLength = errors.New("cipher text record body too short (explicit length)")
+var ErrCiphertextRecordBodyTooLong = errors.New("cipher text record body exceeds 2^14 + 256")
 
 var ErrRecordTypeFailedToParse = errors.New("record type failed to parse")
 
@@ -132,6 +153,9 @@ func (hdr *CiphertextRecordHeader) Parse(datagram []byte, cIDLength int) (n int,
 		return 0, nil, nil, nil, nil, ErrCiphertextRecordTooShort
 	}
 	length := int(binary.BigEndian.Uint16(datagram[offset:]))
+	if length > MaxCiphertextRecordLength { // TODO - generate record_overflow alert
+		return 0, nil, nil, nil, nil, ErrCiphertextRecordBodyTooLong
+	}
 	offset += 2
 	endOffset := offset + length
 	if len(datagram) < endOffset {

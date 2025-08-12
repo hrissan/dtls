@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"hash"
+	"log"
 	"math"
 	"net/netip"
 	"sync"
@@ -21,7 +22,11 @@ type HandshakeConnection struct {
 
 	InSenderQueue bool // intrusive, must not be changed except by sender, protected by sender mutex
 
-	mu                      sync.Mutex
+	receivedPartialMessageSet    bool // if set, Header.MessageSeq == Keys.NextMessageSeqReceive - 1
+	receivedPartialMessage       format.MessageHandshake
+	receivedPartialMessageOffset uint32 // we do not support holes for now. TODO - support holes
+
+	mu                      sync.Mutex // TODO - check that mutex is alwasy taken
 	Keys                    keys.Keys
 	sendQueueFlight         byte                      // message from the next flight will ack (clear) all messages in send queue
 	messagesSendQueue       []format.MessageHandshake // all messages here belong to the same flight.
@@ -29,6 +34,66 @@ type HandshakeConnection struct {
 	SendQueueFragmentOffset int                       // offset inside messagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(messagesSendQueue)
 
 	TranscriptHasher hash.Hash // when messages are added to messagesSendQueue, they are also added to TranscriptHasher
+}
+
+func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.MessageHandshakeHeader, body []byte) {
+	// we ignore handshakeHdr.MessageSeq here TODO - check, update
+	switch handshakeHdr.HandshakeType {
+	case format.HandshakeTypeEncryptedExtensions:
+		var msg format.ExtensionsSet
+		if err := msg.ParseOutside(body, false, true, false); err != nil {
+			// rc.opts.Stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
+			//TODO: alert here
+			return
+		}
+		log.Printf("encrypted extensions parsed: %+v", msg)
+		//rc.opts.Stats.ServerHelloMessage(handshakeHdr, msg, addr)
+		//rc.OnServerHello(body, handshakeHdr, msg, addr)
+	default:
+		log.Printf("TODO - message type %d not supported", handshakeHdr.HandshakeType)
+		//rc.opts.Stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)
+	}
+}
+
+func (hctx *HandshakeConnection) ReceivedMessage(handshakeHdr format.MessageHandshakeHeader, body []byte) {
+	if !hctx.receivedPartialMessageSet {
+		if handshakeHdr.MessageSeq != hctx.Keys.NextMessageSeqReceive {
+			return // totally ok to ignore
+		}
+		hctx.Keys.NextMessageSeqReceive++
+		if !handshakeHdr.IsFragmented() {
+			hctx.receivedFullMessage(handshakeHdr, body)
+			return
+		}
+		hctx.receivedPartialMessageSet = true
+		hctx.receivedPartialMessageOffset = 0
+		// TODO - take body from pool
+		hctx.receivedPartialMessage.Body = append(hctx.receivedPartialMessage.Body[:0], make([]byte, handshakeHdr.Length)...)
+		hctx.receivedPartialMessage.Header = handshakeHdr
+		// now process partial message below
+	}
+	if handshakeHdr.MessageSeq != hctx.receivedPartialMessage.Header.MessageSeq {
+		return // totally ok to ignore
+	}
+	if handshakeHdr.Length != hctx.receivedPartialMessage.Header.Length {
+		// TODO - alert and close connection, invariant violated
+		return
+	}
+	if handshakeHdr.FragmentOffset > hctx.receivedPartialMessageOffset {
+		return // we do not support holes, ignore
+	}
+	newOffset := handshakeHdr.FragmentOffset + handshakeHdr.FragmentLength
+	if newOffset <= hctx.receivedPartialMessageOffset {
+		return // nothing new, ignore
+	}
+	copy(hctx.receivedPartialMessage.Body[handshakeHdr.FragmentOffset:], body)
+	hctx.receivedPartialMessageOffset = newOffset
+	if hctx.receivedPartialMessageOffset != handshakeHdr.Length {
+		return // ok, waiting for more fragments
+	}
+	hctx.receivedFullMessage(hctx.receivedPartialMessage.Header, hctx.receivedPartialMessage.Body)
+	// TODO - return message body to pool
+	hctx.receivedPartialMessageSet = false
 }
 
 func (hctx *HandshakeConnection) SendQueueFlight() byte { return hctx.sendQueueFlight }
@@ -54,7 +119,7 @@ func (hctx *HandshakeConnection) PushMessage(flight byte, msg format.MessageHand
 		// close connection here
 		return // for now
 	}
-	msg.Header.MessageSeq = uint16(hctx.Keys.NextMessageSeqSend)
+	msg.Header.MessageSeq = hctx.Keys.NextMessageSeqSend
 	hctx.Keys.NextMessageSeqSend++
 	hctx.messagesSendQueue = append(hctx.messagesSendQueue, msg)
 

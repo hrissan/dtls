@@ -8,6 +8,9 @@ const (
 	SupportedGroup_SECP384R1 = 0x0018
 	SupportedGroup_SECP521R1 = 0x0019
 	SupportedGroup_X448      = 0x001E
+	// those groups defined in [rfc8422:5.1.1]
+	// more groups defined in rfc7919
+	// more groups can be defined elsewhere
 )
 
 type SupportedGroupsSet struct {

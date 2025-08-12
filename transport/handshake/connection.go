@@ -50,6 +50,9 @@ func (hctx *HandshakeConnection) PushMessage(flight byte, msg format.MessageHand
 	msg.Header.MessageSeq = uint16(hctx.Keys.NextMessageSeqSend)
 	hctx.Keys.NextMessageSeqSend++
 	hctx.messagesSendQueue = append(hctx.messagesSendQueue, msg)
+
+	msg.Header.AddToHash(hctx.TranscriptHasher)
+	_, _ = hctx.TranscriptHasher.Write(msg.Body)
 }
 
 // datagram is empty slice with enough capacity (TODO - capacity corresponds to PMTU)

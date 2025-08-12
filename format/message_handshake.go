@@ -3,6 +3,7 @@ package format
 import (
 	"encoding/binary"
 	"errors"
+	"hash"
 )
 
 var ErrMessageHandshakeTooShort = errors.New("message handshake too short")
@@ -71,6 +72,14 @@ type MessageHandshakeHeader struct {
 
 func (hdr *MessageHandshakeHeader) IsFragmented() bool {
 	return hdr.FragmentOffset != 0 || hdr.FragmentLength != hdr.Length
+}
+
+// only first 2 fields are part of transcript hash
+func (hdr *MessageHandshakeHeader) AddToHash(transcriptHasher hash.Hash) {
+	var result [4]byte
+	binary.BigEndian.PutUint32(result[:], (uint32(hdr.HandshakeType)<<24)+hdr.Length)
+	_, _ = transcriptHasher.Write(result[:])
+	return
 }
 
 func (hdr *MessageHandshakeHeader) Parse(record []byte) error {

@@ -1,6 +1,7 @@
 package receiver
 
 import (
+	"crypto/sha256"
 	"errors"
 	"net"
 	"net/netip"
@@ -123,7 +124,10 @@ func (rc *Receiver) startConnection(peerAddr netip.AddrPort) (*handshake.Handsha
 		return nil, nil // for now will wait for previous handshake timeout first
 	}
 
-	hctx = &handshake.HandshakeConnection{Addr: peerAddr}
+	hctx = &handshake.HandshakeConnection{
+		Addr:             peerAddr,
+		TranscriptHasher: sha256.New(),
+	}
 	rc.handshakes[peerAddr] = hctx
 
 	rc.opts.Rnd.Read(hctx.Keys.LocalRandom[:])

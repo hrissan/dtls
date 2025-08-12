@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"hash"
 	"log"
+	"os"
 
 	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/hkdf"
@@ -69,6 +70,7 @@ func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {
 	copy(keys.ServerWriteKey[:], hkdf.ExpandLabel(hasher, ssecret, "key", []byte{}, len(keys.ServerWriteKey)))
 	copy(keys.ClientWriteIV[:], hkdf.ExpandLabel(hasher, csecret, "iv", []byte{}, len(keys.ClientWriteIV)))
 	copy(keys.ServerWriteIV[:], hkdf.ExpandLabel(hasher, ssecret, "iv", []byte{}, len(keys.ServerWriteIV)))
+	os.Exit(1) // to compare printed keys above
 }
 
 func deriveSecret(hasher hash.Hash, secret []byte, label string, sum []byte) []byte {

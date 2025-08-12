@@ -5,6 +5,7 @@ import (
 	"net/netip"
 	"sync"
 
+	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
 )
 
@@ -21,10 +22,10 @@ type HandshakeConnection struct {
 
 	mu                      sync.Mutex
 	Keys                    keys.Keys
-	MessagesFlight          byte     // message from the next flight will ack (clear) all messages in send queue
-	MessagesSendQueue       [][]byte // all messages here belong to the same flight
-	SendQueueMessageOffset  int      // offset in MessagesSendQueue of the message we are sending, len(MessagesSendQueue) if all sent
-	SendQueueFragmentOffset int      // offset inside MessagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(MessagesSendQueue)
+	MessagesFlight          byte                      // message from the next flight will ack (clear) all messages in send queue
+	MessagesSendQueue       []format.MessageHandshake // all messages here belong to the same flight.
+	SendQueueMessageOffset  int                       // offset in MessagesSendQueue of the message we are sending, len(MessagesSendQueue) if all sent
+	SendQueueFragmentOffset int                       // offset inside MessagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(MessagesSendQueue)
 
 	TranscriptHasher hash.Hash // when messages are added to MessagesSendQueue, they are also added to TranscriptHasher
 }
@@ -43,18 +44,49 @@ func (hctx *HandshakeConnection) ConstructDatagram(datagram []byte) (datagramSiz
 		if hctx.SendQueueMessageOffset == len(hctx.MessagesSendQueue) {
 			return len(datagram), false // everything sent, wait for ack (TODO) or local timer to start from the scratch
 		}
-		msg := hctx.MessagesSendQueue[hctx.SendQueueMessageOffset]
-		if hctx.SendQueueFragmentOffset >= len(msg) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
-			panic("invariant of send queue fragment offset violated")
+		spaceLeft := 512 - len(datagram) - 12 - 13 // TODO - take into account CID size
+		if spaceLeft <= 0 {                        // some heuristic
+			return len(datagram), true
 		}
-		fragmentSize := min(len(msg)-hctx.SendQueueFragmentOffset, 512) // TODO - record size
+		msg := hctx.MessagesSendQueue[hctx.SendQueueMessageOffset]
+		datagram, hctx.SendQueueFragmentOffset = hctx.constructDatagram(datagram, msg, 512, hctx.SendQueueFragmentOffset)
 		// append record to datagram
-		// if message kind is (handshake,*hello), then send unencrypted in zero epoch
-		// otherwise send encrypted
-		hctx.SendQueueFragmentOffset += fragmentSize
-		if hctx.SendQueueFragmentOffset == len(msg) {
+		if hctx.SendQueueFragmentOffset == len(msg.Body) {
 			hctx.SendQueueMessageOffset++
 			hctx.SendQueueFragmentOffset = 0
 		}
 	}
+}
+
+func (hctx *HandshakeConnection) constructDatagram(datagram []byte, msg format.MessageHandshake, maxBodySize int, fragmentOffset int) ([]byte, int) {
+	// during fragmenting we always write header at the start of the message, and then part of the body
+	if fragmentOffset >= len(msg.Body) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
+		panic("invariant of send queue fragment offset violated")
+	}
+	fragmentLength := min(len(msg.Body)-fragmentOffset, maxBodySize)
+	if fragmentLength == 0 { // only if maxBodySize == 0
+		panic("invariant of send queue fragment body, empty body")
+	}
+
+	msg.Header.FragmentOffset = uint32(fragmentOffset) // those are scratch space inside header
+	msg.Header.FragmentLength = uint32(fragmentLength) // those are scratch space inside header
+
+	if msg.Header.HandshakeType == format.HandshakeTypeClientHello || msg.Header.HandshakeType == format.HandshakeTypeServerHello {
+		datagram = hctx.constructPlaintextRecord(datagram, msg)
+	} else {
+		panic("TODO - construct ciphertext")
+	}
+	return datagram, fragmentOffset + fragmentLength
+}
+
+func (hctx *HandshakeConnection) constructPlaintextRecord(datagram []byte, msg format.MessageHandshake) []byte {
+	recordHdr := format.PlaintextRecordHeader{
+		ContentType:    format.PlaintextContentTypeHandshake,
+		Epoch:          0,
+		SequenceNumber: 1,
+	}
+	datagram = recordHdr.Write(datagram, format.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
+	datagram = msg.Header.Write(datagram)
+	datagram = append(datagram, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
+	return datagram
 }

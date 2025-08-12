@@ -54,7 +54,7 @@ func (msg *SupportedGroupsSet) Parse(body []byte) (err error) {
 }
 
 func (msg *SupportedGroupsSet) Write(body []byte) []byte {
-	body, mark := MarkUin16Offset(body)
+	body, mark := MarkUint16Offset(body)
 	if msg.X25519 {
 		body = binary.BigEndian.AppendUint16(body, SupportedGroup_X25519)
 	}
@@ -70,6 +70,6 @@ func (msg *SupportedGroupsSet) Write(body []byte) []byte {
 	if msg.X448 {
 		body = binary.BigEndian.AppendUint16(body, SupportedGroup_X448)
 	}
-	FillUin16Offset(body, mark)
+	FillUint16Offset(body, mark)
 	return body
 }

@@ -11,6 +11,7 @@ import (
 const (
 	EXTENSION_SUPPORTED_GROUPS     = 0x000a
 	EXTENSION_SIGNATURE_ALGORITHMS = 0x000d
+	EXTENSION_ENCRYPT_THEN_MAC     = 0x0016
 	EXTENSION_EARLY_DATA           = 0x002a
 	EXTENSION_SUPPORTED_VERSIONS   = 0x002b
 	EXTENSION_COOKIE               = 0x002c
@@ -28,6 +29,7 @@ type ExtensionsSet struct {
 	SignatureAlgorithms    SignatureAlgorithmsSet
 	EarlyDataSet           bool
 	EarlyDataMaxSize       uint32
+	EncryptThenMacSet      bool
 
 	CookieSet bool
 	// we have fixed size cookie to avoid allocations.
@@ -107,45 +109,50 @@ func (msg *ExtensionsSet) Write(body []byte, isNewSessionTicket bool, isServerHe
 	var mark int
 	if msg.SupportedVersionsSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_SUPPORTED_VERSIONS)
-		body, mark = MarkUin16Offset(body)
+		body, mark = MarkUint16Offset(body)
 		body = msg.SupportedVersions.Write(body, isServerHello)
-		FillUin16Offset(body, mark)
+		FillUint16Offset(body, mark)
 	}
 	if msg.SupportedGroupsSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_SUPPORTED_GROUPS)
-		body, mark = MarkUin16Offset(body)
+		body, mark = MarkUint16Offset(body)
 		body = msg.SupportedGroups.Write(body)
-		FillUin16Offset(body, mark)
+		FillUint16Offset(body, mark)
 	}
 	if msg.SignatureAlgorithmsSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_SIGNATURE_ALGORITHMS)
-		body, mark = MarkUin16Offset(body)
+		body, mark = MarkUint16Offset(body)
 		body = msg.SignatureAlgorithms.Write(body)
-		FillUin16Offset(body, mark)
+		FillUint16Offset(body, mark)
 	}
 	if msg.EarlyDataSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_EARLY_DATA)
-		body, mark = MarkUin16Offset(body)
+		body, mark = MarkUint16Offset(body)
 		if isNewSessionTicket {
 			body = binary.BigEndian.AppendUint32(body, msg.EarlyDataMaxSize)
 		}
-		FillUin16Offset(body, mark)
+		FillUint16Offset(body, mark)
+	}
+	if msg.EncryptThenMacSet {
+		body = binary.BigEndian.AppendUint16(body, EXTENSION_ENCRYPT_THEN_MAC)
+		body, mark = MarkUint16Offset(body)
+		FillUint16Offset(body, mark)
 	}
 	if msg.CookieSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_COOKIE)
-		body, mark = MarkUin16Offset(body)
+		body, mark = MarkUint16Offset(body)
 		if len(msg.Cookie) >= math.MaxUint16 {
 			panic("cookie length too big")
 		}
 		body = binary.BigEndian.AppendUint16(body, uint16(len(msg.Cookie)))
 		body = append(body, msg.Cookie[:]...)
-		FillUin16Offset(body, mark)
+		FillUint16Offset(body, mark)
 	}
 	if msg.KeyShareSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_KEY_SHARE)
-		body, mark = MarkUin16Offset(body)
+		body, mark = MarkUint16Offset(body)
 		body = msg.KeyShare.Write(body, isServerHello, isHelloRetryRequest)
-		FillUin16Offset(body, mark)
+		FillUint16Offset(body, mark)
 	}
 	return body
 }

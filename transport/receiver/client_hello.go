@@ -15,6 +15,12 @@ import (
 )
 
 func (rc *Receiver) OnClientHello(messageData []byte, handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort) {
+	if !rc.opts.RoleServer {
+		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
+		// TODO - send alert
+		return
+	}
+
 	if err := IsSupportedClientHello(&msg); err != nil {
 		rc.opts.Stats.ErrorClientHelloUnsupportedParams(handshakeHdr, msg, addr, err)
 		// TODO - generate alert

@@ -77,7 +77,7 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 		datagramSize := 0
 		addToSendQueue := false
 		if hctx != nil {
-			datagramSize, addToSendQueue = hctx.ConstructDatagram(datagram)
+			datagramSize, addToSendQueue = hctx.ConstructDatagram(datagram[:0])
 			if datagramSize != 0 && !snd.sendDatagram(socket, datagram[:datagramSize], hctx.Addr) {
 				return
 			}

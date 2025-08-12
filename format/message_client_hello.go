@@ -1,6 +1,7 @@
 package format
 
 import (
+	"encoding/binary"
 	"errors"
 )
 
@@ -50,4 +51,24 @@ func (msg *ClientHello) Parse(body []byte) (err error) {
 		return err
 	}
 	return ParserReadFinish(body, offset)
+}
+
+func (msg *ClientHello) Write(body []byte) []byte {
+	body = binary.BigEndian.AppendUint16(body, 0xFEFD)
+
+	body = append(body, msg.Random[:]...)
+
+	body = binary.BigEndian.AppendUint16(body, 0) // legacy_session_id, legacy_cookie
+
+	body, mark := MarkUint16Offset(body)
+	body = msg.CipherSuites.Write(body)
+	FillUint16Offset(body, mark)
+
+	body = binary.BigEndian.AppendUint16(body, 0x0100) // legacy_compression_methods
+
+	body, mark = MarkUint16Offset(body)
+	body = msg.Extensions.Write(body, false, false, false)
+	FillUint16Offset(body, mark)
+
+	return body
 }

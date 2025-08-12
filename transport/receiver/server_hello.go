@@ -7,6 +7,9 @@ import (
 )
 
 func (rc *Receiver) OnServerHello(messageData []byte, handshakeHdr format.MessageHandshakeHeader, msg format.ServerHello, addr netip.AddrPort) {
-	rc.opts.Stats.ErrorServerReceivedServerHello(addr)
-	// TODO - send alert
+	if rc.opts.RoleServer {
+		rc.opts.Stats.ErrorServerReceivedServerHello(addr)
+		// TODO - send alert
+		return
+	}
 }

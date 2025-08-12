@@ -56,13 +56,13 @@ func (msg *SupportedVersionsSet) Write(body []byte, isServerHello bool) []byte {
 		body = binary.BigEndian.AppendUint16(body, msg.SelectedVersion)
 		return body
 	}
-	body, mark := MarkUin16Offset(body)
+	body, mark := MarkByteOffset(body)
 	if msg.DTLS_12 {
 		body = binary.BigEndian.AppendUint16(body, DTLS_VERSION_12)
 	}
 	if msg.DTLS_13 {
 		body = binary.BigEndian.AppendUint16(body, DTLS_VERSION_13)
 	}
-	FillUin16Offset(body, mark)
+	FillByteOffset(body, mark)
 	return body
 }

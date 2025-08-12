@@ -1,5 +1,7 @@
 package format
 
+import "encoding/binary"
+
 const (
 	CypherSuite_TLS_AES_128_GCM_SHA256       = 0x1301
 	CypherSuite_TLS_AES_256_GCM_SHA384       = 0x1302
@@ -38,4 +40,23 @@ func (msg *CipherSuitesSet) Parse(body []byte) (err error) {
 		}
 	}
 	return nil
+}
+
+func (msg *CipherSuitesSet) Write(body []byte) []byte {
+	if msg.HasCypherSuite_TLS_AES_128_GCM_SHA256 {
+		body = binary.BigEndian.AppendUint16(body, CypherSuite_TLS_AES_128_GCM_SHA256)
+	}
+	if msg.HasCypherSuite_TLS_AES_256_GCM_SHA384 {
+		body = binary.BigEndian.AppendUint16(body, CypherSuite_TLS_AES_256_GCM_SHA384)
+	}
+	if msg.HasCypherSuite_TLS_CHACHA20_POLY1305_SHA256 {
+		body = binary.BigEndian.AppendUint16(body, CypherSuite_TLS_CHACHA20_POLY1305_SHA256)
+	}
+	if msg.HasCypherSuite_TLS_AES_128_CCM_SHA256 {
+		body = binary.BigEndian.AppendUint16(body, CypherSuite_TLS_AES_128_CCM_SHA256)
+	}
+	if msg.HasCypherSuite_TLS_AES_128_CCM_8_SHA256 {
+		body = binary.BigEndian.AppendUint16(body, CypherSuite_TLS_AES_128_CCM_8_SHA256)
+	}
+	return body
 }

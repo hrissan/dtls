@@ -18,7 +18,7 @@ func (rc *Receiver) processPlaintextRecord(hdr format.PlaintextRecordHeader, rec
 		case format.PlaintextContentTypeHandshake:
 			log.Printf("dtls: got handshake %v from %v, message(hex): %x", hdr, addr, messageData)
 			var handshakeHdr format.MessageHandshakeHeader
-			n, body, err := handshakeHdr.Parse(messageData)
+			n, body, err := handshakeHdr.ParseWithBody(messageData)
 			if err != nil {
 				rc.opts.Stats.BadMessageHeader("handshake", messageOffset, len(record), addr, err)
 				// TODO: alert here, and we cannot continue to the next record.

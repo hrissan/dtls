@@ -31,6 +31,7 @@ type Stats interface {
 
 	// logic layer
 	ErrorServerReceivedServerHello(addr netip.AddrPort)
+	ErrorClientReceivedClientHello(addr netip.AddrPort)
 	ErrorClientHelloUnsupportedParams(handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort, err error)
 	ClientHelloMessage(handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort)
 	ServerHelloMessage(handshakeHdr format.MessageHandshakeHeader, msg format.ServerHello, addr netip.AddrPort)
@@ -57,110 +58,117 @@ func (s *StatsLog) SocketReadError(n int, addr netip.AddrPort, err error) {
 	if s.level.Load() < 0 {
 		return
 	}
-	log.Printf("dtls: socket read error n=%d addr=%v: %v", n, addr, err)
+	log.Printf("tinydtls: socket read error n=%d addr=%v: %v", n, addr, err)
 }
 
 func (s *StatsLog) SocketWriteError(n int, addr netip.AddrPort, err error) {
 	if !s.printDatagrams.Load() {
 		return
 	}
-	log.Printf("dtls: socket write error n=%d addr=%v: %v", n, addr, err)
+	log.Printf("tinydtls: socket write error n=%d addr=%v: %v", n, addr, err)
 }
 
 func (s *StatsLog) SocketReadDatagram(datagram []byte, addr netip.AddrPort) {
 	if !s.printDatagrams.Load() {
 		return
 	}
-	log.Printf("dtls: socket read %d bytes from addr=%v hex(datagram): %x", len(datagram), addr, datagram)
+	log.Printf("tinydtls: socket read %d bytes from addr=%v hex(datagram): %x", len(datagram), addr, datagram)
 }
 
 func (s *StatsLog) SocketWriteDatagram(datagram []byte, addr netip.AddrPort) {
 	if s.level.Load() < 0 {
 		return
 	}
-	log.Printf("dtls: socket write %d bytes from addr=%v hex(datagram): %x", len(datagram), addr, datagram)
+	log.Printf("tinydtls: socket write %d bytes from addr=%v hex(datagram): %x", len(datagram), addr, datagram)
 }
 
 func (s *StatsLog) BadRecord(kind string, recordOffset int, datagramLen int, addr netip.AddrPort, err error) {
 	if s.level.Load() < 0 {
 		return
 	}
-	log.Printf("dtls: bad %s record offset=%d/%d addr=%v: %v", kind, recordOffset, datagramLen, addr, err)
+	log.Printf("tinydtls: bad %s record offset=%d/%d addr=%v: %v", kind, recordOffset, datagramLen, addr, err)
 }
 
 func (s *StatsLog) BadMessageHeader(kind string, messageOffset int, recordLen int, addr netip.AddrPort, err error) {
 	if s.level.Load() < 0 {
 		return
 	}
-	log.Printf("dtls: bad %s message header offset=%d/%d addr=%v: %v", kind, messageOffset, recordLen, addr, err)
+	log.Printf("tinydtls: bad %s message header offset=%d/%d addr=%v: %v", kind, messageOffset, recordLen, addr, err)
 }
 
 func (s *StatsLog) BadMessage(kind string, message string, addr netip.AddrPort, err error) {
 	if s.level.Load() < 0 {
 		return
 	}
-	log.Printf("dtls: bad %s %s message addr=%v: %v", kind, message, addr, err)
+	log.Printf("tinydtls: bad %s %s message addr=%v: %v", kind, message, addr, err)
 }
 
 func (s *StatsLog) MustNotBeFragmented(kind string, message string, addr netip.AddrPort, header format.MessageHandshakeHeader) {
 	if s.level.Load() < 0 {
 		return
 	}
-	log.Printf("dtls: message %s %s must not be fragmented %v addr=%v", kind, message, header, addr)
+	log.Printf("tinydtls: message %s %s must not be fragmented %v addr=%v", kind, message, header, addr)
 }
 
 func (s *StatsLog) MustBeEncrypted(kind string, message string, addr netip.AddrPort, header format.MessageHandshakeHeader) {
 	if s.level.Load() < 0 {
 		return
 	}
-	log.Printf("dtls: message %s %s must be encrypted %v addr=%v", kind, message, header, addr)
+	log.Printf("tinydtls: message %s %s must be encrypted %v addr=%v", kind, message, header, addr)
 }
 
 func (s *StatsLog) ErrorServerReceivedServerHello(addr netip.AddrPort) {
 	if s.level.Load() < 0 {
 		return
 	}
-	log.Printf("dtls: server received server hello addr=%v", addr)
+	log.Printf("tinydtls: server received server hello addr=%v", addr)
+}
+
+func (s *StatsLog) ErrorClientReceivedClientHello(addr netip.AddrPort) {
+	if s.level.Load() < 0 {
+		return
+	}
+	log.Printf("tinydtls: client received client hello addr=%v", addr)
 }
 
 func (s *StatsLog) ErrorClientHelloUnsupportedParams(handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort, err error) {
 	if !s.printMessages.Load() {
 		return
 	}
-	log.Printf("dtls: message %s header=%+v has unsupported params addr=%v: %+v: %v", msg.MessageName(), handshakeHdr, addr, msg, err)
+	log.Printf("tinydtls: message %s header=%+v has unsupported params addr=%v: %+v: %v", msg.MessageName(), handshakeHdr, addr, msg, err)
 }
 
 func (s *StatsLog) ClientHelloMessage(handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}
-	log.Printf("dtls: message %s header=%+v addr=%v: %+v", msg.MessageName(), handshakeHdr, addr, msg)
+	log.Printf("tinydtls: message %s header=%+v addr=%v: %+v", msg.MessageName(), handshakeHdr, addr, msg)
 }
 
 func (s *StatsLog) ServerHelloMessage(handshakeHdr format.MessageHandshakeHeader, msg format.ServerHello, addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}
-	log.Printf("dtls: message %s header=%+v addr=%v: %+v", msg.MessageName(), handshakeHdr, addr, msg)
+	log.Printf("tinydtls: message %s header=%+v addr=%v: %+v", msg.MessageName(), handshakeHdr, addr, msg)
 }
 
 func (s *StatsLog) ServerHelloRetryRequestQueueOverloaded(addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}
-	log.Printf("dtls: server hello retry request queue size overloaded addr=%v", addr)
+	log.Printf("tinydtls: server hello retry request queue size overloaded addr=%v", addr)
 }
 
 func (s *StatsLog) CookieCreated(addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}
-	log.Printf("dtls: cookie created for addr=%v", addr)
+	log.Printf("tinydtls: cookie created for addr=%v", addr)
 }
 
 func (s *StatsLog) CookieChecked(valid bool, age time.Duration, addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}
-	log.Printf("dtls: cookie checked valid=%v age=%v for addr=%v", valid, age, addr)
+	log.Printf("tinydtls: cookie checked valid=%v age=%v for addr=%v", valid, age, addr)
 }

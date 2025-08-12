@@ -76,35 +76,35 @@ func (msg *KeyShareSet) Write(body []byte, isServerHello bool, isHelloRetryReque
 	if isServerHello {
 		if msg.X25519PublicKeySet {
 			body = binary.BigEndian.AppendUint16(body, SupportedGroup_X25519)
-			body, mark = MarkUin16Offset(body)
+			body, mark = MarkUint16Offset(body)
 			body = append(body, msg.X25519PublicKey[:]...)
-			FillUin16Offset(body, mark)
+			FillUint16Offset(body, mark)
 			return body
 		}
 		if msg.SECP256R1PublicKeySet {
 			body = binary.BigEndian.AppendUint16(body, SupportedGroup_SECP256R1)
-			body, mark = MarkUin16Offset(body)
+			body, mark = MarkUint16Offset(body)
 			body = append(body, 4)
 			body = append(body, msg.SECP256R1PublicKey[:]...)
-			FillUin16Offset(body, mark)
+			FillUint16Offset(body, mark)
 			return body
 		}
 		panic("server hello must contain single selected key_share")
 	}
-	body, externalMark := MarkUin16Offset(body)
+	body, externalMark := MarkUint16Offset(body)
 	if msg.X25519PublicKeySet {
 		body = binary.BigEndian.AppendUint16(body, SupportedGroup_X25519)
-		body, mark = MarkUin16Offset(body)
+		body, mark = MarkUint16Offset(body)
 		body = append(body, msg.X25519PublicKey[:]...)
-		FillUin16Offset(body, mark)
+		FillUint16Offset(body, mark)
 	}
 	if msg.SECP256R1PublicKeySet {
 		body = binary.BigEndian.AppendUint16(body, SupportedGroup_SECP256R1)
-		body, mark = MarkUin16Offset(body)
+		body, mark = MarkUint16Offset(body)
 		body = append(body, 4)
 		body = append(body, msg.SECP256R1PublicKey[:]...)
-		FillUin16Offset(body, mark)
+		FillUint16Offset(body, mark)
 	}
-	FillUin16Offset(body, externalMark)
+	FillUint16Offset(body, externalMark)
 	return body
 }

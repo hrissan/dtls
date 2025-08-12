@@ -26,6 +26,8 @@ const (
 	HandshakeTypeMessageHash         = 254 // synthetic message, never transmitted [rfc9147:5.1]
 )
 
+const MessageHandshakeHeaderSize = 12
+
 func HandshakeTypeToName(t byte) string {
 	switch t {
 	case HandshakeTypeClientHello:
@@ -71,20 +73,27 @@ func (hdr *MessageHandshakeHeader) IsFragmented() bool {
 	return hdr.FragmentOffset != 0 || hdr.FragmentLength != hdr.Length
 }
 
-func (hdr *MessageHandshakeHeader) Parse(record []byte) (n int, body []byte, err error) {
-	if len(record) < 12 {
-		return 0, nil, ErrMessageHandshakeTooShort
+func (hdr *MessageHandshakeHeader) Parse(record []byte) error {
+	if len(record) < MessageHandshakeHeaderSize {
+		return ErrMessageHandshakeTooShort
 	}
 	hdr.HandshakeType = record[0]
 	hdr.Length = binary.BigEndian.Uint32(record[0:4]) & 0xFFFFFF
 	hdr.MessageSeq = binary.BigEndian.Uint16(record[4:6])
 	hdr.FragmentOffset = binary.BigEndian.Uint32(record[5:9]) & 0xFFFFFF
 	hdr.FragmentLength = binary.BigEndian.Uint32(record[8:12]) & 0xFFFFFF
-	endOffset := 12 + int(hdr.FragmentLength)
+	return nil
+}
+
+func (hdr *MessageHandshakeHeader) ParseWithBody(record []byte) (n int, body []byte, err error) {
+	if err := hdr.Parse(record); err != nil {
+		return 0, nil, err
+	}
+	endOffset := MessageHandshakeHeaderSize + int(hdr.FragmentLength)
 	if len(record) < endOffset {
 		return 0, nil, ErrMessageHandshakeTooShort
 	}
-	return endOffset, record[12:endOffset], nil
+	return endOffset, record[MessageHandshakeHeaderSize:endOffset], nil
 }
 
 func (hdr *MessageHandshakeHeader) Write(datagram []byte) []byte {

@@ -42,7 +42,7 @@ func (rc *Receiver) processPlaintextRecord(hdr format.PlaintextRecordHeader, rec
 					continue
 				}
 				rc.opts.Stats.ClientHelloMessage(handshakeHdr, msg, addr)
-				rc.OnClientHello(messageData, handshakeHdr, msg, addr)
+				rc.OnClientHello(body, handshakeHdr, msg, addr)
 			case format.HandshakeTypeServerHello:
 				// we ignore handshakeHdr.MessageSeq here, will be 0
 				// TODO - check
@@ -58,7 +58,7 @@ func (rc *Receiver) processPlaintextRecord(hdr format.PlaintextRecordHeader, rec
 					continue
 				}
 				rc.opts.Stats.ServerHelloMessage(handshakeHdr, msg, addr)
-				rc.OnServerHello(messageData, handshakeHdr, msg, addr)
+				rc.OnServerHello(body, handshakeHdr, msg, addr)
 			default:
 				rc.opts.Stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)
 			}

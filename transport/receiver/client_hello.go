@@ -14,7 +14,7 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-func (rc *Receiver) OnClientHello(messageData []byte, handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort) {
+func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort) {
 	if !rc.opts.RoleServer {
 		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
 		// TODO - send alert
@@ -33,7 +33,9 @@ func (rc *Receiver) OnClientHello(messageData []byte, handshakeHdr format.Messag
 			return
 		}
 		transcriptHasher := sha256.New()
-		addMessageDataTranscript(transcriptHasher, messageData)
+		handshakeHdr.AddToHash(transcriptHasher)
+		_, _ = transcriptHasher.Write(messageBody)
+		//addMessageDataTranscript(transcriptHasher, messageBody)
 		var initialHelloTranscriptHash [cookie.MaxTranscriptHashLength]byte
 		transcriptHasher.Sum(initialHelloTranscriptHash[:0])
 
@@ -127,7 +129,8 @@ func (rc *Receiver) OnClientHello(messageData []byte, handshakeHdr format.Messag
 	_, _ = transcriptHasher.Write(syntheticHashData)
 	_, _ = transcriptHasher.Write(initialHelloTranscriptHash[:sha256.Size])
 	addMessageDataTranscript(transcriptHasher, hrrDatagram[13:]) // skip record header
-	addMessageDataTranscript(transcriptHasher, messageData)
+	handshakeHdr.AddToHash(transcriptHasher)
+	_, _ = transcriptHasher.Write(messageBody)
 	addMessageDataTranscript(transcriptHasher, datagram[13:]) // skip record header
 
 	var handshakeTranscriptHash [cookie.MaxTranscriptHashLength]byte

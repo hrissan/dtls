@@ -12,13 +12,13 @@ import (
 
 var ErrServerHRRContainsNoCookie = errors.New("server HRR contains no cookie")
 
-func (rc *Receiver) OnServerHello(messageData []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort) {
+func (rc *Receiver) OnServerHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort) {
 	if rc.opts.RoleServer {
 		rc.opts.Stats.ErrorServerReceivedServerHello(addr)
 		// TODO - send alert
 		return
 	}
-	hctxToSend, err := rc.onServerHello(messageData, handshakeHdr, serverHello, addr)
+	hctxToSend, err := rc.onServerHello(messageBody, handshakeHdr, serverHello, addr)
 	if hctxToSend != nil { // motivation: do not register under our lock
 		rc.snd.RegisterConnectionForSend(hctxToSend)
 	}
@@ -28,7 +28,7 @@ func (rc *Receiver) OnServerHello(messageData []byte, handshakeHdr format.Messag
 	}
 }
 
-func (rc *Receiver) onServerHello(messageData []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort) (*handshake.HandshakeConnection, error) {
+func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort) (*handshake.HandshakeConnection, error) {
 	rc.handMu.Lock()
 	defer rc.handMu.Unlock()
 	hctx := rc.handshakes[addr]

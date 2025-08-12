@@ -47,7 +47,9 @@ func (msg *ExtensionsSet) parseCookie(body []byte) (err error) {
 	if offset, insideBody, err = ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
-	copy(msg.Cookie[:], insideBody)
+	if err := msg.Cookie.SetValue(insideBody); err != nil {
+		return err
+	}
 	return ParserReadFinish(body, offset)
 }
 
@@ -141,11 +143,12 @@ func (msg *ExtensionsSet) Write(body []byte, isNewSessionTicket bool, isServerHe
 	if msg.CookieSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_COOKIE)
 		body, mark = MarkUint16Offset(body)
-		if len(msg.Cookie) >= math.MaxUint16 {
+		data := msg.Cookie.GetValue()
+		if len(data) >= math.MaxUint16 {
 			panic("cookie length too big")
 		}
-		body = binary.BigEndian.AppendUint16(body, uint16(len(msg.Cookie)))
-		body = append(body, msg.Cookie[:]...)
+		body = binary.BigEndian.AppendUint16(body, uint16(len(data)))
+		body = append(body, data...)
 		FillUint16Offset(body, mark)
 	}
 	if msg.KeyShareSet {

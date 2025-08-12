@@ -33,17 +33,22 @@ type HandshakeConnection struct {
 
 func (hctx *HandshakeConnection) SendQueueFlight() byte { return hctx.sendQueueFlight }
 
-// ack (remove) all previous flights
-func (hctx *HandshakeConnection) PushMessage(flight byte, msg format.MessageHandshake) {
-	if flight < hctx.sendQueueFlight {
-		panic("you cannot add message from previous flight")
-	}
+// acks (removes) all previous flights
+func (hctx *HandshakeConnection) AckFlight(flight byte) {
 	if flight > hctx.sendQueueFlight { // implicit ack of all previous flights
 		hctx.messagesSendQueue = hctx.messagesSendQueue[:0]
 		hctx.SendQueueMessageOffset = 0
 		hctx.SendQueueFragmentOffset = 0
 		hctx.sendQueueFlight = flight
 	}
+}
+
+// also acks (removes) all previous flights
+func (hctx *HandshakeConnection) PushMessage(flight byte, msg format.MessageHandshake) {
+	if flight < hctx.sendQueueFlight {
+		panic("you cannot add message from previous flight")
+	}
+	hctx.AckFlight(flight)
 	if hctx.Keys.NextMessageSeqSend >= math.MaxUint16 {
 		// TODO - prevent wrapping next message seq
 		// close connection here

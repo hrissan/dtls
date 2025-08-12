@@ -70,6 +70,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	if !serverHello.Extensions.KeyShare.X25519PublicKeySet {
 		return nil, ErrSupportOnlyX25519
 	}
+	hctx.AckFlight(handshake.MessagesFlightServerHello)
 	if hctx.SendQueueFlight() >= handshake.MessagesFlightClientCertificate {
 		return nil, nil
 	}

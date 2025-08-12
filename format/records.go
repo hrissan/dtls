@@ -64,7 +64,7 @@ func (hdr *PlaintextRecordHeader) Write(datagram []byte, length int) []byte {
 type CiphertextRecordHeader struct {
 	FirstByte byte
 	// CID is variable length, not stored
-	SequenceNumber uint16
+	SequenceNumberBytes [2]byte // 1 or 2 bytes (depending on FirstByte) copied from/to datagram
 	// Length is checked, not stored
 }
 
@@ -77,6 +77,10 @@ func (hdr *CiphertextRecordHeader) HasCID() bool         { return hdr.FirstByte&
 func (hdr *CiphertextRecordHeader) Has16BitSeqNum() bool { return hdr.FirstByte&0b00001000 != 0 }
 func (hdr *CiphertextRecordHeader) HasLength() bool      { return hdr.FirstByte&0b00000100 != 0 }
 func (hdr *CiphertextRecordHeader) Epoch() byte          { return hdr.FirstByte & 0b00000011 }
+
+func (hdr *CiphertextRecordHeader) SequenceNumber() uint16 { // return garbage before decryption or after encryption
+	return binary.BigEndian.Uint16(hdr.SequenceNumberBytes[:])
+}
 
 func (hdr *CiphertextRecordHeader) Parse(datagram []byte, cIDLength int) (n int, cid []byte, body []byte, err error) {
 	hdr.FirstByte = datagram[0] // !empty checked elsewhere
@@ -92,13 +96,15 @@ func (hdr *CiphertextRecordHeader) Parse(datagram []byte, cIDLength int) (n int,
 		if len(datagram) < offset+2 {
 			return 0, nil, nil, ErrCiphertextRecordTooShort
 		}
-		hdr.SequenceNumber = binary.BigEndian.Uint16(datagram[offset:])
+		hdr.SequenceNumberBytes[0] = datagram[offset]
+		hdr.SequenceNumberBytes[1] = datagram[offset+1]
 		offset += 2
 	} else {
 		if len(datagram) < offset+1 {
 			return 0, nil, nil, ErrCiphertextRecordTooShort
 		}
-		hdr.SequenceNumber = uint16(datagram[offset])
+		hdr.SequenceNumberBytes[0] = datagram[offset]
+		hdr.SequenceNumberBytes[1] = 0
 		offset += 1
 	}
 	if !hdr.HasLength() {
@@ -107,7 +113,9 @@ func (hdr *CiphertextRecordHeader) Parse(datagram []byte, cIDLength int) (n int,
 	if len(datagram) < offset+2 {
 		return 0, nil, nil, ErrCiphertextRecordTooShort
 	}
-	endOffset := offset + int(binary.BigEndian.Uint16(datagram[offset:]))
+	length := int(binary.BigEndian.Uint16(datagram[offset:]))
+	offset += 2
+	endOffset := offset + length
 	if len(datagram) < endOffset {
 		return 0, nil, nil, ErrCiphertextRecordTooShortLength
 	}

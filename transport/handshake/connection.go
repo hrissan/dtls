@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"hash"
+	"math"
 	"net/netip"
 	"sync"
 
@@ -22,12 +23,33 @@ type HandshakeConnection struct {
 
 	mu                      sync.Mutex
 	Keys                    keys.Keys
-	MessagesFlight          byte                      // message from the next flight will ack (clear) all messages in send queue
-	MessagesSendQueue       []format.MessageHandshake // all messages here belong to the same flight.
-	SendQueueMessageOffset  int                       // offset in MessagesSendQueue of the message we are sending, len(MessagesSendQueue) if all sent
-	SendQueueFragmentOffset int                       // offset inside MessagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(MessagesSendQueue)
+	messagesFlight          byte                      // message from the next flight will ack (clear) all messages in send queue
+	messagesSendQueue       []format.MessageHandshake // all messages here belong to the same flight.
+	SendQueueMessageOffset  int                       // offset in messagesSendQueue of the message we are sending, len(messagesSendQueue) if all sent
+	SendQueueFragmentOffset int                       // offset inside messagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(messagesSendQueue)
 
-	TranscriptHasher hash.Hash // when messages are added to MessagesSendQueue, they are also added to TranscriptHasher
+	TranscriptHasher hash.Hash // when messages are added to messagesSendQueue, they are also added to TranscriptHasher
+}
+
+// ack (remove) all previous flights
+func (hctx *HandshakeConnection) PushMessage(flight byte, msg format.MessageHandshake) {
+	if flight < hctx.messagesFlight {
+		panic("you cannot add message from previous flight")
+	}
+	if flight > hctx.messagesFlight { // implicit ack of all previous flights
+		hctx.messagesSendQueue = hctx.messagesSendQueue[:0]
+		hctx.SendQueueMessageOffset = 0
+		hctx.SendQueueFragmentOffset = 0
+		hctx.messagesFlight = flight
+	}
+	if hctx.Keys.NextMessageSeqSend >= math.MaxUint16 {
+		// TODO - prevent wrapping next message seq
+		// close connection here
+		return // for now
+	}
+	msg.Header.MessageSeq = uint16(hctx.Keys.NextMessageSeqSend)
+	hctx.Keys.NextMessageSeqSend++
+	hctx.messagesSendQueue = append(hctx.messagesSendQueue, msg)
 }
 
 // datagram is empty slice with enough capacity (TODO - capacity corresponds to PMTU)
@@ -38,17 +60,17 @@ func (hctx *HandshakeConnection) ConstructDatagram(datagram []byte) (datagramSiz
 	hctx.mu.Lock()
 	defer hctx.mu.Unlock()
 	for {
-		if hctx.SendQueueMessageOffset > len(hctx.MessagesSendQueue) {
+		if hctx.SendQueueMessageOffset > len(hctx.messagesSendQueue) {
 			panic("invariant of send queue message offset violated")
 		}
-		if hctx.SendQueueMessageOffset == len(hctx.MessagesSendQueue) {
+		if hctx.SendQueueMessageOffset == len(hctx.messagesSendQueue) {
 			return len(datagram), false // everything sent, wait for ack (TODO) or local timer to start from the scratch
 		}
 		spaceLeft := 512 - len(datagram) - 12 - 13 // TODO - take into account CID size
 		if spaceLeft <= 0 {                        // some heuristic
 			return len(datagram), true
 		}
-		msg := hctx.MessagesSendQueue[hctx.SendQueueMessageOffset]
+		msg := hctx.messagesSendQueue[hctx.SendQueueMessageOffset]
 		datagram, hctx.SendQueueFragmentOffset = hctx.constructDatagram(datagram, msg, 512, hctx.SendQueueFragmentOffset)
 		// append record to datagram
 		if hctx.SendQueueFragmentOffset == len(msg.Body) {

@@ -82,24 +82,20 @@ func (rc *Receiver) OnClientHello(messageData []byte, handshakeHdr format.Messag
 	//		NextMessageSeqReceive: 2, // ClientHello, ClientHello
 	//		NextMessageSeqSend:    2, // HRR, ServerHello
 	//	}
-	rc.opts.Rnd.Read(kk.ServerRandom[:])
-	rc.opts.Rnd.Read(kk.X25519Secret[:])
-	x25519Public, err := curve25519.X25519(kk.X25519Secret[:], curve25519.Basepoint)
-	if err != nil {
-		panic("curve25519.X25519 failed")
-	}
+	rc.opts.Rnd.Read(kk.LocalRandom[:])
+	kk.ComputeKeyShare(rc.opts.Rnd)
 	//rc.handshakes[addr] = hctx
 
 	datagram, _ := rc.snd.PopHelloRetryDatagram()
 	helloRetryRequest := format.ServerHello{
-		Random:      kk.ServerRandom,
+		Random:      kk.LocalRandom,
 		CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
 	}
 	helloRetryRequest.Extensions.SupportedVersionsSet = true
 	helloRetryRequest.Extensions.SupportedVersions.SelectedVersion = format.DTLS_VERSION_13
 	helloRetryRequest.Extensions.KeyShareSet = true
 	helloRetryRequest.Extensions.KeyShare.X25519PublicKeySet = true
-	copy(helloRetryRequest.Extensions.KeyShare.X25519PublicKey[:], x25519Public)
+	helloRetryRequest.Extensions.KeyShare.X25519PublicKey = kk.X25519Public
 	recordHdr := format.PlaintextRecordHeader{
 		ContentType:    format.PlaintextContentTypeHandshake,
 		Epoch:          0,

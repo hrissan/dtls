@@ -6,6 +6,8 @@ import (
 	"math"
 )
 
+const PlaintextRecordHeaderSize = 13
+
 type PlaintextRecordHeader struct {
 	ContentType byte
 	// Version is fixed, not stored
@@ -32,7 +34,7 @@ func IsPlaintextRecord(fb byte) bool {
 }
 
 func (hdr *PlaintextRecordHeader) Parse(datagram []byte) (n int, body []byte, err error) {
-	if len(datagram) < 13 {
+	if len(datagram) < PlaintextRecordHeaderSize {
 		return 0, nil, ErrPlaintextRecordHeaderTooShort
 	}
 	hdr.ContentType = datagram[0] // checked elsewhere
@@ -41,7 +43,7 @@ func (hdr *PlaintextRecordHeader) Parse(datagram []byte) (n int, body []byte, er
 	}
 	hdr.Epoch = binary.BigEndian.Uint16(datagram[3:5])
 	hdr.SequenceNumber = binary.BigEndian.Uint64(datagram[3:11]) & 0xFFFFFFFFFFFF
-	endOffset := 13 + int(binary.BigEndian.Uint16(datagram[11:13]))
+	endOffset := PlaintextRecordHeaderSize + int(binary.BigEndian.Uint16(datagram[11:13]))
 	if len(datagram) < endOffset {
 		return 0, nil, ErrPlaintextRecordBodyTooShort
 	}

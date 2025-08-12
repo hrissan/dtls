@@ -5,12 +5,15 @@ import (
 	"hash"
 	"log"
 
+	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/hkdf"
+	"golang.org/x/crypto/curve25519"
 )
 
 type Keys struct {
-	ServerRandom [32]byte
-	X25519Secret [32]byte
+	LocalRandom  [32]byte // TODO - move to handshake context
+	X25519Secret [32]byte // TODO - move to handshake context
+	X25519Public [32]byte // TODO - move to handshake context
 
 	ClientHandshakeTrafficSecret [32]byte
 	ServerHandshakeTrafficSecret [32]byte
@@ -27,6 +30,17 @@ type Keys struct {
 
 	Epoch           uint16
 	SegmentSequence uint64
+}
+
+func (keys *Keys) ComputeKeyShare(rnd dtlsrand.Rand) {
+	rnd.Read(keys.X25519Secret[:])
+	{
+		x25519Public, err := curve25519.X25519(keys.X25519Secret[:], curve25519.Basepoint)
+		if err != nil {
+			panic("curve25519.X25519 failed")
+		}
+		copy(keys.X25519Public[:], x25519Public)
+	}
 }
 
 func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {

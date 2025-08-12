@@ -12,13 +12,12 @@ type KeyShareSet struct {
 	SECP256R1PublicKey    [64]byte
 
 	// Be careful to set this extension only when strictly needed, conditions are specified in [rfc8446:4.2.8]
-	// otherwise client will abort connection
+	// otherwise client will abort connection. TODO - ask dtls13 workgroup if condition makes any sense
 	KeyShareHRRSelectedGroup uint16
 }
 
 var ErrKeyShareX25519PublicKeyWrongFormat = errors.New("x25519 public key has wrong format")
 var ErrKeyShareSECP256R1PublicKeyWrongFormat = errors.New("secp256r1 public key has wrong format")
-var ErrKeyShareHRRWrongFormat = errors.New("HRR key_share must contain single selected group")
 
 func (msg *KeyShareSet) parseInside(body []byte) (err error) {
 	offset := 0

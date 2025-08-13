@@ -49,6 +49,30 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 		log.Printf("encrypted extensions parsed: %+v", msg)
 		//rc.opts.Stats.ServerHelloMessage(handshakeHdr, msg, addr)
 		//rc.OnServerHello(body, handshakeHdr, msg, addr)
+	case format.HandshakeTypeCertificate:
+		var msg format.MessageCertificate
+		if err := msg.Parse(body); err != nil {
+			// rc.opts.Stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
+			//TODO: alert here
+			return
+		}
+		log.Printf("certificate parsed: %+v", msg)
+	case format.HandshakeTypeCertificateVerify:
+		var msg format.MessageCertificateVerify
+		if err := msg.Parse(body); err != nil {
+			// rc.opts.Stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
+			//TODO: alert here
+			return
+		}
+		log.Printf("certificate verify parsed: %+v", msg)
+	case format.HandshakeTypeFinished:
+		var msg format.MessageFinished
+		if err := msg.Parse(body); err != nil {
+			// rc.opts.Stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
+			//TODO: alert here
+			return
+		}
+		log.Printf("finished message parsed: %+v", msg)
 	default:
 		log.Printf("TODO - message type %d not supported", handshakeHdr.HandshakeType)
 		//rc.opts.Stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)

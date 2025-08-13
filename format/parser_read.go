@@ -71,6 +71,24 @@ func ParserReadUint16Length(body []byte, offset int) (_ int, value []byte, err e
 	return endOffset, body[offset+2 : endOffset], nil
 }
 
+func ParserReadUint24(body []byte, offset int) (_ int, value uint32, err error) {
+	if len(body) < offset+3 {
+		return offset, 0, ErrMessageBodyTooShort
+	}
+	return offset + 3, (uint32(body[offset]) << 16) | (uint32(body[offset+1]) << 8) | uint32(body[offset+2]), nil
+}
+
+func ParserReadUint24Length(body []byte, offset int) (_ int, value []byte, err error) {
+	if len(body) < offset+3 {
+		return offset, nil, ErrMessageBodyTooShort
+	}
+	endOffset := offset + 3 + int((uint32(body[offset])<<16)|(uint32(body[offset+1])<<8)|uint32(body[offset+2]))
+	if len(body) < endOffset {
+		return offset, nil, ErrMessageBodyTooShort
+	}
+	return endOffset, body[offset+3 : endOffset], nil
+}
+
 func ParserReadFixedBytes(body []byte, offset int, value []byte) (_ int, _ error) {
 	if len(body) < offset+len(value) {
 		return offset, ErrMessageBodyTooShort

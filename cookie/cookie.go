@@ -11,7 +11,7 @@ import (
 	"github.com/hrissan/tinydtls/dtlsrand"
 )
 
-const MaxTranscriptHashLength = 64
+const MaxTranscriptHashLength = 64 // TODO - replace with constants.MaxHashLength
 const cookieHashLength = sha256.Size
 const saltLength = 24
 

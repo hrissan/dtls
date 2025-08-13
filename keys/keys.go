@@ -147,3 +147,15 @@ func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {
 func deriveSecret(hasher hash.Hash, secret []byte, label string, sum []byte) []byte {
 	return hkdf.ExpandLabel(hasher, secret, label, sum, len(sum))
 }
+
+func (keys *Keys) ComputeClientFinished(hasher hash.Hash, transcriptHash []byte) []byte {
+	finishedKey := hkdf.ExpandLabel(hasher, keys.ClientHandshakeTrafficSecret[:], "finished", []byte{}, hasher.Size())
+	//transcriptHash := sha256.Sum256(conn.transcript)
+	return hkdf.HMAC(finishedKey, transcriptHash[:], hasher)
+}
+
+func (keys *Keys) ComputeServerFinished(hasher hash.Hash, transcriptHash []byte) []byte {
+	finishedKey := hkdf.ExpandLabel(hasher, keys.ServerHandshakeTrafficSecret[:], "finished", []byte{}, hasher.Size())
+	//transcriptHash := sha256.Sum256(conn.transcript)
+	return hkdf.HMAC(finishedKey, transcriptHash[:], hasher)
+}

@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
@@ -36,7 +37,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		handshakeHdr.AddToHash(transcriptHasher)
 		_, _ = transcriptHasher.Write(messageBody)
 		//addMessageDataTranscript(transcriptHasher, messageBody)
-		var initialHelloTranscriptHash [cookie.MaxTranscriptHashLength]byte
+		var initialHelloTranscriptHash [constants.MaxHashLength]byte
 		transcriptHasher.Sum(initialHelloTranscriptHash[:0])
 
 		keyShareSet := !msg.Extensions.KeyShare.X25519PublicKeySet
@@ -134,7 +135,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	_, _ = transcriptHasher.Write(messageBody)
 	addMessageDataTranscript(transcriptHasher, datagram[13:]) // skip record header
 
-	var handshakeTranscriptHash [cookie.MaxTranscriptHashLength]byte
+	var handshakeTranscriptHash [constants.MaxHashLength]byte
 	transcriptHasher.Sum(handshakeTranscriptHash[:0])
 
 	sharedSecret, err := curve25519.X25519(kk.X25519Secret[:], msg.Extensions.KeyShare.X25519PublicKey[:])

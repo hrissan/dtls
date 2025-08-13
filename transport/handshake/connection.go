@@ -1,14 +1,17 @@
 package handshake
 
 import (
+	"crypto/sha256"
 	"hash"
 	"log"
 	"math"
 	"net/netip"
 	"sync"
 
+	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
+	"github.com/hrissan/tinydtls/signature"
 )
 
 const MessagesFlightClientHello1 = 0
@@ -34,6 +37,8 @@ type HandshakeConnection struct {
 	SendQueueFragmentOffset int                       // offset inside messagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(messagesSendQueue)
 
 	TranscriptHasher hash.Hash // when messages are added to messagesSendQueue, they are also added to TranscriptHasher
+
+	certificateChain format.MessageCertificate
 }
 
 func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.MessageHandshakeHeader, body []byte) {
@@ -49,6 +54,8 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 		log.Printf("encrypted extensions parsed: %+v", msg)
 		//rc.opts.Stats.ServerHelloMessage(handshakeHdr, msg, addr)
 		//rc.OnServerHello(body, handshakeHdr, msg, addr)
+		handshakeHdr.AddToHash(hctx.TranscriptHasher)
+		_, _ = hctx.TranscriptHasher.Write(body)
 	case format.HandshakeTypeCertificate:
 		var msg format.MessageCertificate
 		if err := msg.Parse(body); err != nil {
@@ -56,7 +63,13 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 			//TODO: alert here
 			return
 		}
+		// We do not want checks here, because receiving goroutine should not be blocked for long
+		// We have to first receive everything up to finished, probably send ack,
+		// then offload ECC to separate core and trigger state machine depending on result
+		hctx.certificateChain = msg
 		log.Printf("certificate parsed: %+v", msg)
+		handshakeHdr.AddToHash(hctx.TranscriptHasher)
+		_, _ = hctx.TranscriptHasher.Write(body)
 	case format.HandshakeTypeCertificateVerify:
 		var msg format.MessageCertificateVerify
 		if err := msg.Parse(body); err != nil {
@@ -64,13 +77,50 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 			//TODO: alert here
 			return
 		}
+		// TODO - We do not want checks here, because receiving goroutine should not be blocked for long
+		// We have to first receive everything up to finished, probably send ack,
+		// then offload ECC to separate core and trigger state machine depending on result
+		// But, for now we check here
+		if hctx.certificateChain.CertificatesLength == 0 {
+			// TODO - alert here
+			return
+		}
+		if msg.SignatureScheme != format.SignatureAlgorithm_RSA_PSS_RSAE_SHA256 {
+			// Single algorithm for now
+			// TODO - alert here
+			return
+		}
+		// [rfc8446:4.4.3] - certificate verification
+		var certVerifyTranscriptHash [constants.MaxHashLength]byte
+		hctx.TranscriptHasher.Sum(certVerifyTranscriptHash[:0])
+		sigMessage := []byte("                                                                " +
+			"TLS 1.3, server CertificateVerify")
+		sigMessage = append(sigMessage, 0)
+		sigMessage = append(sigMessage, certVerifyTranscriptHash[:sha256.Size]...)
+
+		sigMessageHash := sha256.Sum256(sigMessage)
+
+		cert := hctx.certificateChain.Certificates[0].Cert
+		if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash[:], msg.Signature); err != nil {
+			log.Printf("certificate verify error: %v", err)
+		}
 		log.Printf("certificate verify parsed: %+v", msg)
+		handshakeHdr.AddToHash(hctx.TranscriptHasher)
+		_, _ = hctx.TranscriptHasher.Write(body)
 	case format.HandshakeTypeFinished:
 		var msg format.MessageFinished
 		if err := msg.Parse(body); err != nil {
 			// rc.opts.Stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
 			//TODO: alert here
 			return
+		}
+		// [rfc8446:4.4.3] - certificate verification
+		var finishedTranscriptHash [constants.MaxHashLength]byte
+		hctx.TranscriptHasher.Sum(finishedTranscriptHash[:0])
+
+		mustBeFinished := hctx.Keys.ComputeServerFinished(sha256.New(), finishedTranscriptHash[:])
+		if string(msg.VerifyData[:msg.VerifyDataLength]) != string(mustBeFinished) {
+			log.Printf("finished message verify error")
 		}
 		log.Printf("finished message parsed: %+v", msg)
 	default:

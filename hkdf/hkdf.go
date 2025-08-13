@@ -13,6 +13,7 @@ import (
 	"hash"
 )
 
+// TODO - remove allocations
 func HMAC(key, data []byte, h hash.Hash) []byte {
 	mirror := hmac.New(sha256.New, key) // TODO - actually use h
 	_, _ = mirror.Write(data)

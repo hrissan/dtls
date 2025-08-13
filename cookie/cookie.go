@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/dtlsrand"
 )
 
@@ -63,7 +64,7 @@ func (c *CookieState) SetRand(rnd dtlsrand.Rand) {
 	rnd.Read(c.cookieSecret[:])
 }
 
-func (c *CookieState) CreateCookie(transcriptHash [MaxTranscriptHashLength]byte, keyShareSet bool, addr netip.AddrPort, now time.Time) Cookie {
+func (c *CookieState) CreateCookie(transcriptHash [constants.MaxHashLength]byte, keyShareSet bool, addr netip.AddrPort, now time.Time) Cookie {
 	var cookie Cookie
 	{
 		var salt [saltLength]byte
@@ -89,7 +90,7 @@ func (c *CookieState) CreateCookie(transcriptHash [MaxTranscriptHashLength]byte,
 	return cookie
 }
 
-func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time.Time) (ok bool, age time.Duration, transcriptHash [MaxTranscriptHashLength]byte, keyShareSet bool) {
+func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time.Time) (ok bool, age time.Duration, transcriptHash [constants.MaxHashLength]byte, keyShareSet bool) {
 	data := cookie.GetValue()
 	if len(data) != saltLength+8+1+MaxTranscriptHashLength+cookieHashLength {
 		return
@@ -107,9 +108,9 @@ func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time
 	copy(transcriptHash[:], data[saltLength+8+1:])
 
 	var mustBeHash [cookieHashLength]byte
-	copy(mustBeHash[:], data[saltLength+8+1+MaxTranscriptHashLength:])
+	copy(mustBeHash[:], data[saltLength+8+1+constants.MaxHashLength:])
 
-	hash := c.getScratchHash(data[:saltLength+8+1+MaxTranscriptHashLength], addr)
+	hash := c.getScratchHash(data[:saltLength+8+1+constants.MaxHashLength], addr)
 	ok = hash == mustBeHash
 	return
 }

@@ -1,11 +1,21 @@
 package format
 
+import (
+	"crypto/x509"
+	"errors"
+
+	"github.com/hrissan/tinydtls/constants"
+)
+
+var ErrCertificateChainTooLong = errors.New("certificate chain is too long")
+
 type MessageCertificate struct {
 	// ProtocolVersion is checked but not stored
 	RequestContextLength int
 	RequestContext       [256]byte // always enough
 
-	Certificates []CertificateEntry
+	CertificatesLength int
+	Certificates       [constants.MaxCertificateChainLength]CertificateEntry
 }
 
 func (msg *MessageCertificate) MessageKind() string { return "handshake" }
@@ -14,14 +24,21 @@ func (msg *MessageCertificate) MessageName() string { return "certificate" }
 func (msg *MessageCertificate) parseCertificates(body []byte) (err error) {
 	offset := 0
 	for offset < len(body) {
-		var entry CertificateEntry
-		if offset, entry.CertData, err = ParserReadUint24Length(body, offset); err != nil {
+		if msg.CertificatesLength >= len(msg.Certificates) {
+			return ErrCertificateChainTooLong
+		}
+		var certData []byte
+		if offset, certData, err = ParserReadUint24Length(body, offset); err != nil {
 			return err
 		}
-		if offset, entry.ExtenstionsData, err = ParserReadUint16Length(body, offset); err != nil {
+		if offset, _, err = ParserReadUint16Length(body, offset); err != nil {
 			return err
 		}
-		msg.Certificates = append(msg.Certificates, entry)
+		msg.Certificates[msg.CertificatesLength].Cert, err = x509.ParseCertificate(certData) // reuse certificates
+		if err != nil {
+			return err
+		}
+		msg.CertificatesLength++
 	}
 	return nil
 }

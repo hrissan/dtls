@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/netip"
 
+	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/transport/handshake"
@@ -57,7 +58,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 			return nil, nil
 		}
 		// [rfc8446:4.4.1] replace initial hello message with its hash if HRR was used
-		var initialHelloTranscriptHash [cookie.MaxTranscriptHashLength]byte
+		var initialHelloTranscriptHash [constants.MaxHashLength]byte
 		hctx.TranscriptHasher.Sum(initialHelloTranscriptHash[:0])
 		hctx.TranscriptHasher.Reset()
 		syntheticHashData := []byte{format.HandshakeTypeMessageHash, 0, 0, sha256.Size}
@@ -81,7 +82,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	handshakeHdr.AddToHash(hctx.TranscriptHasher)
 	_, _ = hctx.TranscriptHasher.Write(messageBody)
 
-	var handshakeTranscriptHash [cookie.MaxTranscriptHashLength]byte
+	var handshakeTranscriptHash [constants.MaxHashLength]byte
 	hctx.TranscriptHasher.Sum(handshakeTranscriptHash[:0])
 
 	sharedSecret, err := curve25519.X25519(hctx.Keys.X25519Secret[:], serverHello.Extensions.KeyShare.X25519PublicKey[:])

@@ -299,15 +299,13 @@ func (hctx *HandshakeConnection) constructCiphertextRecord(datagram []byte, msg 
 	// TODO - subtract max overhead we add here on the 1 leel above, so we do not end up with larger fragment than allowed
 	binary.BigEndian.PutUint16(datagram[startRecordOffset+3:], uint16(len(datagram)-startBodyOFfset))
 
-	var cipherText [16384]byte // TODO - encrypt inplace
-	encrypted := gcm.Seal(cipherText[:0], iv[:], datagram[startBodyOFfset:len(datagram)-SealSize], datagram[startRecordOffset:startBodyOFfset])
-	if &encrypted[0] != &cipherText[0] {
+	encrypted := gcm.Seal(datagram[startBodyOFfset:startBodyOFfset], iv[:], datagram[startBodyOFfset:len(datagram)-SealSize], datagram[startRecordOffset:startBodyOFfset])
+	if &encrypted[0] != &datagram[startBodyOFfset] {
 		panic("gcm.Seal reallocated datagram storage")
 	}
 	if len(encrypted) != len(datagram[startBodyOFfset:]) {
 		panic("gcm.Seal length mismatch")
 	}
-	copy(datagram[startBodyOFfset:], encrypted)
 
 	if err := hctx.Keys.EncryptSequenceNumbers(datagram[startRecordOffset+1:startRecordOffset+3], datagram[startBodyOFfset:], hctx.RoleServer); err != nil {
 		panic("cipher text too short when sending")

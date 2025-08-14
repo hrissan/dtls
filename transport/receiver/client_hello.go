@@ -12,6 +12,7 @@ import (
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
+	"github.com/hrissan/tinydtls/transport/handshake"
 	"golang.org/x/crypto/curve25519"
 )
 
@@ -71,20 +72,27 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		// generate alert
 		return
 	}
-	hrrDatagram, _ := rc.snd.PopHelloRetryDatagram()
-	hrrDatagram = generateStatelessHRR(hrrDatagram, msg.Extensions.Cookie, keyShareSet)
+
+	hctx, ok := rc.handshakes[addr]
+	if !ok { // TODO - replace older handshakes with the new ones (by cookie age)
+		hctx = &handshake.HandshakeConnection{
+			Addr:       addr,
+			RoleServer: true,
+		}
+		rc.handshakes[addr] = hctx
+	}
+	// TODO - check if the same handshake by storing (age, initialHelloTranscriptHash, keyShareSet)
+
+	var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte
+	hrrDatagram := generateStatelessHRR(hrrDatagramStorage[:0], msg.Extensions.Cookie, keyShareSet)
+	if len(hrrDatagram) > len(hrrDatagramStorage) {
+		panic("Large HRR datagram must not be generated")
+	}
 	hrrHash := sha256.Sum256(hrrDatagram)
 	log.Printf("serverHRRHash: %x\n", hrrHash[:])
 
 	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", keyShareSet, initialHelloTranscriptHash)
 	var kk keys.Keys
-	//hctx, ok := rc.handshakes[addr]
-	//if !ok {
-	//	hctx = &HandshakeContext{
-	//		LastActivity:          time.Now(),
-	//		NextMessageSeqReceive: 2, // ClientHello, ClientHello
-	//		NextMessageSeqSend:    2, // HRR, ServerHello
-	//	}
 	rc.opts.Rnd.Read(kk.LocalRandom[:])
 	kk.ComputeKeyShare(rc.opts.Rnd)
 	//rc.handshakes[addr] = hctx
@@ -167,6 +175,7 @@ func IsSupportedClientHello(msg *format.ClientHello) error {
 	return nil
 }
 
+// we must generate the same server hello, because we are stateless, but this message is in transcript
 func generateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) []byte {
 	helloRetryRequest := format.ServerHello{
 		CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,

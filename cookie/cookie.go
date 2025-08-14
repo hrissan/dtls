@@ -10,6 +10,7 @@ import (
 
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/dtlsrand"
+	"github.com/hrissan/tinydtls/hkdf"
 )
 
 const cookieHashLength = sha256.Size
@@ -118,12 +119,17 @@ func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time
 func (c *CookieState) getScratchHash(cookieHashedBytes []byte, addr netip.AddrPort) [cookieHashLength]byte {
 	scratch := make([]byte, 0, MaxCookieSize+cookieHashLength) // allocate on stack
 	scratch = append(scratch, cookieHashedBytes...)
-	scratch = append(scratch, c.cookieSecret[:]...) // secret in the middle. IDK if this important, but feels better.
 	b := addr.Addr().As16()
 	scratch = append(scratch, b[:]...)
 	scratch = binary.BigEndian.AppendUint16(scratch, addr.Port())
 	if len(scratch) > MaxCookieSize+cookieHashLength {
 		panic("please increase maxScratchSize")
 	}
-	return sha256.Sum256(scratch)
+	hmac := hkdf.HMAC(c.cookieSecret[:], scratch, sha256.New())
+	if len(hmac) != cookieHashLength {
+		panic("bad hmac")
+	}
+	var result [cookieHashLength]byte
+	copy(result[:], hmac)
+	return result
 }

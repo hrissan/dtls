@@ -7,3 +7,5 @@ const MaxHashLength = 32
 
 // Limited as a protection against too much work for signature checking
 const MaxCertificateChainLength = 16
+
+const MaxOutgoingHRRDatagramLength = 512

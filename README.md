@@ -85,12 +85,46 @@ which might change state and wake up some other goroutine or set timer again.
 
 We'd like to make this list as simple as possible (no B-tree or similar structures).
 
-We'd like to have fixed number of queues sorted by expiration time (for example, for 50ms and 1s).
+We'd like to have fixed number of queues, sorted by expiration time (for example, for 50ms and 1s).
 
 So if we need 5-second timer, we'd set timeout to 5s and add it to 1s queue.
 After expiration, we decrease timeout by 1s, and add to the queue again, until timeout reaches 0. 
 
 This covers both short and long timers with minimal data structure.
+
+## Links to other implementations
+
+https://github.com/syncsynchalt/tincan-tls
+
+https://dtls.xargs.org/#server-certificate-datagram/annotated
+
+## (D)TLS 1.3 promotions
+
+Advantages to Using TLS 1.3 https://www.wolfssl.com/docs/tls13/
+
+What’s new in DTLS 1.3 https://www.wolfssl.com/whats-new-dtls-1-3/
+
+## References
+
+The Datagram Transport Layer Security (DTLS) Protocol Version 1.3 https://www.rfc-editor.org/rfc/rfc9147.html
+
+The Transport Layer Security (TLS) Protocol Version 1.3 https://www.rfc-editor.org/rfc/rfc8446
+
+HMAC-based Extract-and-Expand Key Derivation Function (HKDF) https://datatracker.ietf.org/doc/html/rfc5869
+
+Example Handshake Traces for TLS 1.3 https://www.rfc-editor.org/rfc/rfc8448.html
+
+An Interface and Algorithms for Authenticated Encryption https://datatracker.ietf.org/doc/html/rfc5116
+
+TLS 1.3 Authentication and Integrity-Only Cipher Suites https://www.rfc-editor.org/rfc/rfc9150.html
+
+Elliptic Curves for Security https://www.rfc-editor.org/rfc/rfc7748
+
+Negotiated Finite Field Diffie-Hellman Ephemeral Parameters for Transport Layer Security (TLS) https://www.rfc-editor.org/rfc/rfc7919
+
+Elliptic Curve Cryptography (ECC) Cipher Suites for Transport Layer Security (TLS) Versions 1.2 and Earlier https://www.rfc-editor.org/rfc/rfc8422
+
+Transport Layer Security (TLS) Extensions: Extension Definitions https://www.rfc-editor.org/rfc/rfc6066
 
 # for now, tested against wolfssl
 

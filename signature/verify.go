@@ -10,6 +10,9 @@ import (
 	"fmt"
 )
 
+// worth reading and understanding
+// https://crypto.stackexchange.com/questions/58680/whats-the-difference-between-rsa-pss-pss-and-rsa-pss-rsae-schemes
+
 var ErrCertificateWrongPublicKeyType = errors.New("certificate has wrong public key type")
 
 func VerifySignature_RSA_PSS_RSAE_SHA256(cert *x509.Certificate, data []byte, signature []byte) error {

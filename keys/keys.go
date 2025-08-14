@@ -20,8 +20,10 @@ type Keys struct {
 	X25519Secret [32]byte // TODO - move to handshake context
 	X25519Public [32]byte // TODO - move to handshake context
 
-	ClientHandshakeTrafficSecret [32]byte
-	ServerHandshakeTrafficSecret [32]byte
+	ClientHandshakeTrafficSecret   [32]byte
+	ServerHandshakeTrafficSecret   [32]byte
+	ClientApplicationTrafficSecret [32]byte
+	ServerApplicationTrafficSecret [32]byte
 
 	MasterSecret [32]byte
 
@@ -116,8 +118,8 @@ func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {
 	handshakeSecret := hkdf.Extract(hasher, derivedSecret, sharedSecret)
 	copy(keys.ClientHandshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "c hs traffic", trHash[:]))
 	copy(keys.ServerHandshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "s hs traffic", trHash[:]))
-	log.Printf("client handshake keys: %x\n", keys.ClientHandshakeTrafficSecret)
-	log.Printf("server handshake keys: %x\n", keys.ServerHandshakeTrafficSecret)
+	log.Printf("client handshake traffic secret: %x\n", keys.ClientHandshakeTrafficSecret)
+	log.Printf("server handshake traffic secret: %x\n", keys.ServerHandshakeTrafficSecret)
 
 	derivedSecret = deriveSecret(hasher, handshakeSecret, "derived", emptyHash[:])
 	zeros := [32]byte{}
@@ -140,6 +142,38 @@ func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {
 
 	keys.Epoch = 2
 	//os.Exit(1) // to compare printed keys above
+}
+
+func (keys *Keys) ComputeServerApplicationKeys(trHash []byte) {
+	hasher := sha256.New()
+	copy(keys.ClientApplicationTrafficSecret[:], deriveSecret(hasher, keys.MasterSecret[:], "c ap traffic", trHash[:]))
+	copy(keys.ServerApplicationTrafficSecret[:], deriveSecret(hasher, keys.MasterSecret[:], "s ap traffic", trHash[:]))
+	log.Printf("client handshake application secret: %x\n", keys.ClientApplicationTrafficSecret)
+	log.Printf("server handshake application secret: %x\n", keys.ServerApplicationTrafficSecret)
+
+	ssecret := keys.ServerApplicationTrafficSecret[:]
+	copy(keys.ServerWriteKey[:], hkdf.ExpandLabel(hasher, ssecret, "key", []byte{}, len(keys.ServerWriteKey)))
+	copy(keys.ServerWriteIV[:], hkdf.ExpandLabel(hasher, ssecret, "iv", []byte{}, len(keys.ServerWriteIV)))
+	//TODO - update epoch/seq
+	//keys.Epoch = 3
+	//keys.NextSegmentSequenceReceive = 0
+
+	// [rfc8446:7.2]
+	//The next-generation application_traffic_secret is computed as:
+	//
+	//application_traffic_secret_N+1 =
+	//	HKDF-Expand-Label(application_traffic_secret_N,
+	//		"traffic upd", "", Hash.length)
+}
+
+func (keys *Keys) ComputeClientApplicationKeys() {
+	hasher := sha256.New()
+	csecret := keys.ClientApplicationTrafficSecret[:]
+	copy(keys.ClientWriteKey[:], hkdf.ExpandLabel(hasher, csecret, "key", []byte{}, len(keys.ClientWriteKey)))
+	copy(keys.ClientWriteIV[:], hkdf.ExpandLabel(hasher, csecret, "iv", []byte{}, len(keys.ClientWriteIV)))
+	//TODO - update epoch/seq
+	//keys.Epoch = 3
+	//keys.NextSegmentSequenceReceive = 0
 }
 
 func deriveSecret(hasher hash.Hash, secret []byte, label string, sum []byte) []byte {

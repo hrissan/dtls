@@ -133,14 +133,14 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	}
 	hctx.PushMessage(handshake.MessagesFlightServerHello, serverHelloMessage)
 
-	var handshakeTranscriptHash [constants.MaxHashLength]byte
-	hctx.TranscriptHasher.Sum(handshakeTranscriptHash[:0])
+	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
+	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
 	sharedSecret, err := curve25519.X25519(hctx.Keys.X25519Secret[:], msg.Extensions.KeyShare.X25519PublicKey[:])
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	hctx.Keys.ComputeHandshakeKeys(sharedSecret, handshakeTranscriptHash[:sha256.Size])
+	hctx.Keys.ComputeHandshakeKeys(sharedSecret, handshakeTranscriptHash)
 
 	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateEncryptedExtensions(hctx))
 

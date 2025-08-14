@@ -94,12 +94,12 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 			return
 		}
 		// [rfc8446:4.4.3] - certificate verification
-		var certVerifyTranscriptHash [constants.MaxHashLength]byte
-		hctx.TranscriptHasher.Sum(certVerifyTranscriptHash[:0])
+		var certVerifyTranscriptHashStorage [constants.MaxHashLength]byte
+		certVerifyTranscriptHash := hctx.TranscriptHasher.Sum(certVerifyTranscriptHashStorage[:0])
 		sigMessage := []byte("                                                                " +
 			"TLS 1.3, server CertificateVerify")
 		sigMessage = append(sigMessage, 0)
-		sigMessage = append(sigMessage, certVerifyTranscriptHash[:sha256.Size]...)
+		sigMessage = append(sigMessage, certVerifyTranscriptHash...)
 
 		sigMessageHash := sha256.Sum256(sigMessage)
 		// TODO - offload to calc goroutine here
@@ -124,14 +124,22 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 			return
 		}
 		// [rfc8446:4.4.3] - certificate verification
-		var finishedTranscriptHash [constants.MaxHashLength]byte
-		hctx.TranscriptHasher.Sum(finishedTranscriptHash[:0])
+		var finishedTranscriptHashStorage [constants.MaxHashLength]byte
+		finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
-		mustBeFinished := hctx.Keys.ComputeServerFinished(sha256.New(), finishedTranscriptHash[:])
+		mustBeFinished := hctx.Keys.ComputeServerFinished(sha256.New(), finishedTranscriptHash)
 		if string(msg.VerifyData[:msg.VerifyDataLength]) != string(mustBeFinished) {
 			log.Printf("finished message verify error")
 		}
 		log.Printf("finished message parsed: %+v", msg)
+		handshakeHdr.AddToHash(hctx.TranscriptHasher)
+		_, _ = hctx.TranscriptHasher.Write(body)
+
+		var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
+		handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
+
+		hctx.Keys.ComputeServerApplicationKeys(handshakeTranscriptHash)
+		hctx.Keys.ComputeClientApplicationKeys()
 	default:
 		log.Printf("TODO - message type %d not supported", handshakeHdr.HandshakeType)
 		//rc.opts.Stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)

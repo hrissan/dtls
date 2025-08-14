@@ -2,6 +2,7 @@ package receiver
 
 import (
 	"crypto/sha256"
+	"crypto/x509"
 	"errors"
 	"hash"
 	"log"
@@ -140,10 +141,13 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		panic("curve25519.X25519 failed")
 	}
 	hctx.Keys.ComputeHandshakeKeys(sharedSecret, handshakeTranscriptHash[:sha256.Size])
-	//	return
-	//}
-	// TODO - start Handshake
+
 	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateEncryptedExtensions(hctx))
+
+	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateServerCertificate(hctx))
+
+	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateServerCertificateVerify(
+		rc.opts.ServerCertificate.Leaf, hctx))
 
 	rc.snd.RegisterConnectionForSend(hctx)
 }
@@ -238,15 +242,34 @@ func (rc *Receiver) generateEncryptedExtensions(hctx *handshake.HandshakeConnect
 	}
 }
 
-func (rc *Receiver) generateCertificate(hctx *handshake.HandshakeConnection) format.MessageHandshake {
+func (rc *Receiver) generateServerCertificate(hctx *handshake.HandshakeConnection) format.MessageHandshake {
 	msg := format.MessageCertificate{
-		CertificatesLength: 0,
-		Certificates:       [16]format.CertificateEntry{},
+		CertificatesLength: len(rc.opts.ServerCertificate.Certificate),
+	}
+	for i, certData := range rc.opts.ServerCertificate.Certificate {
+		msg.Certificates[i].CertData = certData // those slices are not retained beyond this func
 	}
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
 	return format.MessageHandshake{
 		Header: format.MessageHandshakeHeader{
-			HandshakeType: format.HandshakeTypeEncryptedExtensions,
+			HandshakeType: format.HandshakeTypeCertificate,
+			Length:        uint32(len(messageBody)),
+		},
+		Body: messageBody,
+	}
+}
+
+func (rc *Receiver) generateServerCertificateVerify(cert *x509.Certificate, hctx *handshake.HandshakeConnection) format.MessageHandshake {
+	msg := format.MessageCertificate{
+		CertificatesLength: len(rc.opts.ServerCertificate.Certificate),
+	}
+	for i, certData := range rc.opts.ServerCertificate.Certificate {
+		msg.Certificates[i].CertData = certData // those slices are not retained beyond this func
+	}
+	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
+	return format.MessageHandshake{
+		Header: format.MessageHandshakeHeader{
+			HandshakeType: format.HandshakeTypeCertificate,
 			Length:        uint32(len(messageBody)),
 		},
 		Body: messageBody,

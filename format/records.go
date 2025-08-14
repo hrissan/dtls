@@ -125,13 +125,13 @@ func closestSequenceNumber(seq uint16, expectedSN uint64, mask uint64) uint64 {
 	return seqCandidate
 }
 
-func (hdr *CiphertextRecordHeader) ClosestSequenceNumber(seqNumData []byte, expectedSN uint64) uint64 { // return garbage before decryption or after encryption
+func (hdr *CiphertextRecordHeader) ClosestSequenceNumber(seqNumData []byte, expectedSN uint64) (uint16, uint64) { // return garbage before decryption or after encryption
 	if hdr.Has16BitSeqNum() {
 		seq := binary.BigEndian.Uint16(seqNumData)
-		return closestSequenceNumber(seq, expectedSN, 0x10000)
+		return seq, closestSequenceNumber(seq, expectedSN, 0x10000)
 	}
-	seq := seqNumData[0]
-	return closestSequenceNumber(uint16(seq), expectedSN, 0x100)
+	seq := uint16(seqNumData[0])
+	return seq, closestSequenceNumber(seq, expectedSN, 0x100)
 }
 
 func (hdr *CiphertextRecordHeader) Parse(datagram []byte, cIDLength int) (n int, cid []byte, seqNum []byte, header []byte, body []byte, err error) {

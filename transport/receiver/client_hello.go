@@ -1,8 +1,8 @@
 package receiver
 
 import (
+	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"errors"
 	"hash"
 	"log"
@@ -12,6 +12,7 @@ import (
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/signature"
 	"github.com/hrissan/tinydtls/transport/handshake"
 	"golang.org/x/crypto/curve25519"
 )
@@ -87,6 +88,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	hctx.Keys.NextEpoch0SequenceReceive = 1 // TODO - get from plaintext record we received
 	hctx.Keys.NextEpoch0SequenceSend = 1    // sequence 0 was HRR
 	hctx.Keys.NextMessageSeqSend = 1        // message 0 was HRR
+	hctx.Keys.NextMessageSeqReceive = 2     // message 0, 1 were initial client_hello, client_hello
 	rc.handshakes[addr] = hctx
 	// TODO - check if the same handshake by storing (age, initialHelloTranscriptHash, keyShareSet)
 	{
@@ -109,8 +111,8 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		debugPrintSum(hctx.TranscriptHasher)
 	}
 	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", keyShareSet, initialHelloTranscriptHash)
-	rc.opts.Rnd.Read(hctx.Keys.LocalRandom[:])
-	rc.opts.Rnd.Read(hctx.Keys.X25519Secret[:])
+	rc.opts.Rnd.ReadMust(hctx.Keys.LocalRandom[:])
+	rc.opts.Rnd.ReadMust(hctx.Keys.X25519Secret[:])
 	hctx.Keys.ComputeKeyShare()
 
 	serverHello := format.ServerHello{
@@ -146,8 +148,13 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 
 	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateServerCertificate(hctx))
 
-	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateServerCertificateVerify(
-		rc.opts.ServerCertificate.Leaf, hctx))
+	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateServerCertificateVerify(hctx))
+
+	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateServerFinished(hctx))
+
+	//handshakeTranscriptHash = hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
+	//hctx.Keys.ComputeServerApplicationKeys(handshakeTranscriptHash)
+	//hctx.Keys.ComputeClientApplicationKeys()
 
 	rc.snd.RegisterConnectionForSend(hctx)
 }
@@ -259,17 +266,51 @@ func (rc *Receiver) generateServerCertificate(hctx *handshake.HandshakeConnectio
 	}
 }
 
-func (rc *Receiver) generateServerCertificateVerify(cert *x509.Certificate, hctx *handshake.HandshakeConnection) format.MessageHandshake {
-	msg := format.MessageCertificate{
-		CertificatesLength: len(rc.opts.ServerCertificate.Certificate),
+func (rc *Receiver) generateServerCertificateVerify(hctx *handshake.HandshakeConnection) format.MessageHandshake {
+	msg := format.MessageCertificateVerify{
+		SignatureScheme: format.SignatureAlgorithm_RSA_PSS_RSAE_SHA256,
 	}
-	for i, certData := range rc.opts.ServerCertificate.Certificate {
-		msg.Certificates[i].CertData = certData // those slices are not retained beyond this func
+
+	// [rfc8446:4.4.3] - certificate verification
+	var certVerifyTranscriptHashStorage [constants.MaxHashLength]byte
+	certVerifyTranscriptHash := hctx.TranscriptHasher.Sum(certVerifyTranscriptHashStorage[:0])
+
+	var sigMessageHashStorage [constants.MaxHashLength]byte
+	sigMessageHash := signature.CalculateCoveredContentHash(sha256.New(), certVerifyTranscriptHash, sigMessageHashStorage[:0])
+
+	privateRsa := rc.opts.ServerCertificate.PrivateKey.(*rsa.PrivateKey)
+	sig, err := signature.CreateSignature_RSA_PSS_RSAE_SHA256(rc.opts.Rnd, privateRsa, sigMessageHash)
+	if err != nil {
+		log.Printf("create signature error: %v", err)
+		// TODO - now what? Close connection probably.
 	}
+	msg.Signature = sig
+	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
+
+	return format.MessageHandshake{
+		Header: format.MessageHandshakeHeader{
+			HandshakeType: format.HandshakeTypeCertificateVerify,
+			Length:        uint32(len(messageBody)),
+		},
+		Body: messageBody,
+	}
+}
+
+func (rc *Receiver) generateServerFinished(hctx *handshake.HandshakeConnection) format.MessageHandshake {
+	// [rfc8446:4.4.4] - finished
+	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
+	finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
+
+	mustBeFinished := hctx.Keys.ComputeServerFinished(sha256.New(), finishedTranscriptHash)
+
+	msg := format.MessageFinished{
+		VerifyDataLength: len(mustBeFinished),
+	}
+	copy(msg.VerifyData[:], mustBeFinished)
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
 	return format.MessageHandshake{
 		Header: format.MessageHandshakeHeader{
-			HandshakeType: format.HandshakeTypeCertificate,
+			HandshakeType: format.HandshakeTypeFinished,
 			Length:        uint32(len(messageBody)),
 		},
 		Body: messageBody,

@@ -129,15 +129,20 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 			//TODO: alert here
 			return
 		}
-		// [rfc8446:4.4.3] - certificate verification
+		// [rfc8446:4.4.4] - finished
 		var finishedTranscriptHashStorage [constants.MaxHashLength]byte
 		finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
-		mustBeFinished := hctx.Keys.ComputeServerFinished(sha256.New(), finishedTranscriptHash)
+		var mustBeFinished []byte
+		if hctx.RoleServer {
+			mustBeFinished = hctx.Keys.ComputeClientFinished(sha256.New(), finishedTranscriptHash)
+		} else {
+			mustBeFinished = hctx.Keys.ComputeServerFinished(sha256.New(), finishedTranscriptHash)
+		}
 		if string(msg.VerifyData[:msg.VerifyDataLength]) != string(mustBeFinished) {
 			log.Printf("finished message verify error")
 		}
-		log.Printf("finished message parsed: %+v", msg)
+		log.Printf("finished message verify ok: %+v", msg)
 		handshakeHdr.AddToHash(hctx.TranscriptHasher)
 		_, _ = hctx.TranscriptHasher.Write(body)
 
@@ -291,6 +296,7 @@ func (hctx *HandshakeConnection) constructCiphertextRecord(datagram []byte, msg 
 	epoch := hctx.Keys.Epoch
 	seq := hctx.Keys.NextSegmentSequenceSend // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check we correctly parse/decrypt them from peer
 	hctx.Keys.NextSegmentSequenceSend++
+	log.Printf("constructing ciphertext with seq: %d", seq)
 
 	gcm := hctx.Keys.ClientWrite
 	iv := hctx.Keys.ClientWriteIV

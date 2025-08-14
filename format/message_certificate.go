@@ -61,6 +61,19 @@ func (msg *MessageCertificate) Parse(body []byte) (err error) {
 }
 
 func (msg *MessageCertificate) Write(body []byte) []byte {
-	panic("TODO")
+	body, mark := MarkByteOffset(body)
+	body = append(body, msg.RequestContext[:msg.RequestContextLength]...)
+	FillByteOffset(body, mark)
+	body, mark = MarkUint24Offset(body)
+	for _, c := range msg.Certificates[:msg.CertificatesLength] {
+		var insideMark int
+		body, insideMark = MarkUint24Offset(body)
+		body = append(body, c.CertData...)
+		FillUint24Offset(body, insideMark)
+		body, insideMark = MarkUint16Offset(body)
+		body = append(body, c.ExtenstionsData...)
+		FillUint16Offset(body, insideMark)
+	}
+	FillUint24Offset(body, mark)
 	return body
 }

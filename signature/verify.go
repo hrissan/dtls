@@ -8,6 +8,8 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+
+	"github.com/hrissan/tinydtls/dtlsrand"
 )
 
 // worth reading and understanding
@@ -15,12 +17,22 @@ import (
 
 var ErrCertificateWrongPublicKeyType = errors.New("certificate has wrong public key type")
 
+func CreateSignature_RSA_PSS_RSAE_SHA256(rand dtlsrand.Rand, priv *rsa.PrivateKey, data []byte) ([]byte, error) {
+	return rsa.SignPSS(rand, priv, crypto.SHA256, data, &rsa.PSSOptions{
+		SaltLength: rsa.PSSSaltLengthEqualsHash,
+	})
+	//&rsa.PSSOptions{
+	//	SaltLength: rsa.PSSSaltLengthAuto,
+	//	Hash:       crypto.SHA256,
+	//}
+}
+
 func VerifySignature_RSA_PSS_RSAE_SHA256(cert *x509.Certificate, data []byte, signature []byte) error {
 	rsaPublicKey, ok := cert.PublicKey.(*rsa.PublicKey)
 	if !ok {
 		return ErrCertificateWrongPublicKeyType
 	}
-	return rsa.VerifyPSS(rsaPublicKey, crypto.SHA256, data[:], signature, nil)
+	return rsa.VerifyPSS(rsaPublicKey, crypto.SHA256, data, signature, nil)
 	//&rsa.PSSOptions{
 	//	SaltLength: rsa.PSSSaltLengthAuto,
 	//	Hash:       crypto.SHA256,

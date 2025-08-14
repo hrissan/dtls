@@ -31,7 +31,7 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 	if byte(hctx.Keys.Epoch&0b00000011) != hdr.Epoch() {
 		return // TODO - switch epoch after key update only
 	}
-	if err := hctx.Keys.EncryptSequenceNumbers(seqNumData, body, rc.opts.RoleServer); err != nil {
+	if err := hctx.Keys.DecryptSequenceNumbers(seqNumData, body, rc.opts.RoleServer); err != nil {
 		return // TODO - send alert here
 	}
 	gcm := hctx.Keys.ServerWrite
@@ -40,7 +40,9 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 		gcm = hctx.Keys.ClientWrite
 		iv = hctx.Keys.ClientWriteIV // copy, otherwise disaster
 	}
-	seq := hdr.ClosestSequenceNumber(seqNumData, hctx.Keys.NextSegmentSequenceReceive)
+	decryptedSeq, seq := hdr.ClosestSequenceNumber(seqNumData, hctx.Keys.NextSegmentSequenceReceive)
+	log.Printf("decrypted SN: %d, closest: %d", decryptedSeq, seq)
+
 	hctx.Keys.FillIVSequence(iv[:], seq)
 	decrypted, err := gcm.Open(body[:0], iv[:], body, header)
 	if err != nil {

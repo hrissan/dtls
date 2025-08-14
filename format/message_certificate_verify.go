@@ -1,5 +1,7 @@
 package format
 
+import "encoding/binary"
+
 // TODO - use rope for all variable memory chunks
 // for now after parsing those slices point to datagram, so must be copied or discarded before next datagram is read
 type MessageCertificateVerify struct {
@@ -22,6 +24,9 @@ func (msg *MessageCertificateVerify) Parse(body []byte) (err error) {
 }
 
 func (msg *MessageCertificateVerify) Write(body []byte) []byte {
-	panic("TODO")
+	body = binary.BigEndian.AppendUint16(body, msg.SignatureScheme)
+	body, mark := MarkUint16Offset(body)
+	body = append(body, msg.Signature...)
+	FillUint16Offset(body, mark)
 	return body
 }

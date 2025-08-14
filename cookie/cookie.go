@@ -61,7 +61,7 @@ func (c *Cookie) AppendByteMust(data byte) {
 
 func (c *CookieState) SetRand(rnd dtlsrand.Rand) {
 	c.rnd = rnd
-	rnd.Read(c.cookieSecret[:])
+	rnd.ReadMust(c.cookieSecret[:])
 }
 
 // TODO - do not copy excess data from transcript hash storage
@@ -69,7 +69,7 @@ func (c *CookieState) CreateCookie(transcriptHash [constants.MaxHashLength]byte,
 	var cookie Cookie
 	{
 		var salt [saltLength]byte
-		c.rnd.Read(salt[:])
+		c.rnd.ReadMust(salt[:])
 		cookie.AppendMust(salt[:])
 	}
 	{

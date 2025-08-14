@@ -55,12 +55,16 @@ type Keys struct {
 	NextEpoch0SequenceSend    uint64
 }
 
+func (keys *Keys) DecryptSequenceNumbers(seqNum []byte, cipherText []byte, roleServer bool) error {
+	return keys.EncryptSequenceNumbers(seqNum, cipherText, !roleServer)
+}
+
 func (keys *Keys) EncryptSequenceNumbers(seqNum []byte, cipherText []byte, roleServer bool) error {
 	var mask [32]byte // Some space good for many ciphers, TODO - check constant mush earlier
 	if !keys.DoNotEncryptSequenceNumbers {
-		snCipher := keys.ServerSN
+		snCipher := keys.ClientSN
 		if roleServer {
-			snCipher = keys.ClientSN
+			snCipher = keys.ServerSN
 		}
 		if len(cipherText) < snCipher.BlockSize() {
 			// TODO - generate alert
@@ -70,12 +74,12 @@ func (keys *Keys) EncryptSequenceNumbers(seqNum []byte, cipherText []byte, roleS
 	}
 	if len(seqNum) == 1 {
 		seqNum[0] ^= mask[0]
-		log.Printf("decrypted SN: %d", uint16(seqNum[0]))
+		//log.Printf("decrypted SN: %d", uint16(seqNum[0]))
 		return nil
 	} else if len(seqNum) == 2 {
 		seqNum[0] ^= mask[0]
 		seqNum[1] ^= mask[1]
-		log.Printf("decrypted SN: %d", binary.BigEndian.Uint16(seqNum))
+		//log.Printf("decrypted SN: %d", binary.BigEndian.Uint16(seqNum))
 		return nil
 	} else {
 		panic("seqNum must have 1 or 2 bytes")
@@ -148,8 +152,8 @@ func (keys *Keys) ComputeServerApplicationKeys(trHash []byte) {
 	hasher := sha256.New()
 	copy(keys.ClientApplicationTrafficSecret[:], deriveSecret(hasher, keys.MasterSecret[:], "c ap traffic", trHash[:]))
 	copy(keys.ServerApplicationTrafficSecret[:], deriveSecret(hasher, keys.MasterSecret[:], "s ap traffic", trHash[:]))
-	log.Printf("client handshake application secret: %x\n", keys.ClientApplicationTrafficSecret)
-	log.Printf("server handshake application secret: %x\n", keys.ServerApplicationTrafficSecret)
+	log.Printf("client application traffic secret: %x\n", keys.ClientApplicationTrafficSecret)
+	log.Printf("server application traffic secret: %x\n", keys.ServerApplicationTrafficSecret)
 
 	ssecret := keys.ServerApplicationTrafficSecret[:]
 	copy(keys.ServerWriteKey[:], hkdf.ExpandLabel(hasher, ssecret, "key", []byte{}, len(keys.ServerWriteKey)))
@@ -180,12 +184,14 @@ func deriveSecret(hasher hash.Hash, secret []byte, label string, sum []byte) []b
 	return hkdf.ExpandLabel(hasher, secret, label, sum, len(sum))
 }
 
+// TODO - remove allocations
 func (keys *Keys) ComputeClientFinished(hasher hash.Hash, transcriptHash []byte) []byte {
 	finishedKey := hkdf.ExpandLabel(hasher, keys.ClientHandshakeTrafficSecret[:], "finished", []byte{}, hasher.Size())
 	//transcriptHash := sha256.Sum256(conn.transcript)
 	return hkdf.HMAC(finishedKey, transcriptHash[:], hasher)
 }
 
+// TODO - remove allocations
 func (keys *Keys) ComputeServerFinished(hasher hash.Hash, transcriptHash []byte) []byte {
 	finishedKey := hkdf.ExpandLabel(hasher, keys.ServerHandshakeTrafficSecret[:], "finished", []byte{}, hasher.Size())
 	//transcriptHash := sha256.Sum256(conn.transcript)

@@ -29,6 +29,7 @@ Must make zero allocations on the fast paths, almost zero allocations on slow pa
 Must be fixed memory for everything. Every object allocated on heap must be recycled indefinitely (except in standard crypto, we do not control). 
 
 Must use as little memory per established connection as possible (1.5 kilobytes?). TODO - benchmark and fill in number here after connection actually works.
+
 Must have separate memory limit for established connections.
 If the limit is reached, new handshakes cannot start.
 
@@ -48,13 +49,13 @@ All parsers/incoming path must be fuzzed.
 
 ## design
 
-There is reading goroutine, writing goroutine, and ECC offload goroutines. They communicate using mutexes, condvars and channels, but do not block each other.
+There is reading goroutine, writing goroutine, timers goroutine, and ECC offload goroutines. They communicate using mutexes, condvars and channels, but do not block each other.
 
 ### reading goroutine
 
-Reads packet into the same buffer, parses inplace.
+Reads packet into the single buffer it owns, parses inplace.
 
-For stateless messages, creates and adds responses to the queue (subject to separate memory limit) and wakes up sending goroutine. 
+For stateless messages, creates and adds responses to the dedicated queue (subject to separate memory limit) and wakes up sending goroutine. 
 
 For stateful messages, finds/creates connection context, decrypts records in place,
 then triggers connection state machine, which sometimes wakes up sending goroutine.
@@ -79,18 +80,21 @@ which might change state and wake up sending goroutine or add connection back to
 
 ### timers goroutine
 
-Maintains a list of connection with timer set (max size of the queue is equal to # of handshakes).
+Maintains a list of connections with timer set (max size of the queue is equal to # of handshakes).
 When timer expires, calls OnTimer function on connection,
 which might change state and wake up some other goroutine or set timer again.
 
-We'd like to make this list as simple as possible (no B-tree or similar structures).
+We do not want to use complicated data structures, like B-tree or intrusive heap.
 
-We'd like to have fixed number of queues, sorted by expiration time (for example, for 50ms and 1s).
+So we have only 2 simple queues for short (50ms) and long (1s) timers, each sorted by expiration time simply because of the push order.
 
-So if we need 5-second timer, we'd set timeout to 5s and add it to 1s queue.
-After expiration, we decrease timeout by 1s, and add to the queue again, until timeout reaches 0. 
+When we set 5-second timer, we'd set timeout deadline to +5s, but add it to 1s queue.
 
-This covers both short and long timers with minimal data structure.
+After expiration, if we reached deadline, we fire timer, but if we did not, we add to the queue again, until deadline is reached.
+
+Each connection can be added to both queues, but only once to each one.
+
+TODO - maybe we need 3 or 4 queues with different timeouts ladder.
 
 ## Links to other implementations
 

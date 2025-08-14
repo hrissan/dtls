@@ -16,6 +16,8 @@ Implement only mandatory and useful crypto algorithms, elliptic groups, etc.
 
 Must defend against simple attacks.
 
+Checking validity of certification chain is not a priority for now, but must be correctly implemented later.
+
 ## technical
 
 Use standard Go crypto and crypto/x509, which we have no desire to reimplement.
@@ -28,7 +30,8 @@ Must make zero allocations on the fast paths, almost zero allocations on slow pa
 
 Must be fixed memory for everything. Every object allocated on heap must be recycled indefinitely (except in standard crypto, we do not control). 
 
-Must use as little memory per established connection as possible (1.5 kilobytes?). TODO - benchmark and fill in number here after connection actually works.
+Must use as little memory per established connection as possible (1.5 kilobytes?). We need this implementation for mesh with at least 100K connections per service, so literally every byte counts.
+TODO - benchmark and fill in number here after connection actually works.
 
 Must have separate memory limit for established connections.
 If the limit is reached, new handshakes cannot start.
@@ -49,7 +52,13 @@ All parsers/incoming path must be fuzzed.
 
 ## design
 
-There is reading goroutine, writing goroutine, timers goroutine, and ECC offload goroutines. They communicate using mutexes, condvars and channels, but do not block each other.
+There is reading goroutine, writing goroutine, timers goroutine, and ECC offload goroutines. They communicate using mutexes, and wake each other with condvars and channels.
+
+Those goroutines block on mutexes only, but for the short time to make quick update of the state machine.
+
+They never wait on something, while holding a mutex, and they do not wait each other, they simply run a common state machine together.
+
+We do not stick to golang's philosophy of communication using blocking channels, because it has a lot of drawbacks for the task we are solving.
 
 ### reading goroutine
 
@@ -60,14 +69,14 @@ For stateless messages, creates and adds responses to the dedicated queue (subje
 For stateful messages, finds/creates connection context, decrypts records in place,
 then triggers connection state machine, which sometimes wakes up sending goroutine.
 
-If heavy computations are required, instead of waking up sending goroutine, 
+If heavy computations are required, instead of waking up sending goroutine,
 sets flag and wakes up computations goroutine,
-which makes computations first, then clears flag and wakes up sending goroutine. 
+which makes computations first, then clears flag and wakes up sending goroutine.
 
 ### writing goroutine
 
 Maintains a round-robin queue of all connections (max size of the queue is equal to # of connections).
-Wakes up, pops a connection from the queue then aska it to generate a datagram. 
+Wakes up, pops a connection from the queue then asks it to generate a datagram.
 Sends the datagram, then if connection state needs to send more datagrams, adds connection to the back of the queue. 
 
 Also has a separate queue of stateless responses. Mixes them in some ratio (1:1 for now) with datagrams created by connections.
@@ -88,9 +97,14 @@ We do not want to use complicated data structures, like B-tree or intrusive heap
 
 So we have only 2 simple queues for short (50ms) and long (1s) timers, each sorted by expiration time simply because of the push order.
 
-When we set 5-second timer, we'd set timeout deadline to +5s, but add it to 1s queue.
+When we set 5-second timer, we'd set timer deadline to +5s, but add it to the 1s queue.
 
-After expiration, if we reached deadline, we fire timer, but if we did not, we add to the queue again, until deadline is reached.
+Goroutine will wake up and examine timers at the head of both queues.
+If the timer reached deadline, it fires timer, otherwise adds to the queue again, until deadline is reached.
+
+Then goroutine will select how long it should sleep, set timer and wait on both timer and wake-up struct{} channel.
+
+If timer is added with deadline less than sleep deadline, wake-up channel is signalled.
 
 Each connection can be added to both queues, but only once to each one.
 
@@ -149,7 +163,7 @@ edit wolfssl-examples/dtls/Makefile
 CFLAGS   = -Wall -I/home/user/devbox/wolfssl
 LIBS     = -L/home/user/devbox/wolfssl/src/.libs -lm
 
-edit wolfssl-examples/dtls/client-dtls13.c and wolfssl-examples/dtls/server-dtls13.c  
+edit wolfssl-examples/dtls/client-dtls13.c and wolfssl-examples/dtls/server-dtls13.c
 void print_secret(const WOLFSSL* ssl, const char* line) {
     fprintf(stderr, "%s\n", line);
 }
@@ -161,3 +175,9 @@ wolfssl-examples/dtls %  make server-dtls13 client-dtls13
 wolfssl-examples/dtls %  LD_LIBRARY_PATH=/home/user/devbox/wolfssl/src/.libs ./server-dtls13
 
 wolfssl-examples/dtls %  LD_LIBRARY_PATH=/home/user/devbox/wolfssl/src/.libs ./client-dtls13 127.0.0.1
+
+# if we are successful
+
+Adding TLS 1.3 seems easy, as TLS is DTLS without complicated datagram state machine.
+
+This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GOST, etc.).

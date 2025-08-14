@@ -152,6 +152,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 
 	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateServerFinished(hctx))
 
+	// TODO - compute application data secret here, compute keys as soon as previous epoch not needed
 	//handshakeTranscriptHash = hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 	//hctx.Keys.ComputeServerApplicationKeys(handshakeTranscriptHash)
 	//hctx.Keys.ComputeClientApplicationKeys()

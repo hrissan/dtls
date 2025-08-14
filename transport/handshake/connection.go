@@ -143,8 +143,11 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 			log.Printf("finished message verify error")
 		}
 		log.Printf("finished message verify ok: %+v", msg)
-		handshakeHdr.AddToHash(hctx.TranscriptHasher)
-		_, _ = hctx.TranscriptHasher.Write(body)
+		if !hctx.RoleServer { // server finished is not part of traffic secret transcript
+			handshakeHdr.AddToHash(hctx.TranscriptHasher)
+			_, _ = hctx.TranscriptHasher.Write(body)
+		}
+		// TODO - on server, secrets must be clculated when sending server finished, not here
 
 		var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 		handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])

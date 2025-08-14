@@ -1,7 +1,6 @@
 package format
 
 import (
-	"crypto/x509"
 	"errors"
 
 	"github.com/hrissan/tinydtls/constants"
@@ -31,13 +30,13 @@ func (msg *MessageCertificate) parseCertificates(body []byte) (err error) {
 		if offset, certData, err = ParserReadUint24Length(body, offset); err != nil {
 			return err
 		}
-		if offset, _, err = ParserReadUint16Length(body, offset); err != nil {
+		var externsionData []byte
+		if offset, externsionData, err = ParserReadUint16Length(body, offset); err != nil {
 			return err
 		}
-		msg.Certificates[msg.CertificatesLength].Cert, err = x509.ParseCertificate(certData) // reuse certificates
-		if err != nil {
-			return err
-		}
+		// TODO - use rope here
+		msg.Certificates[msg.CertificatesLength].CertData = append([]byte(nil), certData...)
+		msg.Certificates[msg.CertificatesLength].ExtenstionsData = append([]byte(nil), externsionData...)
 		msg.CertificatesLength++
 	}
 	return nil

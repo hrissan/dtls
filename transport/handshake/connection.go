@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/binary"
 	"hash"
 	"log"
@@ -101,10 +102,16 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 		sigMessage = append(sigMessage, certVerifyTranscriptHash[:sha256.Size]...)
 
 		sigMessageHash := sha256.Sum256(sigMessage)
+		// TODO - offload to calc goroutine here
 
-		cert := hctx.certificateChain.Certificates[0].Cert
+		cert, err := x509.ParseCertificate(hctx.certificateChain.Certificates[0].CertData) // TODO - reuse certificates
+		if err != nil {
+			log.Printf("certificate load error: %v", err)
+			return
+		}
 		if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash[:], msg.Signature); err != nil {
 			log.Printf("certificate verify error: %v", err)
+			return
 		}
 		log.Printf("certificate verify parsed: %+v", msg)
 		handshakeHdr.AddToHash(hctx.TranscriptHasher)

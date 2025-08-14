@@ -2,6 +2,7 @@ package handshake
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"hash"
 	"log"
 	"math"
@@ -21,7 +22,8 @@ const MessagesFlightServerHello = 3       // ServerHello, EncryptedExtensions, C
 const MessagesFlightClientCertificate = 4 // Certificate, CertificateVerify, Finished
 
 type HandshakeConnection struct {
-	Addr netip.AddrPort // never changes, accessible without lock
+	Addr       netip.AddrPort // never changes, accessible without lock
+	RoleServer bool
 
 	InSenderQueue bool // intrusive, must not be changed except by sender, protected by sender mutex
 
@@ -32,7 +34,7 @@ type HandshakeConnection struct {
 	mu                      sync.Mutex // TODO - check that mutex is alwasy taken
 	Keys                    keys.Keys
 	sendQueueFlight         byte                      // message from the next flight will ack (clear) all messages in send queue
-	messagesSendQueue       []format.MessageHandshake // all messages here belong to the same flight.
+	messagesSendQueue       []format.MessageHandshake // all messages here belong to the same flight. TODO - fixed array storage with some limit
 	SendQueueMessageOffset  int                       // offset in messagesSendQueue of the message we are sending, len(messagesSendQueue) if all sent
 	SendQueueFragmentOffset int                       // offset inside messagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(messagesSendQueue)
 
@@ -245,7 +247,7 @@ func (hctx *HandshakeConnection) constructDatagram(datagram []byte, msg format.M
 	if msg.Header.HandshakeType == format.HandshakeTypeClientHello || msg.Header.HandshakeType == format.HandshakeTypeServerHello {
 		datagram = hctx.constructPlaintextRecord(datagram, msg)
 	} else {
-		panic("TODO - construct ciphertext")
+		datagram = hctx.constructCiphertextRecord(datagram, msg)
 	}
 	return datagram, fragmentOffset + fragmentLength
 }
@@ -260,5 +262,54 @@ func (hctx *HandshakeConnection) constructPlaintextRecord(datagram []byte, msg f
 	datagram = recordHdr.Write(datagram, format.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
 	datagram = msg.Header.Write(datagram)
 	datagram = append(datagram, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
+	return datagram
+}
+
+func (hctx *HandshakeConnection) constructCiphertextRecord(datagram []byte, msg format.MessageHandshake) []byte {
+	// TODO - fragment message
+	epoch := hctx.Keys.Epoch
+	seq := hctx.Keys.NextSegmentSequenceSend // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check we correctly parse/decrypt them from peer
+	hctx.Keys.NextSegmentSequenceSend++
+
+	gcm := hctx.Keys.ClientWrite
+	iv := hctx.Keys.ClientWriteIV
+	if hctx.RoleServer {
+		gcm = hctx.Keys.ServerWrite
+		iv = hctx.Keys.ServerWriteIV
+	}
+	hctx.Keys.FillIVSequence(iv[:], seq)
+
+	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
+	hdr := format.NewCiphertextRecordHeader(false, true, true, epoch)
+	startRecordOffset := len(datagram)
+	datagram = append(datagram, hdr.FirstByte)
+	datagram = binary.BigEndian.AppendUint16(datagram, uint16(seq))
+	datagram = append(datagram, 0, 0) // fill length later
+	startBodyOFfset := len(datagram)
+	datagram = msg.Header.Write(datagram)
+	datagram = append(datagram, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
+	datagram = append(datagram, format.PlaintextContentTypeHandshake)
+
+	padding := len(datagram) % 4 // test our code with different padding. TODO - remove later
+	const SealSize = 16          // TODO - include constant into our gcm wrapper
+	for i := 0; i != padding+SealSize; i++ {
+		datagram = append(datagram, 0)
+	}
+
+	// TODO - subtract max overhead we add here on the 1 leel above, so we do not end up with larger fragment than allowed
+	binary.BigEndian.PutUint16(datagram[startRecordOffset+3:], uint16(len(datagram)-startBodyOFfset))
+
+	encrypted := gcm.Seal(datagram[startBodyOFfset:], iv[:], datagram[startBodyOFfset:], datagram[startRecordOffset:startBodyOFfset])
+	if &encrypted[0] != &datagram[startBodyOFfset] {
+		panic("gcm.Seal reallocated datagram storage")
+	}
+	if string(encrypted[len(encrypted)-SealSize:]) != string(datagram[len(datagram)-SealSize:]) {
+		panic("gcm.Seal put seal to unexpected place")
+	}
+
+	if err := hctx.Keys.EncryptSequenceNumbers(datagram[startRecordOffset+1:startRecordOffset+3], datagram[startBodyOFfset:], hctx.RoleServer); err != nil {
+		panic("cipher text too short when sending")
+	}
+	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
 	return datagram
 }

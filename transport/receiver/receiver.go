@@ -126,6 +126,7 @@ func (rc *Receiver) startConnection(peerAddr netip.AddrPort) (*handshake.Handsha
 
 	hctx = &handshake.HandshakeConnection{
 		Addr:             peerAddr,
+		RoleServer:       false,
 		TranscriptHasher: sha256.New(),
 	}
 	rc.handshakes[peerAddr] = hctx

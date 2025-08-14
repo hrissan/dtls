@@ -12,7 +12,6 @@ import (
 	"github.com/hrissan/tinydtls/dtlsrand"
 )
 
-const MaxTranscriptHashLength = 64 // TODO - replace with constants.MaxHashLength
 const cookieHashLength = sha256.Size
 const saltLength = 24
 
@@ -64,6 +63,7 @@ func (c *CookieState) SetRand(rnd dtlsrand.Rand) {
 	rnd.Read(c.cookieSecret[:])
 }
 
+// TODO - do not copy excess data from transcript hash storage
 func (c *CookieState) CreateCookie(transcriptHash [constants.MaxHashLength]byte, keyShareSet bool, addr netip.AddrPort, now time.Time) Cookie {
 	var cookie Cookie
 	{
@@ -92,7 +92,7 @@ func (c *CookieState) CreateCookie(transcriptHash [constants.MaxHashLength]byte,
 
 func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time.Time) (ok bool, age time.Duration, transcriptHash [constants.MaxHashLength]byte, keyShareSet bool) {
 	data := cookie.GetValue()
-	if len(data) != saltLength+8+1+MaxTranscriptHashLength+cookieHashLength {
+	if len(data) != saltLength+8+1+constants.MaxHashLength+cookieHashLength {
 		return
 	}
 	unixNanoNow := uint64(now.UnixNano())

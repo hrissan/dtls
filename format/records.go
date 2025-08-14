@@ -94,6 +94,20 @@ var ErrCiphertextRecordBodyTooLong = errors.New("cipher text record body exceeds
 
 var ErrRecordTypeFailedToParse = errors.New("record type failed to parse")
 
+func NewCiphertextRecordHeader(hasCID bool, has16bitSeqNum bool, hasLength bool, epoch uint16) CiphertextRecordHeader {
+	result := CiphertextRecordHeader{FirstByte: 0b00100000 | (byte(epoch) & 0b00000011)}
+	if hasCID {
+		result.FirstByte |= 0b00010000
+	}
+	if has16bitSeqNum {
+		result.FirstByte |= 0b00001000
+	}
+	if hasLength {
+		result.FirstByte |= 0b00000100
+	}
+	return result
+}
+
 func (hdr *CiphertextRecordHeader) HasCID() bool         { return hdr.FirstByte&0b00010000 != 0 }
 func (hdr *CiphertextRecordHeader) Has16BitSeqNum() bool { return hdr.FirstByte&0b00001000 != 0 }
 func (hdr *CiphertextRecordHeader) HasLength() bool      { return hdr.FirstByte&0b00000100 != 0 }

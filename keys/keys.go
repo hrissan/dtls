@@ -159,3 +159,10 @@ func (keys *Keys) ComputeServerFinished(hasher hash.Hash, transcriptHash []byte)
 	//transcriptHash := sha256.Sum256(conn.transcript)
 	return hkdf.HMAC(finishedKey, transcriptHash[:], hasher)
 }
+
+// panic if len(iv) is < 8
+func (keys *Keys) FillIVSequence(iv []byte, seq uint64) {
+	maskBytes := iv[len(iv)-8:]
+	mask := binary.BigEndian.Uint64(maskBytes)
+	binary.BigEndian.PutUint64(maskBytes, seq^mask)
+}

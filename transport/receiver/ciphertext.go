@@ -1,7 +1,6 @@
 package receiver
 
 import (
-	"encoding/binary"
 	"log"
 	"net/netip"
 
@@ -36,18 +35,14 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 		return // TODO - send alert here
 	}
 	gcm := hctx.Keys.ServerWrite
-	iv := hctx.Keys.ServerWriteIV
+	iv := hctx.Keys.ServerWriteIV // copy, otherwise disaster
 	if rc.opts.RoleServer {
 		gcm = hctx.Keys.ClientWrite
-		iv = hctx.Keys.ClientWriteIV
+		iv = hctx.Keys.ClientWriteIV // copy, otherwise disaster
 	}
-	var sniv [12]byte
 	seq := hdr.ClosestSequenceNumber(seqNumData, hctx.Keys.NextSegmentSequenceReceive)
-	binary.BigEndian.PutUint64(sniv[4:], seq)
-	for i, b := range iv {
-		sniv[i] ^= b
-	}
-	decrypted, err := gcm.Open(body[:0], sniv[:], body, header)
+	hctx.Keys.FillIVSequence(iv[:], seq)
+	decrypted, err := gcm.Open(body[:0], iv[:], body, header)
 	if err != nil {
 		// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
 		hctx.Keys.FailDeprotection++

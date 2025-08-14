@@ -114,27 +114,24 @@ func (hdr *CiphertextRecordHeader) HasLength() bool      { return hdr.FirstByte&
 func (hdr *CiphertextRecordHeader) Epoch() byte          { return hdr.FirstByte & 0b00000011 }
 
 func closestSequenceNumber(seq uint16, expectedSN uint64, mask uint64) uint64 {
-	expectedSN1 := (expectedSN &^ mask) | uint64(seq)
-	expectedSN2 := ((expectedSN &^ mask) | uint64(seq)) + mask + 1
-	if expectedSN1 > expectedSN {
-		panic("expected SN algorithm failure") // TODO - remove after debugging
+	if expectedSN < mask/2 { // irregularity around 0
+		return (expectedSN &^ (mask - 1)) | uint64(seq)
 	}
-	if expectedSN2 < expectedSN {
-		panic("expected SN algorithm failure") // TODO - remove after debugging
+	bottom := (expectedSN - mask/2)
+	seqCandidate := (bottom &^ (mask - 1)) | uint64(seq)
+	if seqCandidate < bottom {
+		seqCandidate += mask
 	}
-	if expectedSN-expectedSN1 < expectedSN2-expectedSN { // return whatever is closest
-		return expectedSN1
-	}
-	return expectedSN2
+	return seqCandidate
 }
 
 func (hdr *CiphertextRecordHeader) ClosestSequenceNumber(seqNumData []byte, expectedSN uint64) uint64 { // return garbage before decryption or after encryption
 	if hdr.Has16BitSeqNum() {
 		seq := binary.BigEndian.Uint16(seqNumData)
-		return closestSequenceNumber(seq, expectedSN, 0xFFFF)
+		return closestSequenceNumber(seq, expectedSN, 0x10000)
 	}
 	seq := seqNumData[0]
-	return closestSequenceNumber(uint16(seq), expectedSN, 0xFF)
+	return closestSequenceNumber(uint16(seq), expectedSN, 0x100)
 }
 
 func (hdr *CiphertextRecordHeader) Parse(datagram []byte, cIDLength int) (n int, cid []byte, seqNum []byte, header []byte, body []byte, err error) {

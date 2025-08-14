@@ -103,13 +103,19 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 
 		sigMessageHash := sha256.Sum256(sigMessage)
 		// TODO - offload to calc goroutine here
+		var sigMessageHashStorage [constants.MaxHashLength]byte
+		sigMessageHash2 := signature.CalculateCoveredContentHash(sha256.New(), certVerifyTranscriptHash, sigMessageHashStorage[:0])
+
+		if string(sigMessageHash[:]) != string(sigMessageHash2[:]) {
+			panic("hren")
+		}
 
 		cert, err := x509.ParseCertificate(hctx.certificateChain.Certificates[0].CertData) // TODO - reuse certificates
 		if err != nil {
 			log.Printf("certificate load error: %v", err)
 			return
 		}
-		if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash[:], msg.Signature); err != nil {
+		if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash2, msg.Signature); err != nil {
 			log.Printf("certificate verify error: %v", err)
 			return
 		}

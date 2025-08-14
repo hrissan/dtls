@@ -107,7 +107,7 @@ func (rc *Receiver) generateClientHello(hctx *handshake.HandshakeConnection, set
 	clientHello.Extensions.SupportedGroups.X25519 = true
 	clientHello.Extensions.SupportedGroups.SECP256R1 = false
 	clientHello.Extensions.SupportedGroups.SECP384R1 = false
-	clientHello.Extensions.SupportedGroups.SECP521R1 = false
+	clientHello.Extensions.SupportedGroups.SECP512R1 = false
 
 	// We'd like to postpone ECC until HRR, but wolfssl requires key_share in the first client_hello
 	// TODO - offload to separate goroutine

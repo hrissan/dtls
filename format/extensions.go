@@ -120,7 +120,7 @@ func (msg *ExtensionsSet) ParseOutside(body []byte, isNewSessionTicket bool, isS
 	return ParserReadFinish(body, offset)
 }
 
-func (msg *ExtensionsSet) Write(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) []byte {
+func (msg *ExtensionsSet) WriteInside(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) []byte {
 	var mark int
 	if msg.SupportedVersionsSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_SUPPORTED_VERSIONS)
@@ -170,5 +170,12 @@ func (msg *ExtensionsSet) Write(body []byte, isNewSessionTicket bool, isServerHe
 		body = msg.KeyShare.Write(body, isServerHello, isHelloRetryRequest)
 		FillUint16Offset(body, mark)
 	}
+	return body
+}
+
+func (msg *ExtensionsSet) Write(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) []byte {
+	body, mark := MarkUint16Offset(body)
+	body = msg.WriteInside(body, isNewSessionTicket, isServerHello, isHelloRetryRequest)
+	FillUint16Offset(body, mark)
 	return body
 }

@@ -74,15 +74,81 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	}
 
 	hctx, ok := rc.handshakes[addr]
-	if !ok { // TODO - replace older handshakes with the new ones (by cookie age)
-		hctx = &handshake.HandshakeConnection{
-			Addr:       addr,
-			RoleServer: true,
-		}
-		rc.handshakes[addr] = hctx
+	if ok { // TODO - replace older handshakes with the new ones (by cookie age)
+		return
 	}
-	// TODO - check if the same handshake by storing (age, initialHelloTranscriptHash, keyShareSet)
+	//rc.previousCode(localRandom, x25519key, messageBody, handshakeHdr, msg, addr, initialHelloTranscriptHash, keyShareSet)
 
+	hctx = &handshake.HandshakeConnection{
+		Addr:             addr,
+		RoleServer:       true,
+		TranscriptHasher: sha256.New(),
+	}
+	hctx.Keys.NextEpoch0SequenceReceive = 1 // TODO - get from plaintext record we received
+	hctx.Keys.NextEpoch0SequenceSend = 1    // sequence 0 was HRR
+	hctx.Keys.NextMessageSeqSend = 1        // message 0 was HRR
+	rc.handshakes[addr] = hctx
+	// TODO - check if the same handshake by storing (age, initialHelloTranscriptHash, keyShareSet)
+	{
+		var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte
+		hrrDatagram := generateStatelessHRR(hrrDatagramStorage[:0], msg.Extensions.Cookie, keyShareSet)
+		if len(hrrDatagram) > len(hrrDatagramStorage) {
+			panic("Large HRR datagram must not be generated")
+		}
+		// [rfc8446:4.4.1] replace initial client hello message with its hash if HRR was used
+		syntheticHashData := []byte{format.HandshakeTypeMessageHash, 0, 0, sha256.Size}
+		_, _ = hctx.TranscriptHasher.Write(syntheticHashData)
+		_, _ = hctx.TranscriptHasher.Write(initialHelloTranscriptHash[:sha256.Size])
+		debugPrintSum(hctx.TranscriptHasher)
+		// then add reconstructed HRR
+		addMessageDataTranscript(hctx.TranscriptHasher, hrrDatagram[13:]) // skip record header
+		debugPrintSum(hctx.TranscriptHasher)
+		// then add second client hello
+		handshakeHdr.AddToHash(hctx.TranscriptHasher)
+		_, _ = hctx.TranscriptHasher.Write(messageBody)
+		debugPrintSum(hctx.TranscriptHasher)
+	}
+	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", keyShareSet, initialHelloTranscriptHash)
+	rc.opts.Rnd.Read(hctx.Keys.LocalRandom[:])
+	rc.opts.Rnd.Read(hctx.Keys.X25519Secret[:])
+	hctx.Keys.ComputeKeyShare()
+
+	serverHello := format.ServerHello{
+		Random:      hctx.Keys.LocalRandom,
+		CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
+	}
+	serverHello.Extensions.SupportedVersionsSet = true
+	serverHello.Extensions.SupportedVersions.SelectedVersion = format.DTLS_VERSION_13
+	serverHello.Extensions.KeyShareSet = true
+	serverHello.Extensions.KeyShare.X25519PublicKeySet = true
+	serverHello.Extensions.KeyShare.X25519PublicKey = hctx.Keys.X25519Public
+	// TODO - get body from the rope
+	serverHelloBody := serverHello.Write(nil)
+	serverHelloMessage := format.MessageHandshake{
+		Header: format.MessageHandshakeHeader{
+			HandshakeType: format.HandshakeTypeServerHello,
+			Length:        uint32(len(serverHelloBody)),
+		},
+		Body: serverHelloBody,
+	}
+	hctx.PushMessage(handshake.MessagesFlightServerHello, serverHelloMessage)
+
+	var handshakeTranscriptHash [constants.MaxHashLength]byte
+	hctx.TranscriptHasher.Sum(handshakeTranscriptHash[:0])
+
+	sharedSecret, err := curve25519.X25519(hctx.Keys.X25519Secret[:], msg.Extensions.KeyShare.X25519PublicKey[:])
+	if err != nil {
+		panic("curve25519.X25519 failed")
+	}
+	hctx.Keys.ComputeHandshakeKeys(sharedSecret, handshakeTranscriptHash[:sha256.Size])
+	//	return
+	//}
+	// TODO - start Handshake
+	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateEncryptedExtensions(hctx))
+	rc.snd.RegisterConnectionForSend(hctx)
+}
+
+func (rc *Receiver) previousCode(localRandom [32]byte, x25519key [32]byte, messageBody []byte, handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort, initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) {
 	var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte
 	hrrDatagram := generateStatelessHRR(hrrDatagramStorage[:0], msg.Extensions.Cookie, keyShareSet)
 	if len(hrrDatagram) > len(hrrDatagramStorage) {
@@ -93,8 +159,10 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 
 	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", keyShareSet, initialHelloTranscriptHash)
 	var kk keys.Keys
-	rc.opts.Rnd.Read(kk.LocalRandom[:])
-	kk.ComputeKeyShare(rc.opts.Rnd)
+	kk.LocalRandom = localRandom
+	kk.X25519Secret = x25519key
+	//	rc.opts.Rnd.Read(kk.LocalRandom[:])
+	kk.ComputeKeyShare()
 	//rc.handshakes[addr] = hctx
 
 	datagram, _ := rc.snd.PopHelloRetryDatagram()
@@ -131,17 +199,21 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	// now overwrite reserved space
 	_ = recordHdr.Write(datagram[:0], msgHeaderSize+msgBodySize)
 	_ = msgHeader.Write(datagram[recordHeaderSize:recordHeaderSize])
-	rc.snd.SendHelloRetryDatagram(datagram, addr)
+	// rc.snd.SendHelloRetryDatagram(datagram, addr)
 
 	// [rfc8446:4.4.1] replace initial hello message with its hash if HRR was used
 	transcriptHasher := sha256.New()
 	syntheticHashData := []byte{format.HandshakeTypeMessageHash, 0, 0, sha256.Size}
 	_, _ = transcriptHasher.Write(syntheticHashData)
 	_, _ = transcriptHasher.Write(initialHelloTranscriptHash[:sha256.Size])
+	debugPrintSum(transcriptHasher)
 	addMessageDataTranscript(transcriptHasher, hrrDatagram[13:]) // skip record header
+	debugPrintSum(transcriptHasher)
 	handshakeHdr.AddToHash(transcriptHasher)
 	_, _ = transcriptHasher.Write(messageBody)
+	debugPrintSum(transcriptHasher)
 	addMessageDataTranscript(transcriptHasher, datagram[13:]) // skip record header
+	debugPrintSum(transcriptHasher)
 
 	var handshakeTranscriptHash [constants.MaxHashLength]byte
 	transcriptHasher.Sum(handshakeTranscriptHash[:0])
@@ -154,6 +226,12 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	//	return
 	//}
 	// TODO - start Handshake
+}
+
+func debugPrintSum(hasher hash.Hash) {
+	var ha [constants.MaxHashLength]byte
+	hasher.Sum(ha[:0])
+	log.Printf("%x\n", ha[:])
 }
 
 var ErrSupportOnlyDTLS13 = errors.New("we support only DTLS 1.3")
@@ -219,4 +297,23 @@ func generateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 func addMessageDataTranscript(transcriptHasher hash.Hash, messageData []byte) {
 	_, _ = transcriptHasher.Write(messageData[:4])
 	_, _ = transcriptHasher.Write(messageData[12:])
+}
+
+func (rc *Receiver) generateEncryptedExtensions(hctx *handshake.HandshakeConnection) format.MessageHandshake {
+	ee := format.ExtensionsSet{
+		SupportedGroupsSet: true,
+	}
+	ee.SupportedGroups.SECP256R1 = true
+	ee.SupportedGroups.SECP384R1 = true
+	ee.SupportedGroups.SECP512R1 = true
+	ee.SupportedGroups.X25519 = true
+
+	messageBody := ee.Write(nil, false, false, false) // TODO - reuse message bodies in a rope
+	return format.MessageHandshake{
+		Header: format.MessageHandshakeHeader{
+			HandshakeType: format.HandshakeTypeEncryptedExtensions,
+			Length:        uint32(len(messageBody)),
+		},
+		Body: messageBody,
+	}
 }

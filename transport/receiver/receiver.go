@@ -132,10 +132,11 @@ func (rc *Receiver) startConnection(peerAddr netip.AddrPort) (*handshake.Handsha
 	rc.handshakes[peerAddr] = hctx
 
 	rc.opts.Rnd.Read(hctx.Keys.LocalRandom[:])
+	rc.opts.Rnd.Read(hctx.Keys.X25519Secret[:])
 	// We'd like to postpone ECC until HRR, but wolfssl requires key_share in the first client_hello
 	// TODO - offload to separate goroutine
 	// TODO - contact wolfssl team?
-	hctx.Keys.ComputeKeyShare(rc.opts.Rnd)
+	hctx.Keys.ComputeKeyShare()
 	clientHelloMsg := rc.generateClientHello(hctx, false, cookie.Cookie{})
 	hctx.PushMessage(handshake.MessagesFlightClientHello1, clientHelloMsg)
 	return hctx, nil

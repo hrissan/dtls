@@ -256,9 +256,9 @@ func (hctx *HandshakeConnection) constructPlaintextRecord(datagram []byte, msg f
 	recordHdr := format.PlaintextRecordHeader{
 		ContentType:    format.PlaintextContentTypeHandshake,
 		Epoch:          0,
-		SequenceNumber: hctx.Keys.NextEpoch0SequenceReceive,
+		SequenceNumber: hctx.Keys.NextEpoch0SequenceSend,
 	}
-	hctx.Keys.NextEpoch0SequenceReceive++
+	hctx.Keys.NextEpoch0SequenceSend++
 	datagram = recordHdr.Write(datagram, format.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
 	datagram = msg.Header.Write(datagram)
 	datagram = append(datagram, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
@@ -299,13 +299,15 @@ func (hctx *HandshakeConnection) constructCiphertextRecord(datagram []byte, msg 
 	// TODO - subtract max overhead we add here on the 1 leel above, so we do not end up with larger fragment than allowed
 	binary.BigEndian.PutUint16(datagram[startRecordOffset+3:], uint16(len(datagram)-startBodyOFfset))
 
-	encrypted := gcm.Seal(datagram[startBodyOFfset:], iv[:], datagram[startBodyOFfset:], datagram[startRecordOffset:startBodyOFfset])
-	if &encrypted[0] != &datagram[startBodyOFfset] {
+	var cipherText [16384]byte // TODO - encrypt inplace
+	encrypted := gcm.Seal(cipherText[:0], iv[:], datagram[startBodyOFfset:len(datagram)-SealSize], datagram[startRecordOffset:startBodyOFfset])
+	if &encrypted[0] != &cipherText[0] {
 		panic("gcm.Seal reallocated datagram storage")
 	}
-	if string(encrypted[len(encrypted)-SealSize:]) != string(datagram[len(datagram)-SealSize:]) {
-		panic("gcm.Seal put seal to unexpected place")
+	if len(encrypted) != len(datagram[startBodyOFfset:]) {
+		panic("gcm.Seal length mismatch")
 	}
+	copy(datagram[startBodyOFfset:], encrypted)
 
 	if err := hctx.Keys.EncryptSequenceNumbers(datagram[startRecordOffset+1:startRecordOffset+3], datagram[startBodyOFfset:], hctx.RoleServer); err != nil {
 		panic("cipher text too short when sending")

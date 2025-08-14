@@ -9,7 +9,6 @@ import (
 	"hash"
 	"log"
 
-	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/hkdf"
 	"golang.org/x/crypto/curve25519"
 )
@@ -49,7 +48,9 @@ type Keys struct {
 	Epoch                      uint16
 	NextSegmentSequenceReceive uint64
 	NextSegmentSequenceSend    uint64
-	NextEpoch0SequenceReceive  uint64 // to retransmit ServerHello we must remember separate epoch 0 sequence
+	// for ServerHello retransmit and replay protection
+	NextEpoch0SequenceReceive uint64
+	NextEpoch0SequenceSend    uint64
 }
 
 func (keys *Keys) EncryptSequenceNumbers(seqNum []byte, cipherText []byte, roleServer bool) error {
@@ -79,15 +80,12 @@ func (keys *Keys) EncryptSequenceNumbers(seqNum []byte, cipherText []byte, roleS
 	}
 }
 
-func (keys *Keys) ComputeKeyShare(rnd dtlsrand.Rand) {
-	rnd.Read(keys.X25519Secret[:])
-	{
-		x25519Public, err := curve25519.X25519(keys.X25519Secret[:], curve25519.Basepoint)
-		if err != nil {
-			panic("curve25519.X25519 failed")
-		}
-		copy(keys.X25519Public[:], x25519Public)
+func (keys *Keys) ComputeKeyShare() {
+	x25519Public, err := curve25519.X25519(keys.X25519Secret[:], curve25519.Basepoint)
+	if err != nil {
+		panic("curve25519.X25519 failed")
 	}
+	copy(keys.X25519Public[:], x25519Public)
 }
 
 func NewAesCipher(key []byte) cipher.Block {

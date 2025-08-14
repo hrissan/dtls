@@ -67,7 +67,7 @@ func (msg *ClientHello) Write(body []byte) []byte {
 	body = binary.BigEndian.AppendUint16(body, 0x0100) // legacy_compression_methods
 
 	body, mark = MarkUint16Offset(body)
-	body = msg.Extensions.Write(body, false, false, false)
+	body = msg.Extensions.WriteInside(body, false, false, false)
 	FillUint16Offset(body, mark)
 
 	return body

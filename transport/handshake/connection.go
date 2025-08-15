@@ -13,6 +13,11 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
+// Contains absolute minimum of what's mandatory for after handshake finished
+// keys, record replay buffer, ack queue for
+type connection struct {
+}
+
 const MessagesFlightClientHello1 = 0
 const MessagesFlightServerHRR = 1
 const MessagesFlightClientHello2 = 2

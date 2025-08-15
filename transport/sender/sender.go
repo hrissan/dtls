@@ -8,12 +8,14 @@ import (
 	"time"
 
 	"github.com/hrissan/tinydtls/circular"
+	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/transport/handshake"
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
-type OutgoingDatagram struct {
-	data []byte // TODO - fixed size chunks carousel
+type OutgoingHRR struct {
+	data *[constants.MaxOutgoingHRRDatagramLength]byte
+	size int
 	addr netip.AddrPort
 }
 
@@ -26,8 +28,8 @@ type Sender struct {
 
 	// hello retry request is stateless.
 	// we limit (options.HelloRetryQueueSize) how many such datagrams we wish to store
-	helloRetryQueue circular.Buffer[OutgoingDatagram]
-	helloRetryPool  [][]byte
+	helloRetryQueue circular.Buffer[OutgoingHRR]
+	helloRetryPool  []*[constants.MaxOutgoingHRRDatagramLength]byte // stack, not circular buffer
 
 	handshakeQueue circular.Buffer[*handshake.HandshakeConnection]
 }
@@ -37,6 +39,12 @@ func NewSender(opts *options.TransportOptions) *Sender {
 		opts: opts,
 	}
 	snd.sendCond = sync.NewCond(&snd.sendMu)
+
+	if opts.Preallocate {
+		snd.helloRetryQueue.Reserve(opts.MaxHelloRetryQueueSize)
+		snd.helloRetryPool = make([]*[512]byte, 0, opts.MaxHelloRetryQueueSize)
+		snd.handshakeQueue.Reserve(opts.MaxConnections)
+	}
 	return snd
 }
 
@@ -57,7 +65,7 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 			snd.sendCond.Wait()
 		}
 		// if we wish, we can make different ratio between sending from different queues
-		var hrr OutgoingDatagram
+		var hrr OutgoingHRR
 		if snd.helloRetryQueue.Len() != 0 {
 			hrr = snd.helloRetryQueue.PopFront()
 		}
@@ -71,7 +79,7 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 		if sendShutdown {
 			return
 		}
-		if len(hrr.data) != 0 && !snd.sendDatagram(socket, hrr.data, hrr.addr) {
+		if hrr.data != nil && !snd.sendDatagram(socket, (*hrr.data)[:hrr.size], hrr.addr) {
 			return
 		}
 		datagramSize := 0
@@ -86,7 +94,7 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 			}
 		}
 		snd.sendMu.Lock()
-		if len(hrr.data) != 0 {
+		if hrr.data != nil {
 			snd.helloRetryPool = append(snd.helloRetryPool, hrr.data)
 		}
 		if addToSendQueue {
@@ -112,25 +120,32 @@ func (snd *Sender) sendDatagram(socket *net.UDPConn, data []byte, addr netip.Add
 	return true
 }
 
-func (t *Sender) PopHelloRetryDatagram() ([]byte, bool) {
+// returns nil if hello retry queue is at max capacity
+func (t *Sender) PopHelloRetryDatagramStorage() *[constants.MaxOutgoingHRRDatagramLength]byte {
 	t.sendMu.Lock()
 	defer t.sendMu.Unlock()
-	if t.helloRetryQueue.Len() >= t.opts.HelloRetryQueueMaxSize {
-		return nil, false
+	if t.helloRetryQueue.Len() >= t.opts.MaxHelloRetryQueueSize {
+		return nil
 	}
-	var result []byte
 	if pos := len(t.helloRetryPool) - 1; pos >= 0 {
-		result = t.helloRetryPool[pos][:0]
+		result := t.helloRetryPool[pos]
 		t.helloRetryPool[pos] = nil // do not leave alias
 		t.helloRetryPool = t.helloRetryPool[:pos]
+		return result
 	}
-	return result, true
+	return &[constants.MaxOutgoingHRRDatagramLength]byte{}
 }
 
-func (snd *Sender) SendHelloRetryDatagram(datagram []byte, addr netip.AddrPort) {
+func (snd *Sender) SendHelloRetryDatagram(data *[constants.MaxOutgoingHRRDatagramLength]byte, size int, addr netip.AddrPort) {
+	if data == nil {
+		panic("must be chunk previously allocated by PopHelloRetryDatagramStorage")
+	}
+	if size > len(*data) {
+		panic("datagram size too big")
+	}
 	snd.sendMu.Lock()
 	defer snd.sendMu.Unlock()
-	snd.helloRetryQueue.PushBack(OutgoingDatagram{data: datagram, addr: addr})
+	snd.helloRetryQueue.PushBack(OutgoingHRR{data: data, size: size, addr: addr})
 	snd.sendCond.Signal()
 }
 

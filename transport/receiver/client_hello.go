@@ -46,11 +46,16 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		ck := rc.cookieState.CreateCookie(initialHelloTranscriptHash, keyShareSet, addr, time.Now())
 		rc.opts.Stats.CookieCreated(addr)
 
-		hrrDatagram, _ := rc.snd.PopHelloRetryDatagram()
-		hrrDatagram = generateStatelessHRR(hrrDatagram, ck, keyShareSet)
+		hrrStorage := rc.snd.PopHelloRetryDatagramStorage()
+		if hrrStorage == nil {
+			// TODO - rare log
+			log.Printf("HRR queue overloaded (%d), sending no HRR\n", rc.opts.MaxHelloRetryQueueSize)
+			return
+		}
+		hrrDatagram := generateStatelessHRR((*hrrStorage)[:0], ck, keyShareSet)
 		hrrHash := sha256.Sum256(hrrDatagram)
 		log.Printf("serverHRRHash: %x\n", hrrHash[:])
-		rc.snd.SendHelloRetryDatagram(hrrDatagram, addr)
+		rc.snd.SendHelloRetryDatagram(hrrStorage, len(hrrDatagram), addr)
 		return
 	}
 	if handshakeHdr.MessageSeq != 1 {

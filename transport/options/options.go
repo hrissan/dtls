@@ -16,10 +16,13 @@ type TransportOptions struct {
 	Rnd        dtlsrand.Rand
 	Stats      stats.Stats
 
+	Preallocate bool // most data structures will be allocated immediately
+
 	SocketReadErrorDelay   time.Duration
 	SocketWriteErrorDelay  time.Duration
 	CookieValidDuration    time.Duration
-	HelloRetryQueueMaxSize int
+	MaxHelloRetryQueueSize int
+	MaxConnections         int
 	CIDLength              int // We use fixed size connection ID, so we can parse ciphertext records easily [rfc9147:9.1]
 
 	ServerCertificate tls.Certificate // some shortcut
@@ -30,10 +33,12 @@ func DefaultTransportOptions(roleServer bool, rnd dtlsrand.Rand, stats stats.Sta
 		RoleServer:             roleServer,
 		Rnd:                    rnd,
 		Stats:                  stats,
+		Preallocate:            true,
 		SocketReadErrorDelay:   50 * time.Millisecond,
 		SocketWriteErrorDelay:  5 * time.Millisecond,
 		CookieValidDuration:    120 * time.Second, // larger value for debug
-		HelloRetryQueueMaxSize: 8192,
+		MaxHelloRetryQueueSize: 10_000,
+		MaxConnections:         100_000,
 		CIDLength:              0,
 	}
 }
@@ -65,8 +70,8 @@ func (opts *TransportOptions) Validate() error {
 		}
 		// we will not repeat checks in LoadServerCertificate (tls.LoadX509KeyPair)
 	}
-	if opts.HelloRetryQueueMaxSize < 1 {
-		return fmt.Errorf("HelloRetryQueueMaxSize (%d) should be > 0", opts.HelloRetryQueueMaxSize)
+	if opts.MaxHelloRetryQueueSize < 1 {
+		return fmt.Errorf("MaxHelloRetryQueueSize (%d) should be > 0", opts.MaxHelloRetryQueueSize)
 	}
 	if opts.CookieValidDuration < time.Second {
 		return fmt.Errorf("CookieValidDuration (%v) should be at least %v", opts.CookieValidDuration, time.Second)

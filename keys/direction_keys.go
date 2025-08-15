@@ -10,23 +10,21 @@ import (
 )
 
 type DirectionKeys struct {
-	HandshakeTrafficSecret   [32]byte // TODO - remove after debugging
-	ApplicationTrafficSecret [32]byte
-	WriteKey                 [16]byte // TODO - remove after debugging
-	WriteIV                  [12]byte
-	SNKey                    [16]byte // TODO - remove after debugging
+	HandshakeTrafficSecret   [32]byte // we need to keep this for finished message
+	ApplicationTrafficSecret [32]byte // we need to keep this for key update
 
-	Write cipher.AEAD  // 16 interface + 16 interface inside + 16 (counters) + 240 aes half + (240 aes half we do not need)
-	SN    cipher.Block // 16 interface + 240 aes half + (240 aes half we do not need). Can be removed with unencrypted sequence numbers extension
+	WriteIV [12]byte
+	Write   cipher.AEAD  // 16 interface + 16 interface inside + 16 (counters) + 240 aes half + (240 aes half we do not need)
+	SN      cipher.Block // 16 interface + 240 aes half + (240 aes half we do not need). Can be removed with unencrypted sequence numbers extension
 
 	Epoch               uint16
 	NextSegmentSequence uint64
 	// for ServerHello retransmit and replay protection
 	NextEpoch0Sequence uint64 // TODO - reduce to uint16, this is for unencrypted client_hello/server_hello only
 
-	// total size around 128 plus 240 (no seq encryption) or 480 (seq encryption)
+	// total size ~100 plus 240 (no seq encryption) or 480 (seq encryption)
 	// but crypto.Block in standard golang's crypto contains both encrypting and decrypting halves,
-	// so without unsafe tricks our direction keys are 128 plus 480 (no seq encryption) or 960 (seq encryption)
+	// so without unsafe tricks our direction keys total size is ~100 plus 480 (no seq encryption) or 960 (seq encryption)
 }
 
 func (keys *DirectionKeys) ComputeHandshakeKeys(serverKeys bool, handshakeSecret []byte, trHash []byte) {
@@ -73,13 +71,14 @@ func (keys *DirectionKeys) ComputeApplicationTrafficSecret(serverKeys bool, mast
 }
 
 func (keys *DirectionKeys) ComputeSymmetricKeys(secret []byte) {
+	const keySize = 16 // TODO - should depend on cipher suite
 	hasher := sha256.New()
-	copy(keys.WriteKey[:], hkdf.ExpandLabel(hasher, secret, "key", []byte{}, len(keys.WriteKey)))
+	writeKey := hkdf.ExpandLabel(hasher, secret, "key", []byte{}, keySize)
 	copy(keys.WriteIV[:], hkdf.ExpandLabel(hasher, secret, "iv", []byte{}, len(keys.WriteIV)))
-	copy(keys.SNKey[:], hkdf.ExpandLabel(hasher, secret, "sn", []byte{}, len(keys.SNKey)))
+	snKey := hkdf.ExpandLabel(hasher, secret, "sn", []byte{}, keySize)
 
-	keys.Write = NewGCMCipher(NewAesCipher(keys.WriteKey[:]))
-	keys.SN = NewAesCipher(keys.SNKey[:])
+	keys.Write = NewGCMCipher(NewAesCipher(writeKey))
+	keys.SN = NewAesCipher(snKey)
 }
 
 func (keys *DirectionKeys) EncryptSequenceNumbers(seqNum []byte, cipherText []byte) error {

@@ -113,6 +113,10 @@ func (hdr *CiphertextRecordHeader) Has16BitSeqNum() bool { return hdr.FirstByte&
 func (hdr *CiphertextRecordHeader) HasLength() bool      { return hdr.FirstByte&0b00000100 != 0 }
 func (hdr *CiphertextRecordHeader) Epoch() byte          { return hdr.FirstByte & 0b00000011 }
 
+func (hdr *CiphertextRecordHeader) MatchesEpoch(epoch uint16) bool {
+	return byte(epoch&0b00000011) == hdr.Epoch()
+}
+
 func closestSequenceNumber(seq uint16, expectedSN uint64, mask uint64) uint64 {
 	if expectedSN < mask/2 { // irregularity around 0
 		return (expectedSN &^ (mask - 1)) | uint64(seq)

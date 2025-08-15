@@ -2,23 +2,12 @@ package receiver
 
 import (
 	"log"
+	"math"
 	"net/netip"
 
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
 )
-
-// TODO - optimize
-// contentType is the first non-zero byte from the end
-func findPaddingOffsetContentType(data []byte) (paddingOffset int, contentType byte) {
-	for i := len(data) - 1; i >= 0; i-- {
-		b := data[i]
-		if b != 0 {
-			return i, b
-		}
-	}
-	return -1, 0
-}
 
 func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader, cid []byte, seqNumData []byte, header []byte, body []byte, addr netip.AddrPort) {
 	log.Printf("dtls: got ciphertext %v cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, body)
@@ -30,42 +19,53 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 		return
 	}
 	receiver := &hctx.Keys.Receive
-	if byte(receiver.Epoch&0b00000011) != hdr.Epoch() {
-		if !hctx.Keys.ExpectEpochUpdate {
-			return // TODO - alert, either garbage or attack
+	var decrypted []byte
+	var seq uint64
+	var contentType byte
+	var err error
+	if hdr.MatchesEpoch(receiver.Epoch) {
+		decrypted, seq, contentType, err = receiver.Symmetric.Deprotect(hdr, !hctx.Keys.DoNotEncryptSequenceNumbers, hctx.Keys.Receive.NextSegmentSequence,
+			seqNumData, header, body)
+		if err != nil {
+			// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
+			hctx.Keys.FailedDeprotectionCounter++
+			return
+		}
+		hctx.Keys.Receive.NextSegmentSequence = seq + 1 // TODO - update replay window
+	} else {
+		// We should check here that receiver.Epoch+1 does not overflow, because we increment it below
+		if !hctx.Keys.ExpectEpochUpdate || receiver.Epoch == math.MaxUint16 || !hdr.MatchesEpoch(receiver.Epoch+1) {
+			return // TODO - alert, either garbage, attack or epoch wrapping
 		}
 		// We should not believe new epoch bits before we decrypt record successfully,
 		// so we have to calculate new keys here. But if we fail decryption, then we
 		// either should store new keys, or recompute them on each (attacker's) packet.
-		// So, we decided we have to store new keys
-		// var NewKeys keys.SymmetricKeys
-		return // TODO - switch epoch after key update only
-	}
-	if !hctx.Keys.DoNotEncryptSequenceNumbers {
-		if err := receiver.Symmetric.EncryptSequenceNumbers(seqNumData, body); err != nil {
-			return // TODO - send alert here
+		// So, we decided we better store new keys
+		if !hctx.Keys.NewReceiveKeysSet {
+			hctx.Keys.NewReceiveKeysSet = true
+			hctx.Keys.NewReceiveKeys.ComputeKeys(receiver.ApplicationTrafficSecret[:])
+			hctx.Keys.NewReceiveKeysFailedDeprotectionCounter = 0
 		}
+		decrypted, seq, contentType, err = hctx.Keys.NewReceiveKeys.Deprotect(hdr, !hctx.Keys.DoNotEncryptSequenceNumbers, 0,
+			seqNumData, header, body)
+		if err != nil {
+			// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
+			hctx.Keys.NewReceiveKeysFailedDeprotectionCounter++
+			return
+		}
+		hctx.Keys.Receive.Symmetric = hctx.Keys.NewReceiveKeys
+		hctx.Keys.FailedDeprotectionCounter = hctx.Keys.NewReceiveKeysFailedDeprotectionCounter
+		hctx.Keys.NewReceiveKeys = keys.SymmetricKeys{} // remove alias
+		hctx.Keys.NewReceiveKeysSet = false
+		hctx.Keys.NewReceiveKeysFailedDeprotectionCounter = 0
+		hctx.Keys.Receive.NextSegmentSequence = 1 // TODO - update replay window
+		hctx.Keys.Receive.Epoch++
 	}
-	gcm := receiver.Symmetric.Write
-	iv := receiver.Symmetric.WriteIV // copy, otherwise disaster
-	decryptedSeq, seq := hdr.ClosestSequenceNumber(seqNumData, hctx.Keys.Receive.NextSegmentSequence)
-	log.Printf("decrypted SN: %d, closest: %d", decryptedSeq, seq)
-
-	keys.FillIVSequence(iv[:], seq)
-	decrypted, err := gcm.Open(body[:0], iv[:], body, header)
-	if err != nil {
-		// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
-		hctx.Keys.FailedDeprotectionCounter++
-		return
-	}
-	hctx.Keys.Receive.NextSegmentSequence = seq + 1 // TODO - update replay window
 	log.Printf("dtls: ciphertext %d deprotected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
-	paddingOffset, contentType := findPaddingOffsetContentType(decrypted) // [rfc8446:5.4]
-	if paddingOffset < 0 || !format.IsInnerPlaintextRecord(contentType) {
+	if !format.IsInnerPlaintextRecord(contentType) {
 		// TODO - send alert
 		return
 	}
-	decrypted = decrypted[:paddingOffset]
 	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
 	for messageOffset < len(decrypted) {
 		messageData := decrypted[messageOffset:]
@@ -95,6 +95,12 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 			}
 		case format.PlaintextContentTypeAck:
 			log.Printf("dtls: got ack(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)
+			// TODO - if all messages from epoch 2 acked, then switch sending epoch
+			if hctx.Keys.Send.Epoch == 2 {
+				hctx.Keys.Send.Symmetric.ComputeKeys(hctx.Keys.Send.ApplicationTrafficSecret[:])
+				hctx.Keys.Send.Epoch++
+				hctx.Keys.Send.NextSegmentSequence = 0
+			}
 			return // TODO - more checks
 		case format.PlaintextContentTypeApplicationData:
 			log.Printf("dtls: got application_data(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)

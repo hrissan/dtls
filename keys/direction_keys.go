@@ -2,11 +2,15 @@ package keys
 
 import (
 	"crypto/sha256"
+	"errors"
 	"hash"
 	"log"
 
+	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/hkdf"
 )
+
+var ErrCipherTextAllZeroPadding = errors.New("ciphertext all zero padding")
 
 type DirectionKeys struct {
 	// fields sorted to minimize padding
@@ -67,4 +71,41 @@ func (keys *DirectionKeys) ComputeApplicationTrafficSecret(serverKeys bool, mast
 	//application_traffic_secret_N+1 =
 	//	HKDF-Expand-Label(application_traffic_secret_N,
 	//		"traffic upd", "", Hash.length)
+}
+
+// TODO - optimize
+// contentType is the first non-zero byte from the end
+func findPaddingOffsetContentType(data []byte) (paddingOffset int, contentType byte) {
+	for i := len(data) - 1; i >= 0; i-- {
+		b := data[i]
+		if b != 0 {
+			return i, b
+		}
+	}
+	return -1, 0
+}
+
+// Warning - decrypts in place, seqNumData and body can be garbage after unsuccessfull decryption
+func (keys *SymmetricKeys) Deprotect(hdr format.CiphertextRecordHeader, encryptSN bool, expectedSN uint64, seqNumData []byte, header []byte, body []byte) (decrypted []byte, seq uint64, contentType byte, err error) {
+	if encryptSN {
+		if err := keys.EncryptSequenceNumbers(seqNumData, body); err != nil {
+			return nil, 0, 0, err
+		}
+	}
+	gcm := keys.Write
+	iv := keys.WriteIV // copy, otherwise disaster
+	decryptedSeqData, seq := hdr.ClosestSequenceNumber(seqNumData, expectedSN)
+	log.Printf("decrypted SN: %d, closest: %d", decryptedSeqData, seq)
+
+	FillIVSequence(iv[:], seq)
+	decrypted, err = gcm.Open(body[:0], iv[:], body, header)
+	if err != nil {
+		return nil, seq, 0, err
+	}
+	paddingOffset, contentType := findPaddingOffsetContentType(decrypted) // [rfc8446:5.4]
+	if paddingOffset < 0 {
+		// TODO - send alert
+		return nil, seq, 0, ErrCipherTextAllZeroPadding
+	}
+	return decrypted[:paddingOffset], seq, contentType, nil
 }

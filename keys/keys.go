@@ -13,12 +13,16 @@ import (
 var ErrCipherTextTooShortForSNDecryption = errors.New("ciphertext too short for SN decryption")
 
 type Keys struct {
+	// fields sorted to minimize padding
 	MasterSecret [32]byte
 
 	Send    DirectionKeys
 	Receive DirectionKeys
 
-	FailedDeprotectionCounter uint64
+	NewReceiveKeys SymmetricKeys // always correspond to Receive.Epoch + 1
+
+	FailedDeprotectionCounter               uint64
+	NewReceiveKeysFailedDeprotectionCounter uint64
 
 	// this counter does not reset with a new epoch
 	NextMessageSeqSend    uint16
@@ -26,6 +30,7 @@ type Keys struct {
 
 	DoNotEncryptSequenceNumbers bool // enabled extensions and saves us 50% memory on crypto contexts
 	ExpectEpochUpdate           bool // waiting for the next epoch during handshake or key update
+	NewReceiveKeysSet           bool
 }
 
 func NewAesCipher(key []byte) cipher.Block {

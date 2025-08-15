@@ -27,14 +27,17 @@ type HandshakeConnection struct {
 	X25519Secret [32]byte
 	X25519Public [32]byte // TODO - compute in calculator goroutine
 
+	MasterSecret [32]byte
+
 	InSenderQueue bool // intrusive, must not be changed except by sender, protected by sender mutex
 
 	receivedPartialMessageSet    bool // if set, Header.MessageSeq == Keys.NextMessageSeqReceive - 1
 	receivedPartialMessage       format.MessageHandshake
 	receivedPartialMessageOffset uint32 // we do not support holes for now. TODO - support holes
 
-	mu                      sync.Mutex // TODO - check that mutex is alwasy taken
-	Keys                    keys.Keys
+	mu   sync.Mutex // TODO - check that mutex is alwasy taken
+	Keys keys.Keys
+
 	sendQueueFlight         byte                      // message from the next flight will ack (clear) all messages in send queue
 	messagesSendQueue       []format.MessageHandshake // all messages here belong to the same flight. TODO - fixed array storage with some limit
 	SendQueueMessageOffset  int                       // offset in messagesSendQueue of the message we are sending, len(messagesSendQueue) if all sent

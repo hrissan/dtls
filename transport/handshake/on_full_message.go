@@ -112,7 +112,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 			var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 			handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
-			hctx.Keys.ComputeApplicationTrafficSecret(false, handshakeTranscriptHash)
+			hctx.Keys.ComputeApplicationTrafficSecret(false, hctx.MasterSecret[:], handshakeTranscriptHash)
 
 			// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here
 			hctx.PushMessage(MessagesFlightClientCertificate_Finished, hctx.GenerateFinished())
@@ -121,6 +121,13 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 			// hctx.Keys.ComputeClientApplicationKeys()
 			return true
 		}
+	case format.HandshakeTypeNewSessionTicket:
+		log.Printf("TODO - message type %d not supported", handshakeHdr.HandshakeType)
+		// But we must send ack, or otherwise server will continue sending it forever
+	case format.HandshakeTypeKeyUpdate:
+		log.Printf("TODO - message type %d not supported", handshakeHdr.HandshakeType)
+		// TODO - implement key update
+		// But we must send ack, or otherwise server will continue sending it forever
 	default:
 		log.Printf("TODO - message type %d not supported", handshakeHdr.HandshakeType)
 		//rc.opts.Stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)

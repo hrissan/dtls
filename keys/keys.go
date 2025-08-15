@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"errors"
 	"hash"
-	"log"
 
 	"github.com/hrissan/tinydtls/hkdf"
 )
@@ -20,12 +19,9 @@ type Keys struct {
 	Send    DirectionKeys
 	Receive DirectionKeys
 
-	ClientHandshakeTrafficSecret [32]byte
-	ServerHandshakeTrafficSecret [32]byte
-
 	DoNotEncryptSequenceNumbers bool // enabled extensions and saves us 50% memory on crypto contexts
 
-	FailDeprotection uint64
+	FailedDeprotection uint64
 
 	NextMessageSeqSend    uint16
 	NextMessageSeqReceive uint16
@@ -72,11 +68,6 @@ func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trH
 
 	keys.Send.ComputeHandshakeKeys(serverRole, handshakeSecret, trHash)
 	keys.Receive.ComputeHandshakeKeys(!serverRole, handshakeSecret, trHash)
-
-	copy(keys.ClientHandshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "c hs traffic", trHash))
-	copy(keys.ServerHandshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "s hs traffic", trHash))
-	log.Printf("client handshake traffic secret: %x\n", keys.ClientHandshakeTrafficSecret)
-	log.Printf("server handshake traffic secret: %x\n", keys.ServerHandshakeTrafficSecret)
 
 	derivedSecret = deriveSecret(hasher, handshakeSecret, "derived", emptyHash[:])
 	zeros := [32]byte{}
@@ -127,20 +118,6 @@ func (keys *Keys) ComputeClientApplicationKeys() {
 
 func deriveSecret(hasher hash.Hash, secret []byte, label string, sum []byte) []byte {
 	return hkdf.ExpandLabel(hasher, secret, label, sum, len(sum))
-}
-
-// TODO - remove allocations
-func (keys *Keys) ComputeClientFinished(hasher hash.Hash, transcriptHash []byte) []byte {
-	finishedKey := hkdf.ExpandLabel(hasher, keys.ClientHandshakeTrafficSecret[:], "finished", []byte{}, hasher.Size())
-	//transcriptHash := sha256.Sum256(conn.transcript)
-	return hkdf.HMAC(finishedKey, transcriptHash[:], hasher)
-}
-
-// TODO - remove allocations
-func (keys *Keys) ComputeServerFinished(hasher hash.Hash, transcriptHash []byte) []byte {
-	finishedKey := hkdf.ExpandLabel(hasher, keys.ServerHandshakeTrafficSecret[:], "finished", []byte{}, hasher.Size())
-	//transcriptHash := sha256.Sum256(conn.transcript)
-	return hkdf.HMAC(finishedKey, transcriptHash[:], hasher)
 }
 
 // panic if len(iv) is < 8

@@ -3,6 +3,7 @@ package keys
 import (
 	"crypto/cipher"
 	"crypto/sha256"
+	"hash"
 	"log"
 
 	"github.com/hrissan/tinydtls/hkdf"
@@ -45,6 +46,13 @@ func (keys *DirectionKeys) ComputeHandshakeKeys(serverKeys bool, handshakeSecret
 
 	keys.Epoch = 2
 	keys.NextSegmentSequence = 0
+}
+
+// TODO - remove allocations
+func (keys *DirectionKeys) ComputeFinished(hasher hash.Hash, transcriptHash []byte) []byte {
+	finishedKey := hkdf.ExpandLabel(hasher, keys.HandshakeTrafficSecret[:], "finished", []byte{}, hasher.Size())
+	//transcriptHash := sha256.Sum256(conn.transcript)
+	return hkdf.HMAC(finishedKey, transcriptHash[:], hasher)
 }
 
 func (keys *DirectionKeys) ComputeApplicationTrafficSecret(serverKeys bool, masterSecret []byte, trHash []byte) {

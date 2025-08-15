@@ -146,12 +146,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 		var finishedTranscriptHashStorage [constants.MaxHashLength]byte
 		finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
-		var mustBeFinished []byte
-		if hctx.RoleServer {
-			mustBeFinished = hctx.Keys.ComputeClientFinished(sha256.New(), finishedTranscriptHash)
-		} else {
-			mustBeFinished = hctx.Keys.ComputeServerFinished(sha256.New(), finishedTranscriptHash)
-		}
+		mustBeFinished := hctx.Keys.Receive.ComputeFinished(sha256.New(), finishedTranscriptHash)
 		if string(msg.VerifyData[:msg.VerifyDataLength]) != string(mustBeFinished) {
 			log.Printf("finished message verify error")
 		}

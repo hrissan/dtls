@@ -45,7 +45,7 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 	decrypted, err := gcm.Open(body[:0], iv[:], body, header)
 	if err != nil {
 		// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
-		hctx.Keys.FailDeprotection++
+		hctx.Keys.FailedDeprotection++
 		return
 	}
 	hctx.Keys.NextSegmentSequenceReceive++

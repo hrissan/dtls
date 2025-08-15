@@ -304,7 +304,7 @@ func (rc *Receiver) generateServerFinished(hctx *handshake.HandshakeConnection) 
 	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
 	finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
-	mustBeFinished := hctx.Keys.ComputeServerFinished(sha256.New(), finishedTranscriptHash)
+	mustBeFinished := hctx.Keys.Send.ComputeFinished(sha256.New(), finishedTranscriptHash)
 
 	msg := format.MessageFinished{
 		VerifyDataLength: len(mustBeFinished),

@@ -111,19 +111,19 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		debugPrintSum(hctx.TranscriptHasher)
 	}
 	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", keyShareSet, initialHelloTranscriptHash)
-	rc.opts.Rnd.ReadMust(hctx.Keys.LocalRandom[:])
-	rc.opts.Rnd.ReadMust(hctx.Keys.X25519Secret[:])
-	hctx.Keys.ComputeKeyShare()
+	rc.opts.Rnd.ReadMust(hctx.LocalRandom[:])
+	rc.opts.Rnd.ReadMust(hctx.X25519Secret[:])
+	hctx.ComputeKeyShare()
 
 	serverHello := format.ServerHello{
-		Random:      hctx.Keys.LocalRandom,
+		Random:      hctx.LocalRandom,
 		CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
 	}
 	serverHello.Extensions.SupportedVersionsSet = true
 	serverHello.Extensions.SupportedVersions.SelectedVersion = format.DTLS_VERSION_13
 	serverHello.Extensions.KeyShareSet = true
 	serverHello.Extensions.KeyShare.X25519PublicKeySet = true
-	serverHello.Extensions.KeyShare.X25519PublicKey = hctx.Keys.X25519Public
+	serverHello.Extensions.KeyShare.X25519PublicKey = hctx.X25519Public
 	// TODO - get body from the rope
 	serverHelloBody := serverHello.Write(nil)
 	serverHelloMessage := format.MessageHandshake{
@@ -138,7 +138,8 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
-	sharedSecret, err := curve25519.X25519(hctx.Keys.X25519Secret[:], msg.Extensions.KeyShare.X25519PublicKey[:])
+	// TODO - move to calculator goroutine
+	sharedSecret, err := curve25519.X25519(hctx.X25519Secret[:], msg.Extensions.KeyShare.X25519PublicKey[:])
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
@@ -153,8 +154,9 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateServerFinished(hctx))
 
 	// TODO - compute application data secret here, compute keys as soon as previous epoch not needed
-	//handshakeTranscriptHash = hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
-	//hctx.Keys.ComputeServerApplicationKeys(handshakeTranscriptHash)
+	handshakeTranscriptHash = hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
+	hctx.Keys.ComputeApplicationTrafficSecret(handshakeTranscriptHash)
+	//hctx.Keys.ComputeServerApplicationKeys()
 	//hctx.Keys.ComputeClientApplicationKeys()
 
 	rc.snd.RegisterConnectionForSend(hctx)

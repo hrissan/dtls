@@ -14,6 +14,7 @@ import (
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
 	"github.com/hrissan/tinydtls/signature"
+	"golang.org/x/crypto/curve25519"
 )
 
 const MessagesFlightClientHello1 = 0
@@ -25,6 +26,10 @@ const MessagesFlightClientCertificate = 4 // Certificate, CertificateVerify, Fin
 type HandshakeConnection struct {
 	Addr       netip.AddrPort // never changes, accessible without lock
 	RoleServer bool
+
+	LocalRandom  [32]byte
+	X25519Secret [32]byte
+	X25519Public [32]byte // TODO - compute in calculator goroutine
 
 	InSenderQueue bool // intrusive, must not be changed except by sender, protected by sender mutex
 
@@ -42,6 +47,14 @@ type HandshakeConnection struct {
 	TranscriptHasher hash.Hash // when messages are added to messagesSendQueue, they are also added to TranscriptHasher
 
 	certificateChain format.MessageCertificate
+}
+
+func (hctx *HandshakeConnection) ComputeKeyShare() {
+	x25519Public, err := curve25519.X25519(hctx.X25519Secret[:], curve25519.Basepoint)
+	if err != nil {
+		panic("curve25519.X25519 failed")
+	}
+	copy(hctx.X25519Public[:], x25519Public)
 }
 
 func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.MessageHandshakeHeader, body []byte) {
@@ -146,14 +159,15 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 		if !hctx.RoleServer { // server finished is not part of traffic secret transcript
 			handshakeHdr.AddToHash(hctx.TranscriptHasher)
 			_, _ = hctx.TranscriptHasher.Write(body)
+			// TODO - on server, secrets must be clculated when sending server finished, not here
+
+			var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
+			handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
+
+			hctx.Keys.ComputeApplicationTrafficSecret(handshakeTranscriptHash)
+			hctx.Keys.ComputeServerApplicationKeys()
+			hctx.Keys.ComputeClientApplicationKeys()
 		}
-		// TODO - on server, secrets must be clculated when sending server finished, not here
-
-		var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
-		handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
-
-		hctx.Keys.ComputeServerApplicationKeys(handshakeTranscriptHash)
-		hctx.Keys.ComputeClientApplicationKeys()
 	default:
 		log.Printf("TODO - message type %d not supported", handshakeHdr.HandshakeType)
 		//rc.opts.Stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)

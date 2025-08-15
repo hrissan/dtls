@@ -84,7 +84,8 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
-	sharedSecret, err := curve25519.X25519(hctx.Keys.X25519Secret[:], serverHello.Extensions.KeyShare.X25519PublicKey[:])
+	// TODO - move to calculator goroutine
+	sharedSecret, err := curve25519.X25519(hctx.X25519Secret[:], serverHello.Extensions.KeyShare.X25519PublicKey[:])
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
@@ -97,7 +98,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 func (rc *Receiver) generateClientHello(hctx *handshake.HandshakeConnection, setCookie bool, ck cookie.Cookie) format.MessageHandshake {
 	// [rfc8446:4.1.2] the client MUST send the same ClientHello without modification, except as follows
 	clientHello := format.ClientHello{
-		Random: hctx.Keys.LocalRandom,
+		Random: hctx.LocalRandom,
 	}
 	clientHello.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 = true
 	clientHello.Extensions.SupportedVersionsSet = true
@@ -113,7 +114,7 @@ func (rc *Receiver) generateClientHello(hctx *handshake.HandshakeConnection, set
 	// TODO - contact wolfssl team?
 	clientHello.Extensions.KeyShareSet = true
 	clientHello.Extensions.KeyShare.X25519PublicKeySet = true
-	clientHello.Extensions.KeyShare.X25519PublicKey = hctx.Keys.X25519Public
+	clientHello.Extensions.KeyShare.X25519PublicKey = hctx.X25519Public
 
 	// We need signature algorithms to sign and check certificate_verify,
 	// so we need to support lots of them.

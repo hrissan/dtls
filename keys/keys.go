@@ -17,6 +17,9 @@ var ErrCipherTextTooShortForSNDecryption = errors.New("ciphertext too short for 
 type Keys struct {
 	MasterSecret [32]byte
 
+	Send    DirectionKeys
+	Receive DirectionKeys
+
 	ClientHandshakeTrafficSecret   [32]byte
 	ServerHandshakeTrafficSecret   [32]byte
 	ClientApplicationTrafficSecret [32]byte
@@ -98,7 +101,7 @@ func NewGCMCipher(block cipher.Block) cipher.AEAD {
 	return c
 }
 
-func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {
+func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trHash []byte) {
 	if keys.EpochSend != 0 || keys.EpochReceive != 0 {
 		panic("handshake keys state machine violation")
 	}
@@ -112,8 +115,12 @@ func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {
 
 	derivedSecret := deriveSecret(hasher, earlySecret, "derived", emptyHash[:])
 	handshakeSecret := hkdf.Extract(hasher, derivedSecret, sharedSecret)
-	copy(keys.ClientHandshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "c hs traffic", trHash[:]))
-	copy(keys.ServerHandshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "s hs traffic", trHash[:]))
+
+	keys.Send.ComputeHandshakeKeys(serverRole, handshakeSecret, trHash)
+	keys.Receive.ComputeHandshakeKeys(!serverRole, handshakeSecret, trHash)
+
+	copy(keys.ClientHandshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "c hs traffic", trHash))
+	copy(keys.ServerHandshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "s hs traffic", trHash))
 	log.Printf("client handshake traffic secret: %x\n", keys.ClientHandshakeTrafficSecret)
 	log.Printf("server handshake traffic secret: %x\n", keys.ServerHandshakeTrafficSecret)
 
@@ -142,7 +149,9 @@ func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {
 	keys.NextSegmentSequenceReceive = 0
 }
 
-func (keys *Keys) ComputeApplicationTrafficSecret(trHash []byte) {
+func (keys *Keys) ComputeApplicationTrafficSecret(serverRole bool, trHash []byte) {
+	keys.Send.ComputeApplicationTrafficSecret(serverRole, keys.MasterSecret[:], trHash)
+	keys.Receive.ComputeApplicationTrafficSecret(!serverRole, keys.MasterSecret[:], trHash)
 	hasher := sha256.New()
 	copy(keys.ClientApplicationTrafficSecret[:], deriveSecret(hasher, keys.MasterSecret[:], "c ap traffic", trHash[:]))
 	copy(keys.ServerApplicationTrafficSecret[:], deriveSecret(hasher, keys.MasterSecret[:], "s ap traffic", trHash[:]))

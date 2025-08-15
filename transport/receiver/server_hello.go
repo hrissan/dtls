@@ -89,7 +89,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	hctx.Keys.ComputeHandshakeKeys(sharedSecret, handshakeTranscriptHash)
+	hctx.Keys.ComputeHandshakeKeys(false, sharedSecret, handshakeTranscriptHash)
 
 	log.Printf("TODO - process server hello")
 	return nil, nil

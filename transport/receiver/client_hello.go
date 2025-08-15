@@ -143,7 +143,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	hctx.Keys.ComputeHandshakeKeys(sharedSecret, handshakeTranscriptHash)
+	hctx.Keys.ComputeHandshakeKeys(true, sharedSecret, handshakeTranscriptHash)
 
 	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateEncryptedExtensions(hctx))
 
@@ -155,7 +155,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 
 	// TODO - compute application data secret here, compute keys as soon as previous epoch not needed
 	handshakeTranscriptHash = hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
-	hctx.Keys.ComputeApplicationTrafficSecret(handshakeTranscriptHash)
+	hctx.Keys.ComputeApplicationTrafficSecret(true, handshakeTranscriptHash)
 	//hctx.Keys.ComputeServerApplicationKeys()
 	//hctx.Keys.ComputeClientApplicationKeys()
 

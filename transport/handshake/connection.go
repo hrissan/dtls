@@ -164,7 +164,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 			var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 			handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
-			hctx.Keys.ComputeApplicationTrafficSecret(handshakeTranscriptHash)
+			hctx.Keys.ComputeApplicationTrafficSecret(false, handshakeTranscriptHash)
 			hctx.Keys.ComputeServerApplicationKeys()
 			hctx.Keys.ComputeClientApplicationKeys()
 		}

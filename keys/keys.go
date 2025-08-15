@@ -19,20 +19,13 @@ type Keys struct {
 	Send    DirectionKeys
 	Receive DirectionKeys
 
-	DoNotEncryptSequenceNumbers bool // enabled extensions and saves us 50% memory on crypto contexts
+	FailedDeprotectionCounter uint64
 
-	FailedDeprotection uint64
-
+	// this counter does not reset with a new epoch
 	NextMessageSeqSend    uint16
 	NextMessageSeqReceive uint16
 
-	EpochReceive               uint16
-	EpochSend                  uint16
-	NextSegmentSequenceReceive uint64
-	NextSegmentSequenceSend    uint64
-	// for ServerHello retransmit and replay protection
-	NextEpoch0SequenceReceive uint64
-	NextEpoch0SequenceSend    uint64
+	DoNotEncryptSequenceNumbers bool // enabled extensions and saves us 50% memory on crypto contexts
 }
 
 func NewAesCipher(key []byte) cipher.Block {
@@ -52,10 +45,6 @@ func NewGCMCipher(block cipher.Block) cipher.AEAD {
 }
 
 func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trHash []byte) {
-	if keys.EpochSend != 0 || keys.EpochReceive != 0 {
-		panic("handshake keys state machine violation")
-	}
-
 	hasher := sha256.New()
 	emptyHash := sha256.Sum256(nil)
 
@@ -73,11 +62,6 @@ func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trH
 	zeros := [32]byte{}
 	masterSecret := hkdf.Extract(hasher, derivedSecret, zeros[:])
 	copy(keys.MasterSecret[:], masterSecret)
-
-	keys.EpochSend = 2
-	keys.NextSegmentSequenceSend = 0
-	keys.EpochReceive = 2
-	keys.NextSegmentSequenceReceive = 0
 }
 
 func (keys *Keys) ComputeApplicationTrafficSecret(serverRole bool, trHash []byte) {

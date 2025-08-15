@@ -294,9 +294,9 @@ func (hctx *HandshakeConnection) constructPlaintextRecord(datagram []byte, msg f
 	recordHdr := format.PlaintextRecordHeader{
 		ContentType:    format.PlaintextContentTypeHandshake,
 		Epoch:          0,
-		SequenceNumber: hctx.Keys.NextEpoch0SequenceSend,
+		SequenceNumber: hctx.Keys.Send.NextEpoch0Sequence,
 	}
-	hctx.Keys.NextEpoch0SequenceSend++
+	hctx.Keys.Send.NextEpoch0Sequence++
 	datagram = recordHdr.Write(datagram, format.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
 	datagram = msg.Header.Write(datagram)
 	datagram = append(datagram, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
@@ -305,9 +305,9 @@ func (hctx *HandshakeConnection) constructPlaintextRecord(datagram []byte, msg f
 
 func (hctx *HandshakeConnection) constructCiphertextRecord(datagram []byte, msg format.MessageHandshake) []byte {
 	// TODO - fragment message
-	epoch := hctx.Keys.EpochSend
-	seq := hctx.Keys.NextSegmentSequenceSend // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check we correctly parse/decrypt them from peer
-	hctx.Keys.NextSegmentSequenceSend++
+	epoch := hctx.Keys.Send.Epoch
+	seq := hctx.Keys.Send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
+	hctx.Keys.Send.NextSegmentSequence++
 	log.Printf("constructing ciphertext with seq: %d", seq)
 
 	gcm := hctx.Keys.Send.Write

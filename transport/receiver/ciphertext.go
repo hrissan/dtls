@@ -28,7 +28,7 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 		// TODO - send alert here
 		return
 	}
-	if byte(hctx.Keys.EpochReceive&0b00000011) != hdr.Epoch() {
+	if byte(hctx.Keys.Receive.Epoch&0b00000011) != hdr.Epoch() {
 		return // TODO - switch epoch after key update only
 	}
 	if !hctx.Keys.DoNotEncryptSequenceNumbers {
@@ -38,17 +38,17 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 	}
 	gcm := hctx.Keys.Receive.Write
 	iv := hctx.Keys.Receive.WriteIV // copy, otherwise disaster
-	decryptedSeq, seq := hdr.ClosestSequenceNumber(seqNumData, hctx.Keys.NextSegmentSequenceReceive)
+	decryptedSeq, seq := hdr.ClosestSequenceNumber(seqNumData, hctx.Keys.Receive.NextSegmentSequence)
 	log.Printf("decrypted SN: %d, closest: %d", decryptedSeq, seq)
 
 	hctx.Keys.FillIVSequence(iv[:], seq)
 	decrypted, err := gcm.Open(body[:0], iv[:], body, header)
 	if err != nil {
 		// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
-		hctx.Keys.FailedDeprotection++
+		hctx.Keys.FailedDeprotectionCounter++
 		return
 	}
-	hctx.Keys.NextSegmentSequenceReceive++
+	hctx.Keys.Receive.NextSegmentSequence++
 	log.Printf("dtls: ciphertext %d deprotected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
 	paddingOffset, contentType := findPaddingOffsetContentType(decrypted) // [rfc8446:5.4]
 	if paddingOffset < 0 || !format.IsInnerPlaintextRecord(contentType) {

@@ -17,10 +17,10 @@ type DirectionKeys struct {
 	Write   cipher.AEAD  // 16 interface + 16 interface inside + 16 (counters) + 240 aes half + (240 aes half we do not need)
 	SN      cipher.Block // 16 interface + 240 aes half + (240 aes half we do not need). Can be removed with unencrypted sequence numbers extension
 
+	// for ServerHello retransmit and replay protection
+	NextEpoch0Sequence  uint64 // TODO - reduce to uint16, this is for unencrypted client_hello/server_hello only
 	Epoch               uint16
 	NextSegmentSequence uint64
-	// for ServerHello retransmit and replay protection
-	NextEpoch0Sequence uint64 // TODO - reduce to uint16, this is for unencrypted client_hello/server_hello only
 
 	// total size ~100 plus 240 (no seq encryption) or 480 (seq encryption)
 	// but crypto.Block in standard golang's crypto contains both encrypting and decrypting halves,

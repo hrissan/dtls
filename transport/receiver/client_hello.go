@@ -85,10 +85,10 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		RoleServer:       true,
 		TranscriptHasher: sha256.New(),
 	}
-	hctx.Keys.NextEpoch0SequenceReceive = 1 // TODO - get from plaintext record we received
-	hctx.Keys.NextEpoch0SequenceSend = 1    // sequence 0 was HRR
-	hctx.Keys.NextMessageSeqSend = 1        // message 0 was HRR
-	hctx.Keys.NextMessageSeqReceive = 2     // message 0, 1 were initial client_hello, client_hello
+	hctx.Keys.Receive.NextEpoch0Sequence = 1 // TODO - get from plaintext record we received
+	hctx.Keys.Send.NextEpoch0Sequence = 1    // sequence 0 was HRR
+	hctx.Keys.NextMessageSeqSend = 1         // message 0 was HRR
+	hctx.Keys.NextMessageSeqReceive = 2      // message 0, 1 were initial client_hello, client_hello
 	rc.handshakes[addr] = hctx
 	// TODO - check if the same handshake by storing (age, initialHelloTranscriptHash, keyShareSet)
 	{

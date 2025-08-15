@@ -54,37 +54,6 @@ type Keys struct {
 	NextEpoch0SequenceSend    uint64
 }
 
-func (keys *Keys) DecryptSequenceNumbers(seqNum []byte, cipherText []byte, roleServer bool) error {
-	return keys.EncryptSequenceNumbers(seqNum, cipherText, !roleServer)
-}
-
-func (keys *Keys) EncryptSequenceNumbers(seqNum []byte, cipherText []byte, roleServer bool) error {
-	var mask [32]byte // Some space good for many ciphers, TODO - check constant mush earlier
-	if !keys.DoNotEncryptSequenceNumbers {
-		snCipher := keys.ClientSN
-		if roleServer {
-			snCipher = keys.ServerSN
-		}
-		if len(cipherText) < snCipher.BlockSize() {
-			// TODO - generate alert
-			return ErrCipherTextTooShortForSNDecryption
-		}
-		snCipher.Encrypt(mask[:], cipherText)
-	}
-	if len(seqNum) == 1 {
-		seqNum[0] ^= mask[0]
-		//log.Printf("decrypted SN: %d", uint16(seqNum[0]))
-		return nil
-	} else if len(seqNum) == 2 {
-		seqNum[0] ^= mask[0]
-		seqNum[1] ^= mask[1]
-		//log.Printf("decrypted SN: %d", binary.BigEndian.Uint16(seqNum))
-		return nil
-	} else {
-		panic("seqNum must have 1 or 2 bytes")
-	}
-}
-
 func NewAesCipher(key []byte) cipher.Block {
 	c, err := aes.NewCipher(key)
 	if err != nil {

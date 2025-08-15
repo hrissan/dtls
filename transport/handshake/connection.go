@@ -351,8 +351,10 @@ func (hctx *HandshakeConnection) constructCiphertextRecord(datagram []byte, msg 
 		panic("gcm.Seal length mismatch")
 	}
 
-	if err := hctx.Keys.EncryptSequenceNumbers(datagram[startRecordOffset+1:startRecordOffset+3], datagram[startBodyOFfset:], hctx.RoleServer); err != nil {
-		panic("cipher text too short when sending")
+	if !hctx.Keys.DoNotEncryptSequenceNumbers {
+		if err := hctx.Keys.Send.EncryptSequenceNumbers(datagram[startRecordOffset+1:startRecordOffset+3], datagram[startBodyOFfset:]); err != nil {
+			panic("cipher text too short when sending")
+		}
 	}
 	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
 	return datagram

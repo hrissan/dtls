@@ -74,10 +74,10 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	if !serverHello.Extensions.KeyShare.X25519PublicKeySet {
 		return nil, ErrSupportOnlyX25519
 	}
-	if hctx.SendQueueFlight() >= handshake.MessagesFlightServerHello {
+	if hctx.SendQueueFlight() >= handshake.MessagesFlightServerHello_Finished {
 		return nil, nil
 	}
-	hctx.AckFlight(handshake.MessagesFlightServerHello)
+	hctx.AckFlight(handshake.MessagesFlightServerHello_Finished)
 	handshakeHdr.AddToHash(hctx.TranscriptHasher)
 	_, _ = hctx.TranscriptHasher.Write(messageBody)
 

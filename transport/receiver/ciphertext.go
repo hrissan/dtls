@@ -79,7 +79,10 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 				// TODO: alert here, and we do not want to continue to the next record.
 				return
 			}
-			hctx.ReceivedMessage(handshakeHdr, body)
+			registerInSender := hctx.ReceivedMessage(handshakeHdr, body)
+			if registerInSender {
+				rc.snd.RegisterConnectionForSend(hctx) // TODO - postpone all responses until full datagram processed
+			}
 		case format.PlaintextContentTypeAck:
 			log.Printf("dtls: got ack(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)
 			return // TODO - more checks

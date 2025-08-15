@@ -1,0 +1,29 @@
+package handshake
+
+import (
+	"crypto/sha256"
+
+	"github.com/hrissan/tinydtls/constants"
+	"github.com/hrissan/tinydtls/format"
+)
+
+func (hctx *HandshakeConnection) GenerateFinished() format.MessageHandshake {
+	// [rfc8446:4.4.4] - finished
+	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
+	finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
+
+	mustBeFinished := hctx.Keys.Send.ComputeFinished(sha256.New(), finishedTranscriptHash)
+
+	msg := format.MessageFinished{
+		VerifyDataLength: len(mustBeFinished),
+	}
+	copy(msg.VerifyData[:], mustBeFinished)
+	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
+	return format.MessageHandshake{
+		Header: format.MessageHandshakeHeader{
+			HandshakeType: format.HandshakeTypeFinished,
+			Length:        uint32(len(messageBody)),
+		},
+		Body: messageBody,
+	}
+}

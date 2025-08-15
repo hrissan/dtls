@@ -133,7 +133,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		},
 		Body: serverHelloBody,
 	}
-	hctx.PushMessage(handshake.MessagesFlightServerHello, serverHelloMessage)
+	hctx.PushMessage(handshake.MessagesFlightServerHello_Finished, serverHelloMessage)
 
 	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
@@ -145,13 +145,13 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	}
 	hctx.Keys.ComputeHandshakeKeys(true, sharedSecret, handshakeTranscriptHash)
 
-	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateEncryptedExtensions(hctx))
+	hctx.PushMessage(handshake.MessagesFlightServerHello_Finished, rc.generateEncryptedExtensions(hctx))
 
-	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateServerCertificate(hctx))
+	hctx.PushMessage(handshake.MessagesFlightServerHello_Finished, rc.generateServerCertificate(hctx))
 
-	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateServerCertificateVerify(hctx))
+	hctx.PushMessage(handshake.MessagesFlightServerHello_Finished, rc.generateServerCertificateVerify(hctx))
 
-	hctx.PushMessage(handshake.MessagesFlightServerHello, rc.generateServerFinished(hctx))
+	hctx.PushMessage(handshake.MessagesFlightServerHello_Finished, hctx.GenerateFinished())
 
 	// TODO - compute application data secret here, compute keys as soon as previous epoch not needed
 	handshakeTranscriptHash = hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
@@ -293,27 +293,6 @@ func (rc *Receiver) generateServerCertificateVerify(hctx *handshake.HandshakeCon
 	return format.MessageHandshake{
 		Header: format.MessageHandshakeHeader{
 			HandshakeType: format.HandshakeTypeCertificateVerify,
-			Length:        uint32(len(messageBody)),
-		},
-		Body: messageBody,
-	}
-}
-
-func (rc *Receiver) generateServerFinished(hctx *handshake.HandshakeConnection) format.MessageHandshake {
-	// [rfc8446:4.4.4] - finished
-	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
-	finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
-
-	mustBeFinished := hctx.Keys.Send.ComputeFinished(sha256.New(), finishedTranscriptHash)
-
-	msg := format.MessageFinished{
-		VerifyDataLength: len(mustBeFinished),
-	}
-	copy(msg.VerifyData[:], mustBeFinished)
-	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
-	return format.MessageHandshake{
-		Header: format.MessageHandshakeHeader{
-			HandshakeType: format.HandshakeTypeFinished,
 			Length:        uint32(len(messageBody)),
 		},
 		Body: messageBody,

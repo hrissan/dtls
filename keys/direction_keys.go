@@ -10,7 +10,7 @@ import (
 )
 
 type DirectionKeys struct {
-	HandshakeTrafficSecret   [32]byte // we need to keep this for finished message
+	HandshakeTrafficSecret   [32]byte // we need to keep this for finished message. TODO - move into HandshakeContext
 	ApplicationTrafficSecret [32]byte // we need to keep this for key update
 
 	WriteIV [12]byte
@@ -18,9 +18,9 @@ type DirectionKeys struct {
 	SN      cipher.Block // 16 interface + 240 aes half + (240 aes half we do not need). Can be removed with unencrypted sequence numbers extension
 
 	// for ServerHello retransmit and replay protection
-	NextEpoch0Sequence  uint64 // TODO - reduce to uint16, this is for unencrypted client_hello/server_hello only
-	Epoch               uint16
+	NextEpoch0Sequence  uint64 // cannot reduce this, due to 48-bit value on the wire, this is for unencrypted client_hello/server_hello only, but peer can select very large value
 	NextSegmentSequence uint64
+	Epoch               uint16
 
 	// total size ~100 plus 240 (no seq encryption) or 480 (seq encryption)
 	// but crypto.Block in standard golang's crypto contains both encrypting and decrypting halves,

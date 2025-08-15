@@ -310,7 +310,7 @@ func (hctx *HandshakeConnection) constructPlaintextRecord(datagram []byte, msg f
 
 func (hctx *HandshakeConnection) constructCiphertextRecord(datagram []byte, msg format.MessageHandshake) []byte {
 	// TODO - fragment message
-	epoch := hctx.Keys.Epoch
+	epoch := hctx.Keys.EpochSend
 	seq := hctx.Keys.NextSegmentSequenceSend // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check we correctly parse/decrypt them from peer
 	hctx.Keys.NextSegmentSequenceSend++
 	log.Printf("constructing ciphertext with seq: %d", seq)

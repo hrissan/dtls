@@ -28,7 +28,7 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 		// TODO - send alert here
 		return
 	}
-	if byte(hctx.Keys.Epoch&0b00000011) != hdr.Epoch() {
+	if byte(hctx.Keys.EpochReceive&0b00000011) != hdr.Epoch() {
 		return // TODO - switch epoch after key update only
 	}
 	if err := hctx.Keys.DecryptSequenceNumbers(seqNumData, body, rc.opts.RoleServer); err != nil {

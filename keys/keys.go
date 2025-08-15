@@ -42,7 +42,8 @@ type Keys struct {
 	NextMessageSeqSend    uint16
 	NextMessageSeqReceive uint16
 
-	Epoch                      uint16
+	EpochReceive               uint16
+	EpochSend                  uint16
 	NextSegmentSequenceReceive uint64
 	NextSegmentSequenceSend    uint64
 	// for ServerHello retransmit and replay protection
@@ -98,6 +99,10 @@ func NewGCMCipher(block cipher.Block) cipher.AEAD {
 }
 
 func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {
+	if keys.EpochSend != 0 || keys.EpochReceive != 0 {
+		panic("handshake keys state machine violation")
+	}
+
 	hasher := sha256.New()
 	emptyHash := sha256.Sum256(nil)
 
@@ -131,8 +136,10 @@ func (keys *Keys) ComputeHandshakeKeys(sharedSecret []byte, trHash []byte) {
 	keys.ClientWrite = NewGCMCipher(NewAesCipher(keys.ClientWriteKey[:]))
 	keys.ServerWrite = NewGCMCipher(NewAesCipher(keys.ServerWriteKey[:]))
 
-	keys.Epoch = 2
-	//os.Exit(1) // to compare printed keys above
+	keys.EpochSend = 2
+	keys.NextSegmentSequenceSend = 0
+	keys.EpochReceive = 2
+	keys.NextSegmentSequenceReceive = 0
 }
 
 func (keys *Keys) ComputeApplicationTrafficSecret(trHash []byte) {

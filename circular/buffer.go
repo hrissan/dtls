@@ -1,5 +1,7 @@
 package circular
 
+const minCapacity = 4 // reduce tiny fragments
+
 type Buffer[T any] struct {
 	elements  []T  // length == capacity == 2^x
 	read_pos  uint // uint because we rely on integer overflow
@@ -28,13 +30,13 @@ func (s *Buffer[T]) Slices() ([]T, []T) {
 func (s *Buffer[T]) reserve(newCapacity int) {
 	capacity := len(s.elements)
 	if capacity == 0 {
-		capacity = 1
+		capacity = minCapacity
 	}
 	for capacity < newCapacity {
 		capacity *= 2
 	}
 	s1, s2 := s.Slices()
-	elements := make([]T, capacity) // size will forever be equal to capacity
+	elements := make([]T, capacity) // lem() will forever be equal to cap()
 	off := copy(elements, s1)
 	off += copy(elements[off:], s2)
 	if off != len(s1)+len(s2) {
@@ -46,7 +48,7 @@ func (s *Buffer[T]) reserve(newCapacity int) {
 }
 
 func (s *Buffer[T]) Reserve(newCapacity int) {
-	if newCapacity > len(s.elements) { // fits perfectly, do nothing
+	if newCapacity > len(s.elements) { // if fits perfectly, do nothing
 		s.reserve(newCapacity)
 	}
 }
@@ -54,7 +56,7 @@ func (s *Buffer[T]) Reserve(newCapacity int) {
 func (s *Buffer[T]) PushBack(element T) {
 	capacity := len(s.elements)
 	if s.Len() == capacity {
-		s.reserve(max(4, capacity*2))
+		s.reserve(capacity + 1)
 	}
 	s.elements[s.write_pos&s.mask()] = element
 	s.write_pos++

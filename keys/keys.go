@@ -20,25 +20,10 @@ type Keys struct {
 	Send    DirectionKeys
 	Receive DirectionKeys
 
-	ClientHandshakeTrafficSecret   [32]byte
-	ServerHandshakeTrafficSecret   [32]byte
-	ClientApplicationTrafficSecret [32]byte
-	ServerApplicationTrafficSecret [32]byte
-
-	ClientWriteKey [16]byte
-	ServerWriteKey [16]byte
-	ClientWriteIV  [12]byte
-	ServerWriteIV  [12]byte
-	ClientSNKey    [16]byte
-	ServerSNKey    [16]byte
+	ClientHandshakeTrafficSecret [32]byte
+	ServerHandshakeTrafficSecret [32]byte
 
 	DoNotEncryptSequenceNumbers bool // enabled extensions and saves us 50% memory on crypto contexts
-
-	ClientWrite cipher.AEAD
-	ServerWrite cipher.AEAD
-
-	ClientSN cipher.Block
-	ServerSN cipher.Block
 
 	FailDeprotection uint64
 
@@ -97,20 +82,6 @@ func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trH
 	zeros := [32]byte{}
 	masterSecret := hkdf.Extract(hasher, derivedSecret, zeros[:])
 	copy(keys.MasterSecret[:], masterSecret)
-	csecret := keys.ClientHandshakeTrafficSecret[:]
-	ssecret := keys.ServerHandshakeTrafficSecret[:]
-	copy(keys.ClientWriteKey[:], hkdf.ExpandLabel(hasher, csecret, "key", []byte{}, len(keys.ClientWriteKey)))
-	copy(keys.ServerWriteKey[:], hkdf.ExpandLabel(hasher, ssecret, "key", []byte{}, len(keys.ServerWriteKey)))
-	copy(keys.ClientWriteIV[:], hkdf.ExpandLabel(hasher, csecret, "iv", []byte{}, len(keys.ClientWriteIV)))
-	copy(keys.ServerWriteIV[:], hkdf.ExpandLabel(hasher, ssecret, "iv", []byte{}, len(keys.ServerWriteIV)))
-	copy(keys.ClientSNKey[:], hkdf.ExpandLabel(hasher, csecret, "sn", []byte{}, len(keys.ClientSNKey)))
-	copy(keys.ServerSNKey[:], hkdf.ExpandLabel(hasher, ssecret, "sn", []byte{}, len(keys.ServerSNKey)))
-
-	keys.ClientSN = NewAesCipher(keys.ClientSNKey[:])
-	keys.ServerSN = NewAesCipher(keys.ServerSNKey[:])
-
-	keys.ClientWrite = NewGCMCipher(NewAesCipher(keys.ClientWriteKey[:]))
-	keys.ServerWrite = NewGCMCipher(NewAesCipher(keys.ServerWriteKey[:]))
 
 	keys.EpochSend = 2
 	keys.NextSegmentSequenceSend = 0
@@ -121,11 +92,11 @@ func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trH
 func (keys *Keys) ComputeApplicationTrafficSecret(serverRole bool, trHash []byte) {
 	keys.Send.ComputeApplicationTrafficSecret(serverRole, keys.MasterSecret[:], trHash)
 	keys.Receive.ComputeApplicationTrafficSecret(!serverRole, keys.MasterSecret[:], trHash)
-	hasher := sha256.New()
-	copy(keys.ClientApplicationTrafficSecret[:], deriveSecret(hasher, keys.MasterSecret[:], "c ap traffic", trHash[:]))
-	copy(keys.ServerApplicationTrafficSecret[:], deriveSecret(hasher, keys.MasterSecret[:], "s ap traffic", trHash[:]))
-	log.Printf("client application traffic secret: %x\n", keys.ClientApplicationTrafficSecret)
-	log.Printf("server application traffic secret: %x\n", keys.ServerApplicationTrafficSecret)
+	//hasher := sha256.New()
+	//copy(keys.ClientApplicationTrafficSecret[:], deriveSecret(hasher, keys.MasterSecret[:], "c ap traffic", trHash[:]))
+	//copy(keys.ServerApplicationTrafficSecret[:], deriveSecret(hasher, keys.MasterSecret[:], "s ap traffic", trHash[:]))
+	//log.Printf("client application traffic secret: %x\n", keys.ClientApplicationTrafficSecret)
+	//log.Printf("server application traffic secret: %x\n", keys.ServerApplicationTrafficSecret)
 	// [rfc8446:7.2]
 	//The next-generation application_traffic_secret is computed as:
 	//
@@ -135,20 +106,20 @@ func (keys *Keys) ComputeApplicationTrafficSecret(serverRole bool, trHash []byte
 }
 
 func (keys *Keys) ComputeServerApplicationKeys() {
-	hasher := sha256.New()
-	ssecret := keys.ServerApplicationTrafficSecret[:]
-	copy(keys.ServerWriteKey[:], hkdf.ExpandLabel(hasher, ssecret, "key", []byte{}, len(keys.ServerWriteKey)))
-	copy(keys.ServerWriteIV[:], hkdf.ExpandLabel(hasher, ssecret, "iv", []byte{}, len(keys.ServerWriteIV)))
+	//hasher := sha256.New()
+	//ssecret := keys.ServerApplicationTrafficSecret[:]
+	//copy(keys.ServerWriteKey[:], hkdf.ExpandLabel(hasher, ssecret, "key", []byte{}, len(keys.ServerWriteKey)))
+	//copy(keys.ServerWriteIV[:], hkdf.ExpandLabel(hasher, ssecret, "iv", []byte{}, len(keys.ServerWriteIV)))
 	//TODO - update epoch/seq
 	//keys.Epoch = 3
 	//keys.NextSegmentSequenceReceive = 0
 }
 
 func (keys *Keys) ComputeClientApplicationKeys() {
-	hasher := sha256.New()
-	csecret := keys.ClientApplicationTrafficSecret[:]
-	copy(keys.ClientWriteKey[:], hkdf.ExpandLabel(hasher, csecret, "key", []byte{}, len(keys.ClientWriteKey)))
-	copy(keys.ClientWriteIV[:], hkdf.ExpandLabel(hasher, csecret, "iv", []byte{}, len(keys.ClientWriteIV)))
+	//hasher := sha256.New()
+	//csecret := keys.ClientApplicationTrafficSecret[:]
+	//copy(keys.ClientWriteKey[:], hkdf.ExpandLabel(hasher, csecret, "key", []byte{}, len(keys.ClientWriteKey)))
+	//copy(keys.ClientWriteIV[:], hkdf.ExpandLabel(hasher, csecret, "iv", []byte{}, len(keys.ClientWriteIV)))
 	//TODO - update epoch/seq
 	//keys.Epoch = 3
 	//keys.NextSegmentSequenceReceive = 0

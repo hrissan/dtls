@@ -36,12 +36,8 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 			return // TODO - send alert here
 		}
 	}
-	gcm := hctx.Keys.ServerWrite
-	iv := hctx.Keys.ServerWriteIV // copy, otherwise disaster
-	if rc.opts.RoleServer {
-		gcm = hctx.Keys.ClientWrite
-		iv = hctx.Keys.ClientWriteIV // copy, otherwise disaster
-	}
+	gcm := hctx.Keys.Receive.Write
+	iv := hctx.Keys.Receive.WriteIV // copy, otherwise disaster
 	decryptedSeq, seq := hdr.ClosestSequenceNumber(seqNumData, hctx.Keys.NextSegmentSequenceReceive)
 	log.Printf("decrypted SN: %d, closest: %d", decryptedSeq, seq)
 

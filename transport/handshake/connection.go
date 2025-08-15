@@ -315,12 +315,8 @@ func (hctx *HandshakeConnection) constructCiphertextRecord(datagram []byte, msg 
 	hctx.Keys.NextSegmentSequenceSend++
 	log.Printf("constructing ciphertext with seq: %d", seq)
 
-	gcm := hctx.Keys.ClientWrite
-	iv := hctx.Keys.ClientWriteIV
-	if hctx.RoleServer {
-		gcm = hctx.Keys.ServerWrite
-		iv = hctx.Keys.ServerWriteIV
-	}
+	gcm := hctx.Keys.Send.Write
+	iv := hctx.Keys.Send.WriteIV
 	hctx.Keys.FillIVSequence(iv[:], seq)
 
 	// format of our encrypted record is fixed. TODO - save on length if last record in datagram

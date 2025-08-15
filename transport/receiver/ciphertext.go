@@ -5,6 +5,7 @@ import (
 	"net/netip"
 
 	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/keys"
 )
 
 // TODO - optimize
@@ -28,20 +29,22 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 		// TODO - send alert here
 		return
 	}
-	if byte(hctx.Keys.Receive.Epoch&0b00000011) != hdr.Epoch() {
+	kk := &hctx.Keys.Receive.Symmetric
+	if byte(kk.Epoch&0b00000011) != hdr.Epoch() {
+		// we cannot believe epoch bits before we unprotect record successfully
 		return // TODO - switch epoch after key update only
 	}
 	if !hctx.Keys.DoNotEncryptSequenceNumbers {
-		if err := hctx.Keys.Receive.EncryptSequenceNumbers(seqNumData, body); err != nil {
+		if err := kk.EncryptSequenceNumbers(seqNumData, body); err != nil {
 			return // TODO - send alert here
 		}
 	}
-	gcm := hctx.Keys.Receive.Write
-	iv := hctx.Keys.Receive.WriteIV // copy, otherwise disaster
+	gcm := kk.Write
+	iv := kk.WriteIV // copy, otherwise disaster
 	decryptedSeq, seq := hdr.ClosestSequenceNumber(seqNumData, hctx.Keys.Receive.NextSegmentSequence)
 	log.Printf("decrypted SN: %d, closest: %d", decryptedSeq, seq)
 
-	hctx.Keys.FillIVSequence(iv[:], seq)
+	keys.FillIVSequence(iv[:], seq)
 	decrypted, err := gcm.Open(body[:0], iv[:], body, header)
 	if err != nil {
 		// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached

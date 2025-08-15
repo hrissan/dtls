@@ -4,7 +4,6 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
-	"encoding/binary"
 	"errors"
 	"hash"
 
@@ -102,11 +101,4 @@ func (keys *Keys) ComputeClientApplicationKeys() {
 
 func deriveSecret(hasher hash.Hash, secret []byte, label string, sum []byte) []byte {
 	return hkdf.ExpandLabel(hasher, secret, label, sum, len(sum))
-}
-
-// panic if len(iv) is < 8
-func (keys *Keys) FillIVSequence(iv []byte, seq uint64) {
-	maskBytes := iv[len(iv)-8:]
-	mask := binary.BigEndian.Uint64(maskBytes)
-	binary.BigEndian.PutUint64(maskBytes, seq^mask)
 }

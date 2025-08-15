@@ -188,14 +188,14 @@ func (hctx *HandshakeConnection) constructPlaintextRecord(datagram []byte, msg f
 }
 
 func (hctx *HandshakeConnection) constructCiphertextRecord(datagram []byte, msg format.MessageHandshake) []byte {
-	kk := &hctx.Keys.Send.Symmetric
-	epoch := kk.Epoch
-	seq := hctx.Keys.Send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	hctx.Keys.Send.NextSegmentSequence++
+	send := &hctx.Keys.Send
+	epoch := send.Epoch
+	seq := send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
+	send.NextSegmentSequence++
 	log.Printf("constructing ciphertext with seq: %d", seq)
 
-	gcm := kk.Write
-	iv := kk.WriteIV
+	gcm := send.Symmetric.Write
+	iv := send.Symmetric.WriteIV
 	keys.FillIVSequence(iv[:], seq)
 
 	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
@@ -227,7 +227,7 @@ func (hctx *HandshakeConnection) constructCiphertextRecord(datagram []byte, msg 
 	}
 
 	if !hctx.Keys.DoNotEncryptSequenceNumbers {
-		if err := kk.EncryptSequenceNumbers(datagram[startRecordOffset+1:startRecordOffset+3], datagram[startBodyOFfset:]); err != nil {
+		if err := send.Symmetric.EncryptSequenceNumbers(datagram[startRecordOffset+1:startRecordOffset+3], datagram[startBodyOFfset:]); err != nil {
 			panic("cipher text too short when sending")
 		}
 	}

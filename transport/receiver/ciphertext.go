@@ -29,18 +29,25 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 		// TODO - send alert here
 		return
 	}
-	kk := &hctx.Keys.Receive.Symmetric
-	if byte(kk.Epoch&0b00000011) != hdr.Epoch() {
-		// we cannot believe epoch bits before we unprotect record successfully
+	receiver := &hctx.Keys.Receive
+	if byte(receiver.Epoch&0b00000011) != hdr.Epoch() {
+		if !hctx.Keys.ExpectEpochUpdate {
+			return // TODO - alert, either garbage or attack
+		}
+		// We should not believe new epoch bits before we decrypt record successfully,
+		// so we have to calculate new keys here. But if we fail decryption, then we
+		// either should store new keys, or recompute them on each (attacker's) packet.
+		// So, we decided we have to store new keys
+		// var NewKeys keys.SymmetricKeys
 		return // TODO - switch epoch after key update only
 	}
 	if !hctx.Keys.DoNotEncryptSequenceNumbers {
-		if err := kk.EncryptSequenceNumbers(seqNumData, body); err != nil {
+		if err := receiver.Symmetric.EncryptSequenceNumbers(seqNumData, body); err != nil {
 			return // TODO - send alert here
 		}
 	}
-	gcm := kk.Write
-	iv := kk.WriteIV // copy, otherwise disaster
+	gcm := receiver.Symmetric.Write
+	iv := receiver.Symmetric.WriteIV // copy, otherwise disaster
 	decryptedSeq, seq := hdr.ClosestSequenceNumber(seqNumData, hctx.Keys.Receive.NextSegmentSequence)
 	log.Printf("decrypted SN: %d, closest: %d", decryptedSeq, seq)
 
@@ -51,7 +58,7 @@ func (rc *Receiver) deprotectCiphertextRecord(hdr format.CiphertextRecordHeader,
 		hctx.Keys.FailedDeprotectionCounter++
 		return
 	}
-	hctx.Keys.Receive.NextSegmentSequence++
+	hctx.Keys.Receive.NextSegmentSequence = seq + 1 // TODO - update replay window
 	log.Printf("dtls: ciphertext %d deprotected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
 	paddingOffset, contentType := findPaddingOffsetContentType(decrypted) // [rfc8446:5.4]
 	if paddingOffset < 0 || !format.IsInnerPlaintextRecord(contentType) {

@@ -25,6 +25,7 @@ type Keys struct {
 	NextMessageSeqReceive uint16
 
 	DoNotEncryptSequenceNumbers bool // enabled extensions and saves us 50% memory on crypto contexts
+	ExpectEpochUpdate           bool // waiting for the next epoch during handshake or key update
 }
 
 func NewAesCipher(key []byte) cipher.Block {
@@ -56,6 +57,7 @@ func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trH
 
 	keys.Send.ComputeHandshakeKeys(serverRole, handshakeSecret, trHash)
 	keys.Receive.ComputeHandshakeKeys(!serverRole, handshakeSecret, trHash)
+	keys.ExpectEpochUpdate = true
 
 	derivedSecret = deriveSecret(hasher, handshakeSecret, "derived", emptyHash[:])
 	zeros := [32]byte{}

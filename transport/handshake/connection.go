@@ -204,6 +204,10 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 				continue
 			}
 			if conn.Handshake != nil {
+				flight := HandshakeTypeToFlight(handshakeHdr.HandshakeType, conn.RoleServer) // zero if unknown
+				conn.Handshake.ReceivedFlight(conn, flight)
+				// receiving any chunk from the next flight will remove all acks for previous flights
+				// before this and subsequent chunks are added to hctx.acks
 				registerInSender = conn.Handshake.ReceivedMessage(conn, handshakeHdr, body, rn) || registerInSender
 			}
 		case format.PlaintextContentTypeAck:

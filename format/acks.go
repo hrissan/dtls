@@ -1,6 +1,8 @@
 package format
 
-import "cmp"
+import (
+	"cmp"
+)
 
 // TODO - do not allow SeqNum to go over 2^48
 // this is bad idea without key update for AEAD anyway

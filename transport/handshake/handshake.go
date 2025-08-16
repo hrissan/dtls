@@ -13,15 +13,6 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-const (
-	// zero is reserved as a flag for "flight not set"
-	MessagesFlightClientHello1               = 1
-	MessagesFlightServerHRR                  = 2
-	MessagesFlightClientHello2               = 3
-	MessagesFlightServerHello_Finished       = 4 // ServerHello, EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify, Finished
-	MessagesFlightClientCertificate_Finished = 5 // Certificate, CertificateVerify, Finished
-)
-
 type HandshakeConnection struct {
 	LocalRandom  [32]byte
 	X25519Secret [32]byte
@@ -37,15 +28,15 @@ type HandshakeConnection struct {
 	// all message before that are implicitly acked by any message from messagesSendQueue
 	sendAcksfromMessageSeq uint16
 
-	sendQueueFlight         byte                      // message from the next flight will ack (clear) all messages in send queue
+	currentFlight byte // both send and receive
+
 	messagesSendQueue       []format.MessageHandshake // all messages here belong to the same flight. TODO - fixed array storage with some limit
 	SendQueueMessageOffset  int                       // offset in messagesSendQueue of the message we are sending, len(messagesSendQueue) if all sent
 	SendQueueFragmentOffset int                       // offset inside messagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(messagesSendQueue)
 
 	TranscriptHasher hash.Hash // when messages are added to messagesSendQueue, they are also added to TranscriptHasher
 
-	certificateChain    format.MessageCertificate
-	ServerHelloReceived bool
+	certificateChain format.MessageCertificate
 }
 
 func NewHandshakeConnection(hasher hash.Hash) *HandshakeConnection {
@@ -68,6 +59,21 @@ func (hctx *HandshakeConnection) AddAck(messageSeq uint16, rn format.RecordNumbe
 		return
 	}
 	hctx.sendAcks[rn] = struct{}{}
+}
+
+func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byte) (newFlight bool) {
+	if flight <= hctx.currentFlight {
+		return false
+	}
+	hctx.currentFlight = flight
+	// implicit ack of all previous flights
+	hctx.messagesSendQueue = hctx.messagesSendQueue[:0]
+	hctx.SendQueueMessageOffset = 0
+	hctx.SendQueueFragmentOffset = 0
+
+	hctx.sendAcksfromMessageSeq = conn.Keys.NextMessageSeqReceive
+	clear(hctx.sendAcks)
+	return true
 }
 
 func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) (registerInSender bool) {
@@ -116,24 +122,8 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 	return registerInSender
 }
 
-func (hctx *HandshakeConnection) SendQueueFlight() byte { return hctx.sendQueueFlight }
-
 // also acks (removes) all previous flights
-func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, flight byte, msg format.MessageHandshake) {
-	if flight < hctx.sendQueueFlight {
-		panic("you cannot add message from previous flight")
-	}
-	if flight > hctx.sendQueueFlight {
-		// implicit ack of all previous flights
-		hctx.sendQueueFlight = flight
-		hctx.messagesSendQueue = hctx.messagesSendQueue[:0]
-		hctx.SendQueueMessageOffset = 0
-		hctx.SendQueueFragmentOffset = 0
-
-		// all received messages (and acks) were from the previous flight
-		hctx.sendAcksfromMessageSeq = conn.Keys.NextMessageSeqReceive
-		clear(hctx.sendAcks)
-	}
+func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg format.MessageHandshake) {
 	if conn.Keys.NextMessageSeqSend >= math.MaxUint16 {
 		// TODO - prevent wrapping next message seq
 		// close connection here

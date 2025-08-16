@@ -160,6 +160,7 @@ func (rc *Receiver) startConnection(addr netip.AddrPort) (*handshake.ConnectionI
 	// TODO - contact wolfssl team?
 	hctx.ComputeKeyShare()
 	clientHelloMsg := rc.generateClientHello(hctx, false, cookie.Cookie{})
-	hctx.PushMessage(conn, handshake.MessagesFlightClientHello1, clientHelloMsg)
+
+	hctx.PushMessage(conn, clientHelloMsg)
 	return conn, nil
 }

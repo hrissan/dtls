@@ -142,7 +142,9 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		},
 		Body: serverHelloBody,
 	}
-	hctx.PushMessage(conn, handshake.MessagesFlightServerHello_Finished, serverHelloMessage)
+	_ = hctx.ReceivedFlight(conn, handshake.MessagesFlightClientHello2)
+
+	hctx.PushMessage(conn, serverHelloMessage)
 
 	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
@@ -155,13 +157,13 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	masterSecret := conn.Keys.ComputeHandshakeKeys(true, sharedSecret, handshakeTranscriptHash)
 	copy(hctx.MasterSecret[:], masterSecret)
 
-	hctx.PushMessage(conn, handshake.MessagesFlightServerHello_Finished, rc.generateEncryptedExtensions(hctx))
+	hctx.PushMessage(conn, rc.generateEncryptedExtensions(hctx))
 
-	hctx.PushMessage(conn, handshake.MessagesFlightServerHello_Finished, rc.generateServerCertificate(hctx))
+	hctx.PushMessage(conn, rc.generateServerCertificate(hctx))
 
-	hctx.PushMessage(conn, handshake.MessagesFlightServerHello_Finished, rc.generateServerCertificateVerify(hctx))
+	hctx.PushMessage(conn, rc.generateServerCertificateVerify(hctx))
 
-	hctx.PushMessage(conn, handshake.MessagesFlightServerHello_Finished, hctx.GenerateFinished(conn))
+	hctx.PushMessage(conn, hctx.GenerateFinished(conn))
 
 	// TODO - compute application data secret here, compute keys as soon as previous epoch not needed
 	handshakeTranscriptHash = hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])

@@ -13,7 +13,6 @@ import (
 func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte) (registerInSender bool) {
 	// we ignore handshakeHdr.MessageSeq here TODO - check, update
 	switch handshakeHdr.HandshakeType {
-	case format.HandshakeTypeServerHello: // but not
 	case format.HandshakeTypeEncryptedExtensions:
 		var msg format.ExtensionsSet
 		if err := msg.ParseOutside(body, false, true, false); err != nil {
@@ -22,8 +21,6 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 			return
 		}
 		log.Printf("encrypted extensions parsed: %+v", msg)
-		//rc.opts.Stats.ServerHelloMessage(handshakeHdr, msg, addr)
-		//rc.OnServerHello(body, handshakeHdr, msg, addr)
 		handshakeHdr.AddToHash(hctx.TranscriptHasher)
 		_, _ = hctx.TranscriptHasher.Write(body)
 	case format.HandshakeTypeCertificate:
@@ -36,8 +33,8 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 		// We do not want checks here, because receiving goroutine should not be blocked for long
 		// We have to first receive everything up to finished, probably send ack,
 		// then offload ECC to separate core and trigger state machine depending on result
-		hctx.certificateChain = msg
 		log.Printf("certificate parsed: %+v", msg)
+		hctx.certificateChain = msg
 		handshakeHdr.AddToHash(hctx.TranscriptHasher)
 		_, _ = hctx.TranscriptHasher.Write(body)
 	case format.HandshakeTypeCertificateVerify:
@@ -116,7 +113,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 			conn.Keys.ComputeApplicationTrafficSecret(false, hctx.MasterSecret[:], handshakeTranscriptHash)
 
 			// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here
-			hctx.PushMessage(conn, MessagesFlightClientCertificate_Finished, hctx.GenerateFinished(conn))
+			hctx.PushMessage(conn, hctx.GenerateFinished(conn))
 
 			// hctx.Keys.ComputeServerApplicationKeys()
 			// hctx.Keys.ComputeClientApplicationKeys()
@@ -124,14 +121,15 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 		}
 		return true // send acks to client finished
 	case format.HandshakeTypeNewSessionTicket:
-		log.Printf("TODO - message type %d not supported", handshakeHdr.HandshakeType)
+		log.Printf("TODO - encrypted message type %d not supported", handshakeHdr.HandshakeType)
 		// But we must send ack, or otherwise server will continue sending it forever
 	case format.HandshakeTypeKeyUpdate:
-		log.Printf("TODO - message type %d not supported", handshakeHdr.HandshakeType)
+		log.Printf("TODO - encrypted message type %d not supported", handshakeHdr.HandshakeType)
 		// TODO - implement key update
 		// But we must send ack, or otherwise server will continue sending it forever
 	default:
-		log.Printf("TODO - message type %d not supported", handshakeHdr.HandshakeType)
+		// includes client and server hello
+		log.Printf("TODO - encrypted message type %d not supported", handshakeHdr.HandshakeType)
 		//rc.opts.Stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)
 	}
 	return false

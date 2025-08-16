@@ -58,7 +58,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 		if !serverHello.Extensions.CookieSet {
 			return nil, ErrServerHRRContainsNoCookie
 		}
-		if hctx.SendQueueFlight() >= handshake.MessagesFlightClientHello2 {
+		if !hctx.ReceivedFlight(conn, handshake.MessagesFlightServerHRR) {
 			return nil, nil
 		}
 		// [rfc8446:4.4.1] replace initial hello message with its hash if HRR was used
@@ -73,7 +73,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 		_, _ = hctx.TranscriptHasher.Write(messageBody)
 
 		clientHelloMsg := rc.generateClientHello(hctx, true, serverHello.Extensions.Cookie)
-		hctx.PushMessage(conn, handshake.MessagesFlightClientHello2, clientHelloMsg)
+		hctx.PushMessage(conn, clientHelloMsg)
 		return conn, nil
 	}
 	if handshakeHdr.MessageSeq < conn.Keys.NextMessageSeqReceive {
@@ -88,11 +88,9 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	if !serverHello.Extensions.KeyShare.X25519PublicKeySet {
 		return nil, ErrSupportOnlyX25519
 	}
-	if hctx.ServerHelloReceived {
-		// TODO - protocol violation, second server hello
+	if !hctx.ReceivedFlight(conn, handshake.MessagesFlightServerHello_Finished) {
 		return nil, nil
 	}
-	hctx.ServerHelloReceived = true
 	handshakeHdr.AddToHash(hctx.TranscriptHasher)
 	_, _ = hctx.TranscriptHasher.Write(messageBody)
 

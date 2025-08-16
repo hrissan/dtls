@@ -102,7 +102,16 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 			log.Printf("finished message verify error")
 		}
 		log.Printf("finished message verify ok: %+v", msg)
-		if !conn.RoleServer { // server finished is not part of traffic secret transcript
+		if conn.RoleServer {
+			if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Epoch == 2 {
+				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
+				conn.Keys.Send.Epoch++
+				conn.Keys.Send.NextSegmentSequence = 0
+				//conn.Handshake = nil // TODO - reuse into pool
+				conn.Handler = &exampleHandler{toSend: "Hello from server\n"}
+				registerInSender = true
+			}
+		} else { // server finished is not part of traffic secret transcript
 			handshakeHdr.AddToHash(hctx.TranscriptHasher)
 			_, _ = hctx.TranscriptHasher.Write(body)
 			// TODO - on server, secrets must be calculated, when sending server finished, not here

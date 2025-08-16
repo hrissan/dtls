@@ -201,7 +201,7 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 		}
 		conn.Keys.ExpectEpochUpdate = false
 		receiver.Symmetric = conn.Keys.NewReceiveKeys
-		receiver.NextSegmentSequence = 1 // TODO - update replay window
+		receiver.NextSegmentSequence = seq + 1 // TODO - update replay window
 		receiver.Epoch++
 		conn.Keys.FailedDeprotectionCounter = conn.Keys.NewReceiveKeysFailedDeprotectionCounter
 		conn.Keys.NewReceiveKeys = keys.SymmetricKeys{} // remove alias
@@ -278,7 +278,8 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 				conn.Keys.Send.Epoch++
 				conn.Keys.Send.NextSegmentSequence = 0
 				conn.Handshake = nil // TODO - reuse into pool
-				conn.Handler = &exampleHandler{toSend: "Hello\n"}
+				conn.Handler = &exampleHandler{toSend: "Hello from client\n"}
+				registerInSender = true
 			}
 			return // TODO - more checks
 		case format.PlaintextContentTypeApplicationData:

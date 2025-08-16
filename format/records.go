@@ -20,7 +20,7 @@ const (
 type PlaintextRecordHeader struct {
 	ContentType byte
 	// Version is fixed, not stored
-	Epoch          uint16
+	// epoch is fixed to 0 for plaintext messages, do not store
 	SequenceNumber uint64 // stored as 48-bit
 	// Length is checked, not stored
 }
@@ -28,6 +28,7 @@ type PlaintextRecordHeader struct {
 var ErrPlaintextRecordHeaderTooShort = errors.New("plaintext record header too short")
 var ErrPlaintextRecordBodyTooShort = errors.New("plaintext record body too short")
 var ErrPlaintextRecordBodyTooLong = errors.New("plaintext record body exceeds 2^14")
+var ErrPlaintextRecordBodyEpochNonZero = errors.New("plaintext record body non zero epoch")
 var ErrPlaintextRecordWrongLegacyRecordVersion = errors.New("plaintext record wrong legacy record version")
 
 func IsCiphertextRecord(fb byte) bool {
@@ -57,7 +58,10 @@ func (hdr *PlaintextRecordHeader) Parse(datagram []byte) (n int, body []byte, er
 	if datagram[1] != 0xFE || datagram[2] != 0xFD {
 		return 0, nil, ErrPlaintextRecordWrongLegacyRecordVersion
 	}
-	hdr.Epoch = binary.BigEndian.Uint16(datagram[3:5])
+	epoch := binary.BigEndian.Uint16(datagram[3:5])
+	if epoch != 0 {
+		return 0, nil, ErrPlaintextRecordBodyEpochNonZero
+	}
 	hdr.SequenceNumber = binary.BigEndian.Uint64(datagram[3:11]) & 0xFFFFFFFFFFFF
 	length := int(binary.BigEndian.Uint16(datagram[11:13]))
 	if length > MaxPlaintextRecordLength { // TODO - generate record_overflow alert
@@ -72,7 +76,7 @@ func (hdr *PlaintextRecordHeader) Parse(datagram []byte) (n int, body []byte, er
 
 func (hdr *PlaintextRecordHeader) Write(datagram []byte, length int) []byte {
 	datagram = append(datagram, hdr.ContentType, 0xFE, 0xFD)
-	datagram = binary.BigEndian.AppendUint16(datagram, hdr.Epoch)
+	datagram = binary.BigEndian.AppendUint16(datagram, 0)
 	datagram = AppendUint48(datagram, hdr.SequenceNumber)
 	if length < 0 || length > MaxPlaintextRecordLength {
 		panic("length of plaintext record out of range")

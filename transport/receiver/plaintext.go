@@ -58,7 +58,7 @@ func (rc *Receiver) processPlaintextRecord(hdr format.PlaintextRecordHeader, rec
 					continue
 				}
 				rc.opts.Stats.ServerHelloMessage(handshakeHdr, msg, addr)
-				rc.OnServerHello(body, handshakeHdr, msg, addr)
+				rc.OnServerHello(body, handshakeHdr, msg, addr, format.RecordNumber{SeqNum: hdr.SequenceNumber, Epoch: 0})
 			default:
 				rc.opts.Stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)
 			}

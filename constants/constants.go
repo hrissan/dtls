@@ -9,3 +9,5 @@ const MaxHashLength = 32
 const MaxCertificateChainLength = 16
 
 const MaxOutgoingHRRDatagramLength = 512
+
+const MaxSendAcks = 32

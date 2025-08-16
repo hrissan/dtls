@@ -13,6 +13,7 @@ import (
 func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte) (registerInSender bool) {
 	// we ignore handshakeHdr.MessageSeq here TODO - check, update
 	switch handshakeHdr.HandshakeType {
+	case format.HandshakeTypeServerHello: // but not
 	case format.HandshakeTypeEncryptedExtensions:
 		var msg format.ExtensionsSet
 		if err := msg.ParseOutside(body, false, true, false); err != nil {

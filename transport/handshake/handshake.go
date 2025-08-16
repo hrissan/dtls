@@ -11,11 +11,14 @@ import (
 	"golang.org/x/crypto/curve25519"
 )
 
-const MessagesFlightClientHello1 = 0
-const MessagesFlightServerHRR = 1
-const MessagesFlightClientHello2 = 2
-const MessagesFlightServerHello_Finished = 3       // ServerHello, EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify, Finished
-const MessagesFlightClientCertificate_Finished = 4 // Certificate, CertificateVerify, Finished
+const (
+	// zero is reserved as a flag for "flight not set"
+	MessagesFlightClientHello1               = 1
+	MessagesFlightServerHRR                  = 2
+	MessagesFlightClientHello2               = 3
+	MessagesFlightServerHello_Finished       = 4 // ServerHello, EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify, Finished
+	MessagesFlightClientCertificate_Finished = 5 // Certificate, CertificateVerify, Finished
+)
 
 type HandshakeConnection struct {
 	LocalRandom  [32]byte
@@ -24,9 +27,13 @@ type HandshakeConnection struct {
 
 	MasterSecret [32]byte
 
-	receivedPartialMessageSet    bool // if set, Header.MessageSeq == Keys.NextMessageSeqReceive - 1
+	receivedPartialMessageSet    bool // if set, Header.MessageSeq == Keys.NextMessageSeqReceive
 	receivedPartialMessage       format.MessageHandshake
 	receivedPartialMessageOffset uint32 // we do not support holes for now. TODO - support holes
+
+	sendAcks map[format.RecordNumber]struct{} // len() <= MaxSendAcks, sorted before sending
+	// all message before that are implicitly acked by any message from messagesSendQueue
+	sendAcksfromMessageSeq uint16
 
 	sendQueueFlight         byte                      // message from the next flight will ack (clear) all messages in send queue
 	messagesSendQueue       []format.MessageHandshake // all messages here belong to the same flight. TODO - fixed array storage with some limit
@@ -35,7 +42,15 @@ type HandshakeConnection struct {
 
 	TranscriptHasher hash.Hash // when messages are added to messagesSendQueue, they are also added to TranscriptHasher
 
-	certificateChain format.MessageCertificate
+	certificateChain    format.MessageCertificate
+	ServerHelloReceived bool
+}
+
+func NewHandshakeConnection(hasher hash.Hash) *HandshakeConnection {
+	return &HandshakeConnection{
+		TranscriptHasher: hasher,
+		sendAcks:         make(map[format.RecordNumber]struct{}),
+	}
 }
 
 func (hctx *HandshakeConnection) ComputeKeyShare() {
@@ -46,13 +61,26 @@ func (hctx *HandshakeConnection) ComputeKeyShare() {
 	copy(hctx.X25519Public[:], x25519Public)
 }
 
-func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte) (registerInSender bool) {
+func (hctx *HandshakeConnection) AddAck(messageSeq uint16, rn format.RecordNumber) {
+	if messageSeq < hctx.sendAcksfromMessageSeq {
+		return
+	}
+	hctx.sendAcks[rn] = struct{}{}
+}
+
+func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) (registerInSender bool) {
+	if handshakeHdr.MessageSeq < conn.Keys.NextMessageSeqReceive {
+		hctx.AddAck(handshakeHdr.MessageSeq, rn) // otherwise, peer will send those messages forever
+		return false                             // totally ok to ignore
+	}
+	if handshakeHdr.MessageSeq > conn.Keys.NextMessageSeqReceive {
+		return false // totally ok to ignore
+	}
+	// we do not check that message is full here, because if partial message set, we want to clear that by common code
 	if !hctx.receivedPartialMessageSet {
-		if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
-			return false // totally ok to ignore
-		}
-		conn.Keys.NextMessageSeqReceive++
+		hctx.AddAck(handshakeHdr.MessageSeq, rn)
 		if !handshakeHdr.IsFragmented() {
+			conn.Keys.NextMessageSeqReceive++
 			return hctx.receivedFullMessage(conn, handshakeHdr, body)
 		}
 		hctx.receivedPartialMessageSet = true
@@ -62,16 +90,14 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 		hctx.receivedPartialMessage.Header = handshakeHdr
 		// now process partial message below
 	}
-	if handshakeHdr.MessageSeq != hctx.receivedPartialMessage.Header.MessageSeq {
-		return false // totally ok to ignore
-	}
 	if handshakeHdr.Length != hctx.receivedPartialMessage.Header.Length {
 		// TODO - alert and close connection, invariant violated
 		return false
 	}
 	if handshakeHdr.FragmentOffset > hctx.receivedPartialMessageOffset {
-		return false // we do not support holes, ignore
+		return false // we do not support holes, ignore, wait for earlier message first
 	}
+	hctx.AddAck(handshakeHdr.MessageSeq, rn) // should ack it independent of conditions below
 	newOffset := handshakeHdr.FragmentOffset + handshakeHdr.FragmentLength
 	if newOffset <= hctx.receivedPartialMessageOffset {
 		return false // nothing new, ignore
@@ -82,29 +108,30 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 		return false // ok, waiting for more fragments
 	}
 	hctx.receivedPartialMessageSet = false
+	conn.Keys.NextMessageSeqReceive++
 	registerInSender = hctx.receivedFullMessage(conn, hctx.receivedPartialMessage.Header, hctx.receivedPartialMessage.Body)
-	// TODO - return message body to pool
+	// TODO - return message body to pool here
 	return registerInSender
 }
 
 func (hctx *HandshakeConnection) SendQueueFlight() byte { return hctx.sendQueueFlight }
-
-// acks (removes) all previous flights
-func (hctx *HandshakeConnection) AckFlight(flight byte) {
-	if flight > hctx.sendQueueFlight { // implicit ack of all previous flights
-		hctx.messagesSendQueue = hctx.messagesSendQueue[:0]
-		hctx.SendQueueMessageOffset = 0
-		hctx.SendQueueFragmentOffset = 0
-		hctx.sendQueueFlight = flight
-	}
-}
 
 // also acks (removes) all previous flights
 func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, flight byte, msg format.MessageHandshake) {
 	if flight < hctx.sendQueueFlight {
 		panic("you cannot add message from previous flight")
 	}
-	hctx.AckFlight(flight)
+	if flight > hctx.sendQueueFlight {
+		// implicit ack of all previous flights
+		hctx.sendQueueFlight = flight
+		hctx.messagesSendQueue = hctx.messagesSendQueue[:0]
+		hctx.SendQueueMessageOffset = 0
+		hctx.SendQueueFragmentOffset = 0
+
+		// all received messages (and acks) were from the previous flight
+		hctx.sendAcksfromMessageSeq = conn.Keys.NextMessageSeqReceive
+		clear(hctx.sendAcks)
+	}
 	if conn.Keys.NextMessageSeqSend >= math.MaxUint16 {
 		// TODO - prevent wrapping next message seq
 		// close connection here
@@ -168,7 +195,6 @@ func (hctx *HandshakeConnection) constructDatagram(conn *ConnectionImpl, datagra
 func (hctx *HandshakeConnection) constructPlaintextRecord(conn *ConnectionImpl, datagram []byte, msg format.MessageHandshake) []byte {
 	recordHdr := format.PlaintextRecordHeader{
 		ContentType:    format.PlaintextContentTypeHandshake,
-		Epoch:          0,
 		SequenceNumber: conn.Keys.Send.NextEpoch0Sequence,
 	}
 	conn.Keys.Send.NextEpoch0Sequence++

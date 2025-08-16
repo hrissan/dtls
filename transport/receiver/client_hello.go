@@ -92,9 +92,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		return // TODO - replace older handshakes with the new ones (by cookie age)
 	}
 	// TODO - lock conn here
-	hctx := &handshake.HandshakeConnection{
-		TranscriptHasher: sha256.New(),
-	}
+	hctx := handshake.NewHandshakeConnection(sha256.New())
 	conn.Handshake = hctx
 
 	conn.Keys.Receive.NextEpoch0Sequence = 1 // TODO - get from plaintext record we received
@@ -215,7 +213,6 @@ func generateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 	helloRetryRequest.Extensions.Cookie = ck
 	recordHdr := format.PlaintextRecordHeader{
 		ContentType:    format.PlaintextContentTypeHandshake,
-		Epoch:          0,
 		SequenceNumber: 0,
 	}
 	msgHeader := format.MessageHandshakeHeader{

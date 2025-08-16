@@ -14,13 +14,13 @@ import (
 
 var ErrServerHRRContainsNoCookie = errors.New("server HRR contains no cookie")
 
-func (rc *Receiver) OnServerHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort) {
+func (rc *Receiver) OnServerHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort, rn format.RecordNumber) {
 	if rc.opts.RoleServer {
 		rc.opts.Stats.ErrorServerReceivedServerHello(addr)
 		// TODO - send alert
 		return
 	}
-	hctxToSend, err := rc.onServerHello(messageBody, handshakeHdr, serverHello, addr)
+	hctxToSend, err := rc.onServerHello(messageBody, handshakeHdr, serverHello, addr, rn)
 	if hctxToSend != nil { // motivation: do not register under our lock
 		rc.snd.RegisterConnectionForSend(hctxToSend)
 	}
@@ -30,7 +30,7 @@ func (rc *Receiver) OnServerHello(messageBody []byte, handshakeHdr format.Messag
 	}
 }
 
-func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
+func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort, rn format.RecordNumber) (*handshake.ConnectionImpl, error) {
 	rc.handMu.Lock()
 	conn := rc.connections[addr]
 	rc.handMu.Unlock()
@@ -49,12 +49,12 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	if serverHello.CipherSuite != format.CypherSuite_TLS_AES_128_GCM_SHA256 {
 		return nil, ErrSupportOnlyTLS_AES_128_GCM_SHA256
 	}
-	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
-		return nil, nil // not expecting message
-	}
-	conn.Keys.NextMessageSeqReceive++
-
 	if serverHello.IsHelloRetryRequest() {
+		// HRR is never acked, because there is no context on server for that
+		if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
+			return nil, nil // TODO - alert, hello retry request out of order
+		}
+		conn.Keys.NextMessageSeqReceive++
 		if !serverHello.Extensions.CookieSet {
 			return nil, ErrServerHRRContainsNoCookie
 		}
@@ -76,13 +76,23 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 		hctx.PushMessage(conn, handshake.MessagesFlightClientHello2, clientHelloMsg)
 		return conn, nil
 	}
+	if handshakeHdr.MessageSeq < conn.Keys.NextMessageSeqReceive {
+		hctx.AddAck(handshakeHdr.MessageSeq, rn)
+		return nil, nil // repeat of server hello, because we did not ack it yet
+	}
+	if handshakeHdr.MessageSeq > conn.Keys.NextMessageSeqReceive {
+		return nil, nil // not expecting message
+	}
+	conn.Keys.NextMessageSeqReceive++
+
 	if !serverHello.Extensions.KeyShare.X25519PublicKeySet {
 		return nil, ErrSupportOnlyX25519
 	}
-	if hctx.SendQueueFlight() >= handshake.MessagesFlightServerHello_Finished {
+	if hctx.ServerHelloReceived {
+		// TODO - protocol violation, second server hello
 		return nil, nil
 	}
-	hctx.AckFlight(handshake.MessagesFlightServerHello_Finished)
+	hctx.ServerHelloReceived = true
 	handshakeHdr.AddToHash(hctx.TranscriptHasher)
 	_, _ = hctx.TranscriptHasher.Write(messageBody)
 
@@ -97,7 +107,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	masterSecret := conn.Keys.ComputeHandshakeKeys(false, sharedSecret, handshakeTranscriptHash)
 	copy(hctx.MasterSecret[:], masterSecret)
 
-	log.Printf("TODO - process server hello")
+	log.Printf("processed server hello")
 	return nil, nil
 }
 

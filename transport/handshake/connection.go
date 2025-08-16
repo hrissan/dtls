@@ -111,8 +111,9 @@ func (conn *ConnectionImpl) receivedKeyUpdate(handshakeHdr format.MessageHandsha
 	return
 }
 
-func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, seqNumData []byte, header []byte, body []byte) (decrypted []byte, seq uint64, contentType byte, err error) {
+func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, seqNumData []byte, header []byte, body []byte) (decrypted []byte, rn format.RecordNumber, contentType byte, err error) {
 	receiver := &conn.Keys.Receive
+	var seq uint64
 	if hdr.MatchesEpoch(receiver.Epoch) {
 		decrypted, seq, contentType, err = receiver.Symmetric.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, conn.Keys.Receive.NextSegmentSequence,
 			seqNumData, header, body)
@@ -134,7 +135,7 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 		// So, we decided we better store new keys
 		if !conn.Keys.NewReceiveKeysSet {
 			conn.Keys.NewReceiveKeysSet = true
-			conn.Keys.NewReceiveKeys.ComputeKeys(receiver.ApplicationTrafficSecret[:])
+			conn.Keys.NewReceiveKeys.ComputeKeys(receiver.ApplicationTrafficSecret[:]) // next application traffic secret is calculated from the previous one
 			conn.Keys.NewReceiveKeysFailedDeprotectionCounter = 0
 		}
 		decrypted, seq, contentType, err = conn.Keys.NewReceiveKeys.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, 0,
@@ -153,18 +154,19 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 		conn.Keys.NewReceiveKeysSet = false
 		conn.Keys.NewReceiveKeysFailedDeprotectionCounter = 0
 	}
+	rn = format.RecordNumber{SeqNum: seq, Epoch: receiver.Epoch}
 	return
 }
 
 func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptions, hdr format.CiphertextRecordHeader, cid []byte, seqNumData []byte, header []byte, body []byte, addr netip.AddrPort) (registerInSender bool) {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
-	decrypted, seq, contentType, err := conn.deprotectLocked(hdr, seqNumData, header, body)
+	decrypted, rn, contentType, err := conn.deprotectLocked(hdr, seqNumData, header, body)
 	if err != nil {
 		// TODO - alert, either garbage, attack or epoch wrapping
 		return
 	}
-	log.Printf("dtls: ciphertext %v deprotected with seq %d cid(hex): %x from %v, body(hex): %x", hdr, seq, cid, addr, decrypted)
+	log.Printf("dtls: ciphertext %v deprotected with rn=%v cid(hex): %x from %v, body(hex): %x", hdr, rn, cid, addr, decrypted)
 	if !format.IsInnerPlaintextRecord(contentType) {
 		// TODO - send alert
 		return
@@ -201,7 +203,7 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 				continue
 			}
 			if conn.Handshake != nil {
-				registerInSender = conn.Handshake.ReceivedMessage(conn, handshakeHdr, body) || registerInSender
+				registerInSender = conn.Handshake.ReceivedMessage(conn, handshakeHdr, body, rn) || registerInSender
 			}
 		case format.PlaintextContentTypeAck:
 			log.Printf("dtls: got ack(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)

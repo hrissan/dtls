@@ -145,9 +145,7 @@ func (rc *Receiver) startConnection(addr netip.AddrPort) (*handshake.ConnectionI
 	} // TODO - if this is long going handshake, clear and start again?
 
 	// TODO - get from pool
-	hctx := &handshake.HandshakeConnection{
-		TranscriptHasher: sha256.New(),
-	}
+	hctx := handshake.NewHandshakeConnection(sha256.New())
 	conn = &handshake.ConnectionImpl{
 		Addr:       addr,
 		RoleServer: false,

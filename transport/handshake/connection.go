@@ -49,14 +49,16 @@ type ConnectionImpl struct {
 
 	// we do not support those messages to be fragmented, because we do not want
 	// to allocate memory for reassembly
-	ackKeyUpdate                 format.RecordNumber // if != 0, send ack
-	ackKeyNewSessionTicket       format.RecordNumber // if != 0, send ack
-	sendKeyUpdateSequnce         format.RecordNumber // if != 0, send KeyUpdate until acked
-	sendNewSessionTicketSequence format.RecordNumber // if != 0, send NewSessionTicket until acked
+	ackKeyUpdate           format.RecordNumber // if != 0, send ack
+	ackKeyNewSessionTicket format.RecordNumber // if != 0, send ack
+	sendKeyUpdateRN        format.RecordNumber // if != 0, already sent, on resend overwrite rn
+	sendNewSessionTicketRN format.RecordNumber // if != 0, already sent, on resend overwrite rn
 
-	Handshake  *HandshakeConnection // content is also protected by mutex above
-	Handler    ConnectionHandler
-	RoleServer bool // changes very rarely
+	Handshake            *HandshakeConnection // content is also protected by mutex above
+	Handler              ConnectionHandler
+	RoleServer           bool // changes very rarely
+	sendKeyUpdate        bool
+	sendNewSessionTicket bool
 
 	InSenderQueue bool // intrusive, must not be changed except by sender, protected by sender mutex
 }
@@ -213,12 +215,20 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 				registerInSender = conn.Handshake.ReceivedMessage(conn, handshakeHdr, body, rn) || registerInSender
 			}
 		case format.PlaintextContentTypeAck:
+			var insideBody []byte
+			if insideBody, err = format.ParseMessageAcks(messageData); err != nil {
+				log.Printf("tinydtls: failed to parse ack header: %v", err)
+				return
+			}
+			registerInSender = conn.ReceiveAcks(insideBody)
+
 			log.Printf("dtls: got ack(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)
-			// TODO - if all messages from epoch 2 acked, then switch sending epoch
-			if conn.Keys.Send.Epoch == 2 {
+			// if all messages from epoch 2 acked, then switch sending epoch
+			if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Epoch == 2 {
 				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
 				conn.Keys.Send.Epoch++
 				conn.Keys.Send.NextSegmentSequence = 0
+				conn.Handshake = nil // TODO - reuse into pool
 			}
 			return // TODO - more checks
 		case format.PlaintextContentTypeApplicationData:

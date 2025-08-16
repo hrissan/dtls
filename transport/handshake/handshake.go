@@ -25,13 +25,13 @@ type HandshakeConnection struct {
 	receivedPartialMessage       format.MessageHandshake
 	receivedPartialMessageOffset uint32 // we do not support holes for now. TODO - support holes
 
-	// end of previous flight, all messages before are implicitly acked by any message from messagesSendQueue
+	// end of previous flight, all messages before are implicitly acked by any message from messages
 	sendAcksfromMessageSeq uint16
 	sendAcks               AcksSet
 
 	SendQueue SendQueue
 
-	TranscriptHasher hash.Hash // when messages are added to messagesSendQueue, they are also added to TranscriptHasher
+	TranscriptHasher hash.Hash // when messages are added to messages, they are also added to TranscriptHasher
 
 	certificateChain format.MessageCertificate
 }
@@ -163,7 +163,7 @@ func (hctx *HandshakeConnection) ConstructDatagram(conn *ConnectionImpl, datagra
 	return
 }
 
-func (conn *ConnectionImpl) constructRecord(datagram []byte, msg format.MessageHandshake, fragmentOffset uint32, maxFragmentLength uint32) (recordSize int, fragmentLength uint32, rn format.RecordNumber) {
+func (conn *ConnectionImpl) constructRecord(datagram []byte, msg format.MessageHandshake, fragmentOffset uint32, maxFragmentLength uint32) (recordSize int, fragmentInfo format.FragmentInfo, rn format.RecordNumber) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
 	if msg.Header.Length != uint32(len(msg.Body)) {
 		panic("invariant of send queue fragment offset violated")
@@ -176,33 +176,31 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, msg format.MessageH
 	if msg.Header.HandshakeType == format.HandshakeTypeClientHello || msg.Header.HandshakeType == format.HandshakeTypeServerHello {
 		remainingSpace := len(datagram) - format.MessageHandshakeHeaderSize + format.PlaintextRecordHeaderSize
 		if remainingSpace <= 0 {
-			return 0, 0, rn
+			return
 		}
-		fragmentLength = min(maxFragmentLength, uint32(remainingSpace))
-		if fragmentLength <= constants.MinFragmentBodySize && fragmentLength != maxFragmentLength {
-			return 0, 0, rn // do not send tiny records at the end of datagram
+		msg.Header.FragmentLength = min(maxFragmentLength, uint32(remainingSpace))
+		if msg.Header.FragmentLength <= constants.MinFragmentBodySize && msg.Header.FragmentLength != maxFragmentLength {
+			return // do not send tiny records at the end of datagram
 		}
-		msg.Header.FragmentLength = fragmentLength
 		da, rn := conn.constructPlaintextRecord(datagram[:0], msg)
-		if uint32(len(da)) != fragmentLength+format.MessageHandshakeHeaderSize+format.PlaintextRecordHeaderSize {
+		if uint32(len(da)) != msg.Header.FragmentLength+format.MessageHandshakeHeaderSize+format.PlaintextRecordHeaderSize {
 			panic("plaintext handshake record construction length invariant failed")
 		}
-		return len(da), fragmentLength, rn
+		return len(da), msg.Header.FragmentInfo, rn
 	}
 	remainingSpace := len(datagram) - format.MessageHandshakeHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 	if remainingSpace <= 0 {
-		return 0, 0, rn
+		return
 	}
-	fragmentLength = min(maxFragmentLength, uint32(remainingSpace))
-	if fragmentLength <= constants.MinFragmentBodySize && fragmentLength != maxFragmentLength {
-		return 0, 0, rn // do not send tiny records at the end of datagram
+	msg.Header.FragmentLength = min(maxFragmentLength, uint32(remainingSpace))
+	if msg.Header.FragmentLength <= constants.MinFragmentBodySize && msg.Header.FragmentLength != maxFragmentLength {
+		return // do not send tiny records at the end of datagram
 	}
-	msg.Header.FragmentLength = fragmentLength // those are scratch space inside header
 	da, rn := conn.constructCiphertextRecord(datagram[:0], msg)
 	if len(da) > len(datagram) {
 		panic("ciphertext handshake record construction length invariant failed")
 	}
-	return len(da), fragmentLength, rn
+	return len(da), msg.Header.FragmentInfo, rn
 }
 
 func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg format.MessageHandshake) ([]byte, format.RecordNumber) {

@@ -63,10 +63,14 @@ func (s *Buffer[T]) PushBack(element T) {
 }
 
 func (s *Buffer[T]) Front() T {
+	return *s.FrontRef()
+}
+
+func (s *Buffer[T]) FrontRef() *T {
 	if s.write_pos == s.read_pos {
 		panic("empty circular buffer")
 	}
-	return s.elements[s.read_pos&s.mask()]
+	return &s.elements[s.read_pos&s.mask()]
 }
 
 func (s *Buffer[T]) Index(pos int) T {

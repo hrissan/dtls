@@ -16,10 +16,10 @@ func (msg *OutgoingHandshakeMessage) FullyAcked() bool {
 
 func (msg *OutgoingHandshakeMessage) Ack(fragmentOffset uint32, fragmentLength uint32) {
 	fragmentEnd := fragmentOffset + fragmentLength
-	if fragmentOffset < msg.SendEnd && fragmentEnd > msg.SendEnd {
+	if fragmentOffset < msg.SendEnd && fragmentEnd >= msg.SendEnd {
 		msg.SendEnd = fragmentOffset
 	}
-	if fragmentOffset < msg.SendOffset && fragmentEnd > msg.SendOffset {
+	if fragmentOffset <= msg.SendOffset && fragmentEnd > msg.SendOffset {
 		msg.SendOffset = fragmentEnd
 	}
 	// as both conditions above could be true, ends can become reversed, fix here

@@ -2,6 +2,7 @@ package format
 
 import (
 	"cmp"
+	"errors"
 )
 
 // TODO - do not allow SeqNum to go over 2^48
@@ -13,6 +14,7 @@ const MessageAckRecordNumberSize = 16
 const maxUint48 = 0xFFFFFFFFFFFF
 
 // simple implementation for easy debugging
+// uncomment compact implementation below after testing
 
 type RecordNumber struct {
 	epoch  uint16
@@ -68,3 +70,16 @@ func RecordNumberCmp(a, b RecordNumber) int {
 }
 
 */
+
+var ErrAckMessageWrongSize = errors.New("ack record size not multiple of 16")
+
+func ParseMessageAcks(body []byte) (insideBody []byte, err error) {
+	var offset int
+	if offset, insideBody, err = ParserReadUint16Length(body, offset); err != nil {
+		return nil, err
+	}
+	if len(insideBody)%MessageAckRecordNumberSize != 0 {
+		return insideBody, ErrAckMessageWrongSize
+	}
+	return insideBody, ParserReadFinish(body, offset)
+}

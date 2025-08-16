@@ -5,7 +5,6 @@ import (
 	"hash"
 	"log"
 	"math"
-	"slices"
 
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/format"
@@ -24,8 +23,8 @@ type HandshakeConnection struct {
 	receivedPartialMessage       format.MessageHandshake
 	receivedPartialMessageOffset uint32 // we do not support holes for now. TODO - support holes
 
-	sendAcks map[format.RecordNumber]struct{} // len() <= MaxSendAcks, sorted before sending
-	// all message before that are implicitly acked by any message from messagesSendQueue
+	sendAcks AcksSet
+	// end of previous flight, all messages before are implicitly acked by any message from messagesSendQueue
 	sendAcksfromMessageSeq uint16
 
 	currentFlight byte // both send and receive
@@ -40,10 +39,11 @@ type HandshakeConnection struct {
 }
 
 func NewHandshakeConnection(hasher hash.Hash) *HandshakeConnection {
-	return &HandshakeConnection{
+	hctx := &HandshakeConnection{
 		TranscriptHasher: hasher,
-		sendAcks:         make(map[format.RecordNumber]struct{}),
 	}
+	hctx.sendAcks.Clear() // starts in full state, but not a big deal
+	return hctx
 }
 
 func (hctx *HandshakeConnection) ComputeKeyShare() {
@@ -58,7 +58,7 @@ func (hctx *HandshakeConnection) AddAck(messageSeq uint16, rn format.RecordNumbe
 	if messageSeq < hctx.sendAcksfromMessageSeq {
 		return
 	}
-	hctx.sendAcks[rn] = struct{}{}
+	hctx.sendAcks.Add(rn)
 }
 
 func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byte) (newFlight bool) {
@@ -72,7 +72,7 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	hctx.SendQueueFragmentOffset = 0
 
 	hctx.sendAcksfromMessageSeq = conn.Keys.NextMessageSeqReceive
-	clear(hctx.sendAcks)
+	hctx.sendAcks.Clear()
 	return true
 }
 
@@ -164,31 +164,25 @@ func (hctx *HandshakeConnection) ConstructDatagram(conn *ConnectionImpl, datagra
 			hctx.SendQueueFragmentOffset = 0
 		}
 	}
-	if len(hctx.sendAcks) != 0 && conn.Keys.Send.Epoch != 0 {
+	if hctx.sendAcks.Size() != 0 && conn.Keys.Send.Epoch != 0 {
 		// TODO - we shuold send only encrypted acks, but is the second condition correct?
 		acksSpace := len(datagram) - datagramSize - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 		if acksSpace < format.MessageAckRecordNumberSize { // not a single one fits
 			return datagramSize, true
 		}
-		acksCount := acksSpace / format.MessageAckRecordNumberSize
-		if acksSpace < constants.MinFragmentBodySize && acksCount != len(hctx.sendAcks) {
+		acksCount := min(hctx.sendAcks.Size(), acksSpace/format.MessageAckRecordNumberSize)
+		if acksSpace < constants.MinFragmentBodySize && acksCount != hctx.sendAcks.Size() {
 			return datagramSize, true // do not send tiny records at the end of datagram
 		}
-		// TODO - this algorithm looks expensive, test and replace with linear search during adding ack?
-		sortedAcks := make([]format.RecordNumber, 0, constants.MaxSendAcks)
-		for ack := range hctx.sendAcks { // we must sort all acks, not random acksCount only
-			sortedAcks = append(sortedAcks, ack)
-		}
-		slices.SortFunc(sortedAcks, format.RecordNumberCmp)
-		for _, ack := range sortedAcks {
-			delete(hctx.sendAcks, ack)
-		}
-		da := hctx.constructCiphertextAck(conn, datagram[datagramSize:datagramSize], sortedAcks)
+		sendAcks := hctx.sendAcks.PopSorted(acksCount)
+
+		da := hctx.constructCiphertextAck(conn, datagram[datagramSize:datagramSize], sendAcks)
+
 		if len(da) > len(datagram[datagramSize:]) {
 			panic("ciphertext ack record construction length invariant failed")
 		}
 		datagramSize += len(da)
-		return datagramSize, len(hctx.sendAcks) != 0
+		return datagramSize, hctx.sendAcks.Size() != 0
 	}
 	return datagramSize, false // everything sent, wait for ack (TODO) or local timer to start from the scratch
 }

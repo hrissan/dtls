@@ -315,3 +315,47 @@ func (conn *ConnectionImpl) constructCiphertextAck(datagram []byte, acks []forma
 	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
 	return datagram
 }
+
+func (conn *ConnectionImpl) constructCiphertextApplication(record []byte) []byte {
+	// TODO - harmonize with code above
+	send := &conn.Keys.Send
+	epoch := send.Epoch
+	seq := send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
+	send.NextSegmentSequence++
+	log.Printf("constructing ciphertext application with seq: %d", seq)
+
+	gcm := send.Symmetric.Write
+	iv := send.Symmetric.WriteIV
+	keys.FillIVSequence(iv[:], seq)
+
+	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
+	hdr := format.NewCiphertextRecordHeader(false, true, true, epoch)
+	const hdrSize = format.OutgoingCiphertextRecordHeader
+	record = append(record, format.PlaintextContentTypeApplicationData)
+
+	padding := len(record) % 4 // test our code with different padding. TODO - remove later
+	// max padding max correspond to format.MaxOutgoingCiphertextRecordOverhead
+	for i := 0; i != padding+constants.AEADSealSize; i++ {
+		record = append(record, 0)
+	}
+
+	record[0] = hdr.FirstByte
+	binary.BigEndian.PutUint16(record[1:], uint16(seq))
+	binary.BigEndian.PutUint16(record[3:], uint16(len(record)-hdrSize))
+
+	encrypted := gcm.Seal(record[hdrSize:hdrSize], iv[:], record[hdrSize:len(record)-constants.AEADSealSize], record[:hdrSize])
+	if &encrypted[0] != &record[hdrSize] {
+		panic("gcm.Seal reallocated datagram storage")
+	}
+	if len(encrypted) != len(record[hdrSize:]) {
+		panic("gcm.Seal length mismatch")
+	}
+
+	if !conn.Keys.DoNotEncryptSequenceNumbers {
+		if err := send.Symmetric.EncryptSequenceNumbers(record[1:3], record[hdrSize:]); err != nil {
+			panic("cipher text too short when sending")
+		}
+	}
+	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
+	return record
+}

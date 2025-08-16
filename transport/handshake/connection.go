@@ -94,9 +94,24 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 		conn.ackKeyNewSessionTicket = format.RecordNumber{}
 	}
 	// TODO - application data
-	// if conn.handler != nil {
-	//	recordSize, send, add := conn.handler.OnWriteApplicationRecord(datagram)
-	// }
+	if conn.Handler != nil {
+		userSpace := len(datagram) - datagramSize - 1 - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+		if userSpace >= constants.MinFragmentBodySize {
+			record := datagram[datagramSize+format.OutgoingCiphertextRecordHeader : datagramSize+format.OutgoingCiphertextRecordHeader+userSpace]
+			recordSize, send, add := conn.Handler.OnWriteApplicationRecord(record)
+			if recordSize > len(record) {
+				panic("ciphertext user handler overflows allowed record")
+			}
+			if send {
+				da := conn.constructCiphertextApplication(datagram[datagramSize : datagramSize+format.OutgoingCiphertextRecordHeader+recordSize])
+				if len(da) > len(datagram[datagramSize:]) {
+					panic("ciphertext application record construction length invariant failed")
+				}
+				datagramSize += len(da)
+				addToSendQueue = addToSendQueue || add
+			}
+		}
+	}
 	return
 }
 
@@ -263,6 +278,7 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 				conn.Keys.Send.Epoch++
 				conn.Keys.Send.NextSegmentSequence = 0
 				conn.Handshake = nil // TODO - reuse into pool
+				conn.Handler = &exampleHandler{toSend: "Hello\n"}
 			}
 			return // TODO - more checks
 		case format.PlaintextContentTypeApplicationData:
@@ -273,4 +289,22 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 		}
 	}
 	return
+}
+
+type exampleHandler struct {
+	toSend string
+}
+
+func (h *exampleHandler) OnDisconnect(err error) {
+
+}
+
+func (h *exampleHandler) OnWriteApplicationRecord(record []byte) (recordSize int, send bool, addToSendQueue bool) {
+	toSend := copy(record, h.toSend)
+	h.toSend = h.toSend[toSend:]
+	return toSend, toSend != 0, len(h.toSend) > 0
+}
+
+func (h *exampleHandler) OnReadApplicationRecord(record []byte) error {
+	return nil
 }

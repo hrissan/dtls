@@ -13,7 +13,8 @@ const MaxCiphertextRecordLength = MaxPlaintextRecordLength + 256 // [rfc8446:5.2
 // 5 is first byte plus 16-bit seqnum plus 16-bit length
 // 1 is content type size
 // 4 is max padding
-const MaxOutgoingCiphertextRecordOverhead = 5 + 1 + 4
+const OutgoingCiphertextRecordHeader = 5
+const MaxOutgoingCiphertextRecordOverhead = OutgoingCiphertextRecordHeader + 1 + 4
 
 const (
 	PlaintextContentTypeAlert           = 21

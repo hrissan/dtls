@@ -10,7 +10,7 @@ import (
 	"github.com/hrissan/tinydtls/signature"
 )
 
-func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.MessageHandshakeHeader, body []byte) (registerInSender bool) {
+func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte) (registerInSender bool) {
 	// we ignore handshakeHdr.MessageSeq here TODO - check, update
 	switch handshakeHdr.HandshakeType {
 	case format.HandshakeTypeEncryptedExtensions:
@@ -99,12 +99,12 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 		var finishedTranscriptHashStorage [constants.MaxHashLength]byte
 		finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
-		mustBeFinished := hctx.Keys.Receive.ComputeFinished(sha256.New(), finishedTranscriptHash)
+		mustBeFinished := conn.Keys.Receive.ComputeFinished(sha256.New(), finishedTranscriptHash)
 		if string(msg.VerifyData[:msg.VerifyDataLength]) != string(mustBeFinished) {
 			log.Printf("finished message verify error")
 		}
 		log.Printf("finished message verify ok: %+v", msg)
-		if !hctx.RoleServer { // server finished is not part of traffic secret transcript
+		if !conn.RoleServer { // server finished is not part of traffic secret transcript
 			handshakeHdr.AddToHash(hctx.TranscriptHasher)
 			_, _ = hctx.TranscriptHasher.Write(body)
 			// TODO - on server, secrets must be calculated, when sending server finished, not here
@@ -112,10 +112,10 @@ func (hctx *HandshakeConnection) receivedFullMessage(handshakeHdr format.Message
 			var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 			handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
-			hctx.Keys.ComputeApplicationTrafficSecret(false, hctx.MasterSecret[:], handshakeTranscriptHash)
+			conn.Keys.ComputeApplicationTrafficSecret(false, hctx.MasterSecret[:], handshakeTranscriptHash)
 
 			// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here
-			hctx.PushMessage(MessagesFlightClientCertificate_Finished, hctx.GenerateFinished())
+			hctx.PushMessage(conn, MessagesFlightClientCertificate_Finished, hctx.GenerateFinished(conn))
 
 			// hctx.Keys.ComputeServerApplicationKeys()
 			// hctx.Keys.ComputeClientApplicationKeys()

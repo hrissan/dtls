@@ -51,7 +51,7 @@ type StatsLog struct {
 func NewStatsLogVerbose() *StatsLog {
 	s := &StatsLog{}
 	s.level.Store(1)
-	s.printDatagrams.Store(true)
+	s.printDatagrams.Store(false)
 	s.printMessages.Store(true)
 	return s
 }
@@ -78,7 +78,7 @@ func (s *StatsLog) SocketReadDatagram(datagram []byte, addr netip.AddrPort) {
 }
 
 func (s *StatsLog) SocketWriteDatagram(datagram []byte, addr netip.AddrPort) {
-	if s.level.Load() < 0 {
+	if !s.printDatagrams.Load() {
 		return
 	}
 	log.Printf("tinydtls: socket write %d bytes from addr=%v hex(datagram): %x", len(datagram), addr, datagram)

@@ -30,24 +30,29 @@ func (rc *Receiver) OnServerHello(messageBody []byte, handshakeHdr format.Messag
 	}
 }
 
-func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort) (*handshake.HandshakeConnection, error) {
+func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
 	rc.handMu.Lock()
-	defer rc.handMu.Unlock()
-	hctx := rc.handshakes[addr]
-	if hctx == nil {
+	conn := rc.connections[addr]
+	rc.handMu.Unlock()
+	if conn == nil {
 		// TODO - send alert here
 		return nil, nil
 	}
+	if conn.Handshake == nil {
+		// TODO - send alert here
+		return nil, nil
+	}
+	hctx := conn.Handshake
 	if serverHello.Extensions.SupportedVersions.SelectedVersion != format.DTLS_VERSION_13 {
 		return nil, ErrSupportOnlyDTLS13
 	}
 	if serverHello.CipherSuite != format.CypherSuite_TLS_AES_128_GCM_SHA256 {
 		return nil, ErrSupportOnlyTLS_AES_128_GCM_SHA256
 	}
-	if handshakeHdr.MessageSeq != hctx.Keys.NextMessageSeqReceive {
+	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
 		return nil, nil // not expecting message
 	}
-	hctx.Keys.NextMessageSeqReceive++
+	conn.Keys.NextMessageSeqReceive++
 
 	if serverHello.IsHelloRetryRequest() {
 		if !serverHello.Extensions.CookieSet {
@@ -68,8 +73,8 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 		_, _ = hctx.TranscriptHasher.Write(messageBody)
 
 		clientHelloMsg := rc.generateClientHello(hctx, true, serverHello.Extensions.Cookie)
-		hctx.PushMessage(handshake.MessagesFlightClientHello2, clientHelloMsg)
-		return hctx, nil
+		hctx.PushMessage(conn, handshake.MessagesFlightClientHello2, clientHelloMsg)
+		return conn, nil
 	}
 	if !serverHello.Extensions.KeyShare.X25519PublicKeySet {
 		return nil, ErrSupportOnlyX25519
@@ -89,7 +94,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	masterSecret := hctx.Keys.ComputeHandshakeKeys(false, sharedSecret, handshakeTranscriptHash)
+	masterSecret := conn.Keys.ComputeHandshakeKeys(false, sharedSecret, handshakeTranscriptHash)
 	copy(hctx.MasterSecret[:], masterSecret)
 
 	log.Printf("TODO - process server hello")

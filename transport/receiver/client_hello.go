@@ -79,22 +79,28 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		return
 	}
 
-	hctx, ok := rc.handshakes[addr]
-	if ok { // TODO - replace older handshakes with the new ones (by cookie age)
-		return
+	conn, ok := rc.connections[addr]
+	if !ok {
+		conn = &handshake.ConnectionImpl{
+			Addr:       addr,
+			RoleServer: true,
+			Handshake:  nil, // will be set below
+		}
+		rc.connections[addr] = conn
 	}
-	//rc.previousCode(localRandom, x25519key, messageBody, handshakeHdr, msg, addr, initialHelloTranscriptHash, keyShareSet)
-
-	hctx = &handshake.HandshakeConnection{
-		Addr:             addr,
-		RoleServer:       true,
+	if conn.Handshake != nil {
+		return // TODO - replace older handshakes with the new ones (by cookie age)
+	}
+	// TODO - lock conn here
+	hctx := &handshake.HandshakeConnection{
 		TranscriptHasher: sha256.New(),
 	}
-	hctx.Keys.Receive.NextEpoch0Sequence = 1 // TODO - get from plaintext record we received
-	hctx.Keys.Send.NextEpoch0Sequence = 1    // sequence 0 was HRR
-	hctx.Keys.NextMessageSeqSend = 1         // message 0 was HRR
-	hctx.Keys.NextMessageSeqReceive = 2      // message 0, 1 were initial client_hello, client_hello
-	rc.handshakes[addr] = hctx
+	conn.Handshake = hctx
+
+	conn.Keys.Receive.NextEpoch0Sequence = 1 // TODO - get from plaintext record we received
+	conn.Keys.Send.NextEpoch0Sequence = 1    // sequence 0 was HRR
+	conn.Keys.NextMessageSeqSend = 1         // message 0 was HRR
+	conn.Keys.NextMessageSeqReceive = 2      // message 0, 1 were initial client_hello, client_hello
 	// TODO - check if the same handshake by storing (age, initialHelloTranscriptHash, keyShareSet)
 	{
 		var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte
@@ -138,7 +144,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		},
 		Body: serverHelloBody,
 	}
-	hctx.PushMessage(handshake.MessagesFlightServerHello_Finished, serverHelloMessage)
+	hctx.PushMessage(conn, handshake.MessagesFlightServerHello_Finished, serverHelloMessage)
 
 	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
@@ -148,24 +154,24 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	masterSecret := hctx.Keys.ComputeHandshakeKeys(true, sharedSecret, handshakeTranscriptHash)
+	masterSecret := conn.Keys.ComputeHandshakeKeys(true, sharedSecret, handshakeTranscriptHash)
 	copy(hctx.MasterSecret[:], masterSecret)
 
-	hctx.PushMessage(handshake.MessagesFlightServerHello_Finished, rc.generateEncryptedExtensions(hctx))
+	hctx.PushMessage(conn, handshake.MessagesFlightServerHello_Finished, rc.generateEncryptedExtensions(hctx))
 
-	hctx.PushMessage(handshake.MessagesFlightServerHello_Finished, rc.generateServerCertificate(hctx))
+	hctx.PushMessage(conn, handshake.MessagesFlightServerHello_Finished, rc.generateServerCertificate(hctx))
 
-	hctx.PushMessage(handshake.MessagesFlightServerHello_Finished, rc.generateServerCertificateVerify(hctx))
+	hctx.PushMessage(conn, handshake.MessagesFlightServerHello_Finished, rc.generateServerCertificateVerify(hctx))
 
-	hctx.PushMessage(handshake.MessagesFlightServerHello_Finished, hctx.GenerateFinished())
+	hctx.PushMessage(conn, handshake.MessagesFlightServerHello_Finished, hctx.GenerateFinished(conn))
 
 	// TODO - compute application data secret here, compute keys as soon as previous epoch not needed
 	handshakeTranscriptHash = hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
-	hctx.Keys.ComputeApplicationTrafficSecret(true, hctx.MasterSecret[:], handshakeTranscriptHash)
+	conn.Keys.ComputeApplicationTrafficSecret(true, hctx.MasterSecret[:], handshakeTranscriptHash)
 	//hctx.Keys.ComputeServerApplicationKeys()
 	//hctx.Keys.ComputeClientApplicationKeys()
 
-	rc.snd.RegisterConnectionForSend(hctx)
+	rc.snd.RegisterConnectionForSend(conn)
 }
 
 func debugPrintSum(hasher hash.Hash) {

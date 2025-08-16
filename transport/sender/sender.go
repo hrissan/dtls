@@ -31,7 +31,7 @@ type Sender struct {
 	helloRetryQueue circular.Buffer[OutgoingHRR]
 	helloRetryPool  []*[constants.MaxOutgoingHRRDatagramLength]byte // stack, not circular buffer
 
-	handshakeQueue circular.Buffer[*handshake.HandshakeConnection]
+	wantToWriteQueue circular.Buffer[*handshake.ConnectionImpl]
 }
 
 func NewSender(opts *options.TransportOptions) *Sender {
@@ -43,7 +43,7 @@ func NewSender(opts *options.TransportOptions) *Sender {
 	if opts.Preallocate {
 		snd.helloRetryQueue.Reserve(opts.MaxHelloRetryQueueSize)
 		snd.helloRetryPool = make([]*[512]byte, 0, opts.MaxHelloRetryQueueSize)
-		snd.handshakeQueue.Reserve(opts.MaxConnections)
+		snd.wantToWriteQueue.Reserve(opts.MaxConnections)
 	}
 	return snd
 }
@@ -61,18 +61,14 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 	datagram := make([]byte, 65536)
 	snd.sendMu.Lock()
 	for {
-		if !(snd.sendShutdown || snd.helloRetryQueue.Len() != 0 || snd.handshakeQueue.Len() != 0) {
+		if !(snd.sendShutdown || snd.helloRetryQueue.Len() != 0 || snd.wantToWriteQueue.Len() != 0) {
 			snd.sendCond.Wait()
 		}
 		// if we wish, we can make different ratio between sending from different queues
-		var hrr OutgoingHRR
-		if snd.helloRetryQueue.Len() != 0 {
-			hrr = snd.helloRetryQueue.PopFront()
-		}
-		var hctx *handshake.HandshakeConnection
-		if snd.handshakeQueue.Len() != 0 {
-			hctx = snd.handshakeQueue.PopFront()
-			hctx.InSenderQueue = false
+		hrr, _ := snd.helloRetryQueue.TryPopFront()
+		conn, _ := snd.wantToWriteQueue.TryPopFront()
+		if conn != nil {
+			conn.InSenderQueue = false
 		}
 		sendShutdown := snd.sendShutdown
 		snd.sendMu.Unlock()
@@ -84,13 +80,15 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 		}
 		datagramSize := 0
 		addToSendQueue := false
-		if hctx != nil {
-			datagramSize, addToSendQueue = hctx.ConstructDatagram(datagram[:0])
-			if datagramSize != 0 && !snd.sendDatagram(socket, datagram[:datagramSize], hctx.Addr) {
-				return
-			}
+		if conn != nil {
+			datagramSize, addToSendQueue = conn.ConstructDatagram(datagram[:0])
 			if datagramSize == 0 && addToSendQueue {
 				panic("ConstructDatagram invariant violation")
+			}
+			if datagramSize != 0 {
+				if !snd.sendDatagram(socket, datagram[:datagramSize], conn.Addr) {
+					// TODO - rare log
+				}
 			}
 		}
 		snd.sendMu.Lock()
@@ -98,9 +96,9 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 			snd.helloRetryPool = append(snd.helloRetryPool, hrr.data)
 		}
 		if addToSendQueue {
-			if !hctx.InSenderQueue {
-				hctx.InSenderQueue = true
-				snd.handshakeQueue.PushBack(hctx)
+			if !conn.InSenderQueue {
+				conn.InSenderQueue = true
+				snd.wantToWriteQueue.PushBack(conn)
 			}
 		}
 	}
@@ -149,13 +147,13 @@ func (snd *Sender) SendHelloRetryDatagram(data *[constants.MaxOutgoingHRRDatagra
 	snd.sendCond.Signal()
 }
 
-func (snd *Sender) RegisterConnectionForSend(hctx *handshake.HandshakeConnection) {
+func (snd *Sender) RegisterConnectionForSend(hctx *handshake.ConnectionImpl) {
 	snd.sendMu.Lock()
 	defer snd.sendMu.Unlock()
 	if hctx.InSenderQueue {
 		return
 	}
 	hctx.InSenderQueue = true
-	snd.handshakeQueue.PushBack(hctx)
+	snd.wantToWriteQueue.PushBack(hctx)
 	snd.sendCond.Signal()
 }

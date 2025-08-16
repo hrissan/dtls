@@ -84,15 +84,23 @@ func (s *Buffer[T]) IndexRef(pos int) *T {
 }
 
 func (s *Buffer[T]) PopFront() T {
-	if s.write_pos == s.read_pos {
+	t, ok := s.TryPopFront()
+	if !ok {
 		panic("empty circular buffer")
+	}
+	return t
+}
+
+func (s *Buffer[T]) TryPopFront() (T, bool) {
+	var empty T
+	if s.write_pos == s.read_pos {
+		return empty, false
 	}
 	offset := s.read_pos & s.mask()
 	element := s.elements[offset]
-	var empty T
 	s.elements[offset] = empty // do not have dangling references in unused parts of buffer
 	s.read_pos++
-	return element
+	return element, true
 }
 
 func (s *Buffer[T]) Clear() {

@@ -1,8 +1,7 @@
 package handshake
 
 import (
-	"encoding/binary"
-	"hash"
+	"errors"
 	"log"
 	"math"
 	"net/netip"
@@ -10,235 +9,215 @@ import (
 
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
-	"golang.org/x/crypto/curve25519"
+	"github.com/hrissan/tinydtls/transport/options"
 )
 
-// Contains absolute minimum of what's mandatory for after handshake finished
-// keys, record replay buffer, ack queue for
-type connection struct {
+type ConnectionHandler interface {
+	// application must remove connection from all data structures
+	// connection will be reused and become invalid immediately after method returns
+	OnDisconnect(err error)
+
+	// if connection was register for send with transport, this method will be called
+	// in the near future. record is allocated and resized to maximum size application
+	// is allowed to write.
+	// There is 3 possible outcomes
+	// 1. Application already has nothing to send,
+	//    should return <anything>, false, false
+	// 2. Application filled record, and now has nothing to send
+	//    should return recordSize, true, false. recordSize can be 0, then empty record will be sent.
+	// 3. Application filled record, but still has more data to send, which did not fit
+	//    should return recordSize, true, true. recordSize can be 0, empty record will be sent
+	// returning recordSize > len(record) || send = false, addToSendQueue = true is immediate panic (API violation)
+	OnWriteApplicationRecord(record []byte) (recordSize int, send bool, addToSendQueue bool)
+
+	// every record sent will be delivered as is. Sent empty records are delivered as empty records.
+	// record points to buffer inside transport and must not be retained.
+	// bytes are guaranteed to be valid only during the call.
+	// if application returns error, connection close will be initiated, expect OnDisconnect in the near future.
+	OnReadApplicationRecord(record []byte) error
 }
 
-const MessagesFlightClientHello1 = 0
-const MessagesFlightServerHRR = 1
-const MessagesFlightClientHello2 = 2
-const MessagesFlightServerHello_Finished = 3       // ServerHello, EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify, Finished
-const MessagesFlightClientCertificate_Finished = 4 // Certificate, CertificateVerify, Finished
-
-type HandshakeConnection struct {
-	Addr       netip.AddrPort // never changes, accessible without lock
-	RoleServer bool
-
-	LocalRandom  [32]byte
-	X25519Secret [32]byte
-	X25519Public [32]byte // TODO - compute in calculator goroutine
-
-	MasterSecret [32]byte
-
+// Contains absolute minimum of what's mandatory for after handshake finished
+// keys, record replay buffer, ack queue for KeyUpdate and NewSessionTicket messages
+// all other information is in HandshakeContext structure and will be reused
+// after handshake finish
+type ConnectionImpl struct {
 	InSenderQueue bool // intrusive, must not be changed except by sender, protected by sender mutex
 
-	receivedPartialMessageSet    bool // if set, Header.MessageSeq == Keys.NextMessageSeqReceive - 1
-	receivedPartialMessage       format.MessageHandshake
-	receivedPartialMessageOffset uint32 // we do not support holes for now. TODO - support holes
-
-	mu   sync.Mutex // TODO - check that mutex is alwasy taken
-	Keys keys.Keys
-
-	sendQueueFlight         byte                      // message from the next flight will ack (clear) all messages in send queue
-	messagesSendQueue       []format.MessageHandshake // all messages here belong to the same flight. TODO - fixed array storage with some limit
-	SendQueueMessageOffset  int                       // offset in messagesSendQueue of the message we are sending, len(messagesSendQueue) if all sent
-	SendQueueFragmentOffset int                       // offset inside messagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(messagesSendQueue)
-
-	TranscriptHasher hash.Hash // when messages are added to messagesSendQueue, they are also added to TranscriptHasher
-
-	certificateChain format.MessageCertificate
+	// variables below mu are protected by mu
+	mu         sync.Mutex     // TODO - check that mutex is alwasy taken
+	Addr       netip.AddrPort // changes very rarely
+	RoleServer bool           // changes very rarely
+	Keys       keys.Keys
+	// ConnectionImpl is owned by Receiver, Calculator and User.
+	// Reused once refCount reached 0
+	// ConnectionImpl pointer can still stay in Sender and Clock, but
+	// closed bool // if true, every owner releases connection
+	// refCount byte - TODO
+	// inCalculator bool - TODO
+	Handshake *HandshakeConnection // content is also protected by mutex above
+	Handler   ConnectionHandler
 }
 
-func (hctx *HandshakeConnection) ComputeKeyShare() {
-	x25519Public, err := curve25519.X25519(hctx.X25519Secret[:], curve25519.Basepoint)
-	if err != nil {
-		panic("curve25519.X25519 failed")
+func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int, addToSendQueue bool) {
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
+	if conn.Handshake != nil {
+		datagramSize, addToSendQueue = conn.Handshake.ConstructDatagram(conn, datagram)
+		if datagramSize > 0 {
+			return // do not mix - TODO - mix
+		}
 	}
-	copy(hctx.X25519Public[:], x25519Public)
+	// TODO - application data
+	// if conn.handler != nil {
+	//	recordSize, send, add := conn.handler.OnWriteApplicationRecord(datagram)
+	// }
+	return
 }
 
-func (hctx *HandshakeConnection) ReceivedMessage(handshakeHdr format.MessageHandshakeHeader, body []byte) (registerInSender bool) {
-	if !hctx.receivedPartialMessageSet {
-		if handshakeHdr.MessageSeq != hctx.Keys.NextMessageSeqReceive {
-			return false // totally ok to ignore
-		}
-		hctx.Keys.NextMessageSeqReceive++
-		if !handshakeHdr.IsFragmented() {
-			return hctx.receivedFullMessage(handshakeHdr, body)
-		}
-		hctx.receivedPartialMessageSet = true
-		hctx.receivedPartialMessageOffset = 0
-		// TODO - take body from pool
-		hctx.receivedPartialMessage.Body = append(hctx.receivedPartialMessage.Body[:0], make([]byte, handshakeHdr.Length)...)
-		hctx.receivedPartialMessage.Header = handshakeHdr
-		// now process partial message below
+var ErrUpdatingKeysWouldOverflowEpoch = errors.New("updating keys would overflow epoch")
+
+func (conn *ConnectionImpl) receivedNewSessionTicket(handshakeHdr format.MessageHandshakeHeader, body []byte) (registerInSender bool) {
+	if handshakeHdr.IsFragmented() {
+		// alert - we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
+		// They are short though, so we do not ack them, there is chance peer will resend them in full
+		return
 	}
-	if handshakeHdr.MessageSeq != hctx.receivedPartialMessage.Header.MessageSeq {
-		return false // totally ok to ignore
+	if conn.Handshake != nil {
+		return // alert - post-handshake message prohibited during handshake
 	}
-	if handshakeHdr.Length != hctx.receivedPartialMessage.Header.Length {
-		// TODO - alert and close connection, invariant violated
-		return false
+	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
+		return // totally ok to ignore
 	}
-	if handshakeHdr.FragmentOffset > hctx.receivedPartialMessageOffset {
-		return false // we do not support holes, ignore
-	}
-	newOffset := handshakeHdr.FragmentOffset + handshakeHdr.FragmentLength
-	if newOffset <= hctx.receivedPartialMessageOffset {
-		return false // nothing new, ignore
-	}
-	copy(hctx.receivedPartialMessage.Body[handshakeHdr.FragmentOffset:], body)
-	hctx.receivedPartialMessageOffset = newOffset
-	if hctx.receivedPartialMessageOffset != handshakeHdr.Length {
-		return false // ok, waiting for more fragments
-	}
-	hctx.receivedPartialMessageSet = false
-	registerInSender = hctx.receivedFullMessage(hctx.receivedPartialMessage.Header, hctx.receivedPartialMessage.Body)
-	// TODO - return message body to pool
-	return registerInSender
+	conn.Keys.NextMessageSeqReceive++
+	log.Printf("received and ignored NewSessionTicket") // TODO
+	return
 }
 
-func (hctx *HandshakeConnection) SendQueueFlight() byte { return hctx.sendQueueFlight }
-
-// acks (removes) all previous flights
-func (hctx *HandshakeConnection) AckFlight(flight byte) {
-	if flight > hctx.sendQueueFlight { // implicit ack of all previous flights
-		hctx.messagesSendQueue = hctx.messagesSendQueue[:0]
-		hctx.SendQueueMessageOffset = 0
-		hctx.SendQueueFragmentOffset = 0
-		hctx.sendQueueFlight = flight
+func (conn *ConnectionImpl) receivedKeyUpdate(handshakeHdr format.MessageHandshakeHeader, body []byte) (registerInSender bool) {
+	if handshakeHdr.IsFragmented() {
+		// alert - we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
+		// They are short though, so we do not ack them, there is chance peer will resend them in full
+		return
 	}
+	if conn.Handshake != nil {
+		return // alert - post-handshake message prohibited during handshake
+	}
+	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
+		return // totally ok to ignore
+	}
+	conn.Keys.NextMessageSeqReceive++
+	log.Printf("received and ignored KeyUpdate") // TODO
+	return
 }
 
-// also acks (removes) all previous flights
-func (hctx *HandshakeConnection) PushMessage(flight byte, msg format.MessageHandshake) {
-	if flight < hctx.sendQueueFlight {
-		panic("you cannot add message from previous flight")
-	}
-	hctx.AckFlight(flight)
-	if hctx.Keys.NextMessageSeqSend >= math.MaxUint16 {
-		// TODO - prevent wrapping next message seq
-		// close connection here
-		return // for now
-	}
-	msg.Header.MessageSeq = hctx.Keys.NextMessageSeqSend
-	hctx.Keys.NextMessageSeqSend++
-	hctx.messagesSendQueue = append(hctx.messagesSendQueue, msg)
-
-	msg.Header.AddToHash(hctx.TranscriptHasher)
-	_, _ = hctx.TranscriptHasher.Write(msg.Body)
-}
-
-// datagram is empty slice with enough capacity (TODO - capacity corresponds to PMTU)
-// should fill it and return datagramSize, if state changed since was added to sender queue, should return 0
-// also, should return addToSendQueue=true, if it needs to send more datagrams.
-// returning (0, true) makes no sense and will panic
-func (hctx *HandshakeConnection) ConstructDatagram(datagram []byte) (datagramSize int, addToSendQueue bool) {
-	hctx.mu.Lock()
-	defer hctx.mu.Unlock()
-	for {
-		if hctx.SendQueueMessageOffset > len(hctx.messagesSendQueue) {
-			panic("invariant of send queue message offset violated")
+func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, seqNumData []byte, header []byte, body []byte) (decrypted []byte, seq uint64, contentType byte, err error) {
+	receiver := &conn.Keys.Receive
+	if hdr.MatchesEpoch(receiver.Epoch) {
+		decrypted, seq, contentType, err = receiver.Symmetric.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, conn.Keys.Receive.NextSegmentSequence,
+			seqNumData, header, body)
+		if err != nil {
+			// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
+			conn.Keys.FailedDeprotectionCounter++
+			return
 		}
-		if hctx.SendQueueMessageOffset == len(hctx.messagesSendQueue) {
-			return len(datagram), false // everything sent, wait for ack (TODO) or local timer to start from the scratch
-		}
-		spaceLeft := 512 - len(datagram) - 12 - 13 // TODO - take into account CID size
-		if spaceLeft <= 0 {                        // some heuristic
-			return len(datagram), true
-		}
-		msg := hctx.messagesSendQueue[hctx.SendQueueMessageOffset]
-		datagram, hctx.SendQueueFragmentOffset = hctx.constructDatagram(datagram, msg, 512, hctx.SendQueueFragmentOffset)
-		// append record to datagram
-		if hctx.SendQueueFragmentOffset == len(msg.Body) {
-			hctx.SendQueueMessageOffset++
-			hctx.SendQueueFragmentOffset = 0
-		}
-	}
-}
-
-func (hctx *HandshakeConnection) constructDatagram(datagram []byte, msg format.MessageHandshake, maxBodySize int, fragmentOffset int) ([]byte, int) {
-	// during fragmenting we always write header at the start of the message, and then part of the body
-	if fragmentOffset >= len(msg.Body) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
-		panic("invariant of send queue fragment offset violated")
-	}
-	fragmentLength := min(len(msg.Body)-fragmentOffset, maxBodySize)
-	if fragmentLength == 0 { // only if maxBodySize == 0
-		panic("invariant of send queue fragment body, empty body")
-	}
-
-	msg.Header.FragmentOffset = uint32(fragmentOffset) // those are scratch space inside header
-	msg.Header.FragmentLength = uint32(fragmentLength) // those are scratch space inside header
-
-	if msg.Header.HandshakeType == format.HandshakeTypeClientHello || msg.Header.HandshakeType == format.HandshakeTypeServerHello {
-		datagram = hctx.constructPlaintextRecord(datagram, msg)
+		conn.Keys.Receive.NextSegmentSequence = seq + 1 // TODO - update replay window
 	} else {
-		datagram = hctx.constructCiphertextRecord(datagram, msg)
+		// We should check here that receiver.Epoch+1 does not overflow, because we increment it below
+		if !conn.Keys.ExpectEpochUpdate || receiver.Epoch == math.MaxUint16 || !hdr.MatchesEpoch(receiver.Epoch+1) {
+			err = ErrUpdatingKeysWouldOverflowEpoch
+			return
+		}
+		// We should not believe new epoch bits before we decrypt record successfully,
+		// so we have to calculate new keys here. But if we fail decryption, then we
+		// either should store new keys, or recompute them on each (attacker's) packet.
+		// So, we decided we better store new keys
+		if !conn.Keys.NewReceiveKeysSet {
+			conn.Keys.NewReceiveKeysSet = true
+			conn.Keys.NewReceiveKeys.ComputeKeys(receiver.ApplicationTrafficSecret[:])
+			conn.Keys.NewReceiveKeysFailedDeprotectionCounter = 0
+		}
+		decrypted, seq, contentType, err = conn.Keys.NewReceiveKeys.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, 0,
+			seqNumData, header, body)
+		if err != nil {
+			// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
+			conn.Keys.NewReceiveKeysFailedDeprotectionCounter++
+			return
+		}
+		conn.Keys.ExpectEpochUpdate = false
+		receiver.Symmetric = conn.Keys.NewReceiveKeys
+		receiver.NextSegmentSequence = 1 // TODO - update replay window
+		receiver.Epoch++
+		conn.Keys.FailedDeprotectionCounter = conn.Keys.NewReceiveKeysFailedDeprotectionCounter
+		conn.Keys.NewReceiveKeys = keys.SymmetricKeys{} // remove alias
+		conn.Keys.NewReceiveKeysSet = false
+		conn.Keys.NewReceiveKeysFailedDeprotectionCounter = 0
 	}
-	return datagram, fragmentOffset + fragmentLength
+	return
 }
 
-func (hctx *HandshakeConnection) constructPlaintextRecord(datagram []byte, msg format.MessageHandshake) []byte {
-	recordHdr := format.PlaintextRecordHeader{
-		ContentType:    format.PlaintextContentTypeHandshake,
-		Epoch:          0,
-		SequenceNumber: hctx.Keys.Send.NextEpoch0Sequence,
+func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptions, hdr format.CiphertextRecordHeader, cid []byte, seqNumData []byte, header []byte, body []byte, addr netip.AddrPort) (registerInSender bool) {
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
+	decrypted, seq, contentType, err := conn.deprotectLocked(hdr, seqNumData, header, body)
+	if err != nil {
+		// TODO - alert, either garbage, attack or epoch wrapping
+		return
 	}
-	hctx.Keys.Send.NextEpoch0Sequence++
-	datagram = recordHdr.Write(datagram, format.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
-	datagram = msg.Header.Write(datagram)
-	datagram = append(datagram, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
-	return datagram
-}
-
-func (hctx *HandshakeConnection) constructCiphertextRecord(datagram []byte, msg format.MessageHandshake) []byte {
-	send := &hctx.Keys.Send
-	epoch := send.Epoch
-	seq := send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	send.NextSegmentSequence++
-	log.Printf("constructing ciphertext with seq: %d", seq)
-
-	gcm := send.Symmetric.Write
-	iv := send.Symmetric.WriteIV
-	keys.FillIVSequence(iv[:], seq)
-
-	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
-	hdr := format.NewCiphertextRecordHeader(false, true, true, epoch)
-	startRecordOffset := len(datagram)
-	datagram = append(datagram, hdr.FirstByte)
-	datagram = binary.BigEndian.AppendUint16(datagram, uint16(seq))
-	datagram = append(datagram, 0, 0) // fill length later
-	startBodyOFfset := len(datagram)
-	datagram = msg.Header.Write(datagram)
-	datagram = append(datagram, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
-	datagram = append(datagram, format.PlaintextContentTypeHandshake)
-
-	padding := len(datagram) % 4 // test our code with different padding. TODO - remove later
-	const SealSize = 16          // TODO - include constant into our gcm wrapper
-	for i := 0; i != padding+SealSize; i++ {
-		datagram = append(datagram, 0)
+	log.Printf("dtls: ciphertext %v deprotected with seq %d cid(hex): %x from %v, body(hex): %x", hdr, seq, cid, addr, decrypted)
+	if !format.IsInnerPlaintextRecord(contentType) {
+		// TODO - send alert
+		return
 	}
-
-	// TODO - subtract max overhead we add here on the 1 leel above, so we do not end up with larger fragment than allowed
-	binary.BigEndian.PutUint16(datagram[startRecordOffset+3:], uint16(len(datagram)-startBodyOFfset))
-
-	encrypted := gcm.Seal(datagram[startBodyOFfset:startBodyOFfset], iv[:], datagram[startBodyOFfset:len(datagram)-SealSize], datagram[startRecordOffset:startBodyOFfset])
-	if &encrypted[0] != &datagram[startBodyOFfset] {
-		panic("gcm.Seal reallocated datagram storage")
-	}
-	if len(encrypted) != len(datagram[startBodyOFfset:]) {
-		panic("gcm.Seal length mismatch")
-	}
-
-	if !hctx.Keys.DoNotEncryptSequenceNumbers {
-		if err := send.Symmetric.EncryptSequenceNumbers(datagram[startRecordOffset+1:startRecordOffset+3], datagram[startBodyOFfset:]); err != nil {
-			panic("cipher text too short when sending")
+	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
+	for messageOffset < len(decrypted) {
+		messageData := decrypted[messageOffset:]
+		switch contentType {
+		case format.PlaintextContentTypeAlert:
+			log.Printf("dtls: got alert(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)
+			return // TODO - more checks
+		case format.PlaintextContentTypeHandshake:
+			log.Printf("dtls: got handshake(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)
+			var handshakeHdr format.MessageHandshakeHeader
+			n, body, err := handshakeHdr.ParseWithBody(messageData)
+			if err != nil {
+				opts.Stats.BadMessageHeader("handshake(encrypted)", messageOffset, len(decrypted), addr, err)
+				// TODO: alert here, and we cannot continue to the next record.
+				return
+			}
+			messageData = messageData[:n]
+			messageOffset += n
+			if handshakeHdr.HandshakeType == format.HandshakeTypeClientHello || handshakeHdr.HandshakeType == format.HandshakeTypeServerHello {
+				opts.Stats.MustNotBeEncrypted("handshake(encrypted)", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)
+				// TODO: alert here, and we do not want to continue to the next record.
+				return
+			}
+			switch handshakeHdr.HandshakeType {
+			case format.HandshakeTypeNewSessionTicket:
+				registerInSender = conn.receivedNewSessionTicket(handshakeHdr, body)
+				continue
+			case format.HandshakeTypeKeyUpdate:
+				registerInSender = conn.receivedKeyUpdate(handshakeHdr, body)
+				continue
+			}
+			if conn.Handshake != nil {
+				registerInSender = conn.Handshake.ReceivedMessage(conn, handshakeHdr, body) || registerInSender
+			}
+		case format.PlaintextContentTypeAck:
+			log.Printf("dtls: got ack(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)
+			// TODO - if all messages from epoch 2 acked, then switch sending epoch
+			if conn.Keys.Send.Epoch == 2 {
+				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
+				conn.Keys.Send.Epoch++
+				conn.Keys.Send.NextSegmentSequence = 0
+			}
+			return // TODO - more checks
+		case format.PlaintextContentTypeApplicationData:
+			log.Printf("dtls: got application_data(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)
+			return // TODO - more checks
+		default: // never, because checked in format.IsPlaintextRecord()
+			panic("unknown content type")
 		}
 	}
-	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
-	return datagram
+	return
 }

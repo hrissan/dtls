@@ -7,12 +7,12 @@ import (
 	"github.com/hrissan/tinydtls/format"
 )
 
-func (hctx *HandshakeConnection) GenerateFinished() format.MessageHandshake {
+func (hctx *HandshakeConnection) GenerateFinished(conn *ConnectionImpl) format.MessageHandshake {
 	// [rfc8446:4.4.4] - finished
 	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
 	finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
-	mustBeFinished := hctx.Keys.Send.ComputeFinished(sha256.New(), finishedTranscriptHash)
+	mustBeFinished := conn.Keys.Send.ComputeFinished(sha256.New(), finishedTranscriptHash)
 
 	msg := format.MessageFinished{
 		VerifyDataLength: len(mustBeFinished),

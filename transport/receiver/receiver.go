@@ -3,6 +3,7 @@ package receiver
 import (
 	"crypto/sha256"
 	"errors"
+	"log"
 	"net"
 	"net/netip"
 	"sync"
@@ -29,9 +30,11 @@ type Receiver struct {
 	sendShutdown bool
 
 	handMu sync.Mutex
-	// TODO - limit on max number of parallel handshakes, clear items by LRU
 	// only ClientHello with correct cookie and larger timestamp replaces previous handshake here [rfc9147:5.11]
-	handshakes map[netip.AddrPort]*handshake.HandshakeConnection
+	connections map[netip.AddrPort]*handshake.ConnectionImpl
+
+	// TODO - limit on max number of parallel handshakes, clear items by LRU
+	// handshakesPool circular.Buffer[*handshake.HandshakeConnection] - TODO
 
 	// we move handshake here, once it is finished
 	//connections map[netip.AddrPort]*Connection
@@ -40,9 +43,9 @@ type Receiver struct {
 
 func NewReceiver(opts *options.TransportOptions, snd *sender.Sender) *Receiver {
 	rc := &Receiver{
-		opts:       opts,
-		snd:        snd,
-		handshakes: map[netip.AddrPort]*handshake.HandshakeConnection{},
+		opts:        opts,
+		snd:         snd,
+		connections: map[netip.AddrPort]*handshake.ConnectionImpl{},
 	}
 	rc.cookieState.SetRand(opts.Rnd)
 	return rc
@@ -72,6 +75,9 @@ func (rc *Receiver) GoRunUDP(socket *net.UDPConn) {
 }
 
 func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
+	var conn *handshake.ConnectionImpl
+	connSet := false
+
 	recordOffset := 0                  // Multiple DTLS records MAY be placed in a single datagram [rfc9147:4.3]
 	for recordOffset < len(datagram) { // read records one by one
 		fb := datagram[recordOffset]
@@ -84,7 +90,19 @@ func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
 				return
 			}
 			recordOffset += n
-			rc.deprotectCiphertextRecord(hdr, cid, seqNum, header, body, addr) // errors inside do not conflict with our ability to process next record
+			if !connSet { // look up connection only once per datagram, not record
+				rc.handMu.Lock()
+				conn = rc.connections[addr]
+				rc.handMu.Unlock()
+				connSet = true
+			}
+			if conn != nil {
+				log.Printf("dtls: got ciphertext %v cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, body)
+				registerInSender := conn.ProcessCiphertextRecord(rc.opts, hdr, cid, seqNum, header, body, addr) // errors inside do not conflict with our ability to process next record
+				if registerInSender {
+					rc.snd.RegisterConnectionForSend(conn) // TODO - postpone all responses until full datagram processed
+				}
+			}
 			continue
 		}
 		if format.IsPlaintextRecord(fb) {
@@ -116,20 +134,26 @@ func (rc *Receiver) StartConnection(peerAddr netip.AddrPort) error {
 	return err
 }
 
-func (rc *Receiver) startConnection(peerAddr netip.AddrPort) (*handshake.HandshakeConnection, error) {
+var ErrConnectionInProgress = errors.New("connection is in progress")
+
+func (rc *Receiver) startConnection(addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
 	rc.handMu.Lock()
 	defer rc.handMu.Unlock()
-	hctx := rc.handshakes[peerAddr]
-	if hctx != nil {
-		return nil, nil // for now will wait for previous handshake timeout first
-	}
+	conn := rc.connections[addr]
+	if conn != nil {
+		return nil, ErrConnectionInProgress // for now will wait for previous handshake timeout first
+	} // TODO - if this is long going handshake, clear and start again?
 
-	hctx = &handshake.HandshakeConnection{
-		Addr:             peerAddr,
-		RoleServer:       false,
+	// TODO - get from pool
+	hctx := &handshake.HandshakeConnection{
 		TranscriptHasher: sha256.New(),
 	}
-	rc.handshakes[peerAddr] = hctx
+	conn = &handshake.ConnectionImpl{
+		Addr:       addr,
+		RoleServer: false,
+		Handshake:  hctx,
+	}
+	rc.connections[addr] = conn
 
 	rc.opts.Rnd.ReadMust(hctx.LocalRandom[:])
 	rc.opts.Rnd.ReadMust(hctx.X25519Secret[:])
@@ -138,6 +162,6 @@ func (rc *Receiver) startConnection(peerAddr netip.AddrPort) (*handshake.Handsha
 	// TODO - contact wolfssl team?
 	hctx.ComputeKeyShare()
 	clientHelloMsg := rc.generateClientHello(hctx, false, cookie.Cookie{})
-	hctx.PushMessage(handshake.MessagesFlightClientHello1, clientHelloMsg)
-	return hctx, nil
+	hctx.PushMessage(conn, handshake.MessagesFlightClientHello1, clientHelloMsg)
+	return conn, nil
 }

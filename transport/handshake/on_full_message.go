@@ -122,6 +122,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 			// hctx.Keys.ComputeClientApplicationKeys()
 			return true
 		}
+		return true // send acks to client finished
 	case format.HandshakeTypeNewSessionTicket:
 		log.Printf("TODO - message type %d not supported", handshakeHdr.HandshakeType)
 		// But we must send ack, or otherwise server will continue sending it forever

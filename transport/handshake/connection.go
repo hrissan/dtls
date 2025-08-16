@@ -154,7 +154,7 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 		conn.Keys.NewReceiveKeysSet = false
 		conn.Keys.NewReceiveKeysFailedDeprotectionCounter = 0
 	}
-	rn = format.RecordNumber{SeqNum: seq, Epoch: receiver.Epoch}
+	rn = format.RecordNumberWith(receiver.Epoch, seq)
 	return
 }
 

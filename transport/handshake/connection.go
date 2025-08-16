@@ -59,6 +59,7 @@ type ConnectionImpl struct {
 	Handler   ConnectionHandler
 }
 
+// must not write over len(datagram), returns part of datagram filled
 func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int, addToSendQueue bool) {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()

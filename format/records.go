@@ -9,6 +9,12 @@ const PlaintextRecordHeaderSize = 13
 const MaxPlaintextRecordLength = 16384                           // [rfc8446:5.1]
 const MaxCiphertextRecordLength = MaxPlaintextRecordLength + 256 // [rfc8446:5.2]
 
+// This does not include CID size and AEAD seal, they are deterministic but depend on runtime parameters
+// 5 is first byte plus 16-bit seqnum plus 16-bit length
+// 1 is content type size
+// 4 is max padding
+const MaxOutgoingCiphertextRecordOverhead = 5 + 1 + 4
+
 const (
 	PlaintextContentTypeAlert           = 21
 	PlaintextContentTypeHandshake       = 22

@@ -13,6 +13,10 @@ import (
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
+// [rfc9147:4.4]
+const MinimumPMTUv4 = 576 - 8 - 20  // minus UDP header, minus IPv4 header
+const MinimumPMTUv6 = 1280 - 8 - 40 // minus UDP header, minus IPv6 header
+
 type OutgoingHRR struct {
 	data *[constants.MaxOutgoingHRRDatagramLength]byte
 	size int
@@ -81,7 +85,7 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 		datagramSize := 0
 		addToSendQueue := false
 		if conn != nil {
-			datagramSize, addToSendQueue = conn.ConstructDatagram(datagram[:0])
+			datagramSize, addToSendQueue = conn.ConstructDatagram(datagram[:MinimumPMTUv4])
 			if datagramSize == 0 && addToSendQueue {
 				panic("ConstructDatagram invariant violation")
 			}

@@ -6,6 +6,7 @@ import (
 	"log"
 	"math"
 
+	"github.com/hrissan/tinydtls/circular"
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
@@ -29,9 +30,12 @@ type HandshakeConnection struct {
 
 	currentFlight byte // both send and receive
 
-	messagesSendQueue       []format.MessageHandshake // all messages here belong to the same flight. TODO - fixed array storage with some limit
-	SendQueueMessageOffset  int                       // offset in messagesSendQueue of the message we are sending, len(messagesSendQueue) if all sent
-	SendQueueFragmentOffset int                       // offset inside messagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(messagesSendQueue)
+	// all messages here belong to the same flight.
+	messagesSendQueue circular.Buffer[format.MessageHandshake]
+	// offset in messagesSendQueue of the message we are sending, len(messagesSendQueue) if all sent
+	SendQueueMessageOffset int
+	// offset inside messagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(messagesSendQueue)
+	SendQueueFragmentOffset int
 
 	TranscriptHasher hash.Hash // when messages are added to messagesSendQueue, they are also added to TranscriptHasher
 
@@ -42,6 +46,7 @@ func NewHandshakeConnection(hasher hash.Hash) *HandshakeConnection {
 	hctx := &HandshakeConnection{
 		TranscriptHasher: hasher,
 	}
+	hctx.messagesSendQueue.Reserve(constants.MaxSendQueue)
 	hctx.sendAcks.Clear() // starts in full state, but not a big deal
 	return hctx
 }
@@ -67,7 +72,7 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	}
 	hctx.currentFlight = flight
 	// implicit ack of all previous flights
-	hctx.messagesSendQueue = hctx.messagesSendQueue[:0]
+	hctx.messagesSendQueue.Clear()
 	hctx.SendQueueMessageOffset = 0
 	hctx.SendQueueFragmentOffset = 0
 
@@ -131,7 +136,11 @@ func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg format.Me
 	}
 	msg.Header.MessageSeq = conn.Keys.NextMessageSeqSend
 	conn.Keys.NextMessageSeqSend++
-	hctx.messagesSendQueue = append(hctx.messagesSendQueue, msg)
+	if hctx.messagesSendQueue.Len() == constants.MaxSendQueue {
+		// must be never, because no flight contains so many messages
+		panic("too many messages are generated at once")
+	}
+	hctx.messagesSendQueue.PushBack(msg)
 
 	msg.Header.AddToHash(hctx.TranscriptHasher)
 	_, _ = hctx.TranscriptHasher.Write(msg.Body)
@@ -145,13 +154,13 @@ func (hctx *HandshakeConnection) ConstructDatagram(conn *ConnectionImpl, datagra
 	// we decided to first send our messages, then acks.
 	// because message has a chance to ack the whole flight
 	for {
-		if hctx.SendQueueMessageOffset > len(hctx.messagesSendQueue) {
+		if hctx.SendQueueMessageOffset > hctx.messagesSendQueue.Len() {
 			panic("invariant of send queue message offset violated")
 		}
-		if hctx.SendQueueMessageOffset == len(hctx.messagesSendQueue) {
+		if hctx.SendQueueMessageOffset == hctx.messagesSendQueue.Len() {
 			break
 		}
-		msg := hctx.messagesSendQueue[hctx.SendQueueMessageOffset]
+		msg := hctx.messagesSendQueue.Index(hctx.SendQueueMessageOffset)
 		recordSize, fragmentLength := hctx.constructRecord(conn, datagram[datagramSize:], msg, hctx.SendQueueFragmentOffset)
 		if recordSize == 0 {
 			return datagramSize, true

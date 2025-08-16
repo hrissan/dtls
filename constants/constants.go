@@ -12,7 +12,10 @@ const MaxOutgoingHRRDatagramLength = 512
 
 const MaxSendAcks = 32
 
-const MaxSendQueue = 16
+const MaxSendMessagesQueue = 16
+
+// we will not send more records until some are acknowledged
+const MaxSendRecordsQueue = 16
 
 // If there is very little space at the end of datagram, we do not want
 // to send 25 bytes of headers to send 1 byte of body.

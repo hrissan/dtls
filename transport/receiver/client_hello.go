@@ -218,11 +218,13 @@ func generateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 		SequenceNumber: 0,
 	}
 	msgHeader := format.MessageHandshakeHeader{
-		HandshakeType:  format.HandshakeTypeServerHello,
-		Length:         0,
-		MessageSeq:     0,
-		FragmentOffset: 0,
-		FragmentLength: 0,
+		HandshakeType: format.HandshakeTypeServerHello,
+		Length:        0,
+		FragmentInfo: format.FragmentInfo{
+			MessageSeq:     0,
+			FragmentOffset: 0,
+			FragmentLength: 0,
+		},
 	}
 	// first reserve space for headers by writing with not all variables set
 	datagram = recordHdr.Write(datagram, 0) // reserve space

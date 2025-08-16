@@ -6,7 +6,6 @@ import (
 	"log"
 	"math"
 
-	"github.com/hrissan/tinydtls/circular"
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
@@ -20,22 +19,17 @@ type HandshakeConnection struct {
 
 	MasterSecret [32]byte
 
+	currentFlight byte // both send and receive
+
 	receivedPartialMessageSet    bool // if set, Header.MessageSeq == Keys.NextMessageSeqReceive
 	receivedPartialMessage       format.MessageHandshake
 	receivedPartialMessageOffset uint32 // we do not support holes for now. TODO - support holes
 
-	sendAcks AcksSet
 	// end of previous flight, all messages before are implicitly acked by any message from messagesSendQueue
 	sendAcksfromMessageSeq uint16
+	sendAcks               AcksSet
 
-	currentFlight byte // both send and receive
-
-	// all messages here belong to the same flight.
-	messagesSendQueue circular.Buffer[format.MessageHandshake]
-	// offset in messagesSendQueue of the message we are sending, len(messagesSendQueue) if all sent
-	SendQueueMessageOffset int
-	// offset inside messagesSendQueue[SendQueueMessageOffset] or 0 if SendQueueMessageOffset == len(messagesSendQueue)
-	SendQueueFragmentOffset int
+	SendQueue SendQueue
 
 	TranscriptHasher hash.Hash // when messages are added to messagesSendQueue, they are also added to TranscriptHasher
 
@@ -46,8 +40,8 @@ func NewHandshakeConnection(hasher hash.Hash) *HandshakeConnection {
 	hctx := &HandshakeConnection{
 		TranscriptHasher: hasher,
 	}
-	hctx.messagesSendQueue.Reserve(constants.MaxSendQueue)
 	hctx.sendAcks.Clear() // starts in full state, but not a big deal
+	hctx.SendQueue.Reserve()
 	return hctx
 }
 
@@ -72,9 +66,7 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	}
 	hctx.currentFlight = flight
 	// implicit ack of all previous flights
-	hctx.messagesSendQueue.Clear()
-	hctx.SendQueueMessageOffset = 0
-	hctx.SendQueueFragmentOffset = 0
+	hctx.SendQueue.Clear()
 
 	hctx.sendAcksfromMessageSeq = conn.Keys.NextMessageSeqReceive
 	hctx.sendAcks.Clear()
@@ -136,43 +128,18 @@ func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg format.Me
 	}
 	msg.Header.MessageSeq = conn.Keys.NextMessageSeqSend
 	conn.Keys.NextMessageSeqSend++
-	if hctx.messagesSendQueue.Len() == constants.MaxSendQueue {
-		// must be never, because no flight contains so many messages
-		panic("too many messages are generated at once")
-	}
-	hctx.messagesSendQueue.PushBack(msg)
+
+	hctx.SendQueue.PushMessage(msg)
 
 	msg.Header.AddToHash(hctx.TranscriptHasher)
 	_, _ = hctx.TranscriptHasher.Write(msg.Body)
 }
 
 // must not write over len(datagram), returns part of datagram filled
-// should fill it and return datagramSize, if state changed since was added to sender queue, should return 0
-// also, should return addToSendQueue=true, if it needs to send more datagrams.
-// returning (0, true) makes no sense and will panic
 func (hctx *HandshakeConnection) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (datagramSize int, addToSendQueue bool) {
 	// we decided to first send our messages, then acks.
 	// because message has a chance to ack the whole flight
-	for {
-		if hctx.SendQueueMessageOffset > hctx.messagesSendQueue.Len() {
-			panic("invariant of send queue message offset violated")
-		}
-		if hctx.SendQueueMessageOffset == hctx.messagesSendQueue.Len() {
-			break
-		}
-		msg := hctx.messagesSendQueue.Index(hctx.SendQueueMessageOffset)
-		recordSize, fragmentLength := hctx.constructRecord(conn, datagram[datagramSize:], msg, hctx.SendQueueFragmentOffset)
-		if recordSize == 0 {
-			return datagramSize, true
-		}
-		datagramSize += recordSize
-		hctx.SendQueueFragmentOffset += fragmentLength
-		// append record to datagram
-		if hctx.SendQueueFragmentOffset == len(msg.Body) {
-			hctx.SendQueueMessageOffset++
-			hctx.SendQueueFragmentOffset = 0
-		}
-	}
+	datagramSize, addToSendQueue = hctx.SendQueue.ConstructDatagram(conn, datagram)
 	if hctx.sendAcks.Size() != 0 && conn.Keys.Send.Epoch != 0 {
 		// TODO - we shuold send only encrypted acks, but is the second condition correct?
 		acksSpace := len(datagram) - datagramSize - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
@@ -185,50 +152,61 @@ func (hctx *HandshakeConnection) ConstructDatagram(conn *ConnectionImpl, datagra
 		}
 		sendAcks := hctx.sendAcks.PopSorted(acksCount)
 
-		da := hctx.constructCiphertextAck(conn, datagram[datagramSize:datagramSize], sendAcks)
+		da := conn.constructCiphertextAck(datagram[datagramSize:datagramSize], sendAcks)
 
 		if len(da) > len(datagram[datagramSize:]) {
 			panic("ciphertext ack record construction length invariant failed")
 		}
 		datagramSize += len(da)
-		return datagramSize, hctx.sendAcks.Size() != 0
+		addToSendQueue = addToSendQueue || hctx.sendAcks.Size() != 0
 	}
-	return datagramSize, false // everything sent, wait for ack (TODO) or local timer to start from the scratch
+	return
 }
 
-func (hctx *HandshakeConnection) constructRecord(conn *ConnectionImpl, datagram []byte, msg format.MessageHandshake, fragmentOffset int) (recordSize int, fragmentLength int) {
+func (conn *ConnectionImpl) constructRecord(datagram []byte, msg format.MessageHandshake, fragmentOffset uint32, maxFragmentLength uint32) (recordSize int, fragmentLength uint32, rn format.RecordNumber) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
-	if fragmentOffset >= len(msg.Body) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
+	if msg.Header.Length != uint32(len(msg.Body)) {
 		panic("invariant of send queue fragment offset violated")
 	}
-	msg.Header.FragmentOffset = uint32(fragmentOffset)
+	if fragmentOffset >= msg.Header.Length { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
+		panic("invariant of send queue fragment offset violated")
+	}
+	msg.Header.FragmentOffset = fragmentOffset
 
 	if msg.Header.HandshakeType == format.HandshakeTypeClientHello || msg.Header.HandshakeType == format.HandshakeTypeServerHello {
-		fragmentLength = min(len(msg.Body)-fragmentOffset, len(datagram)-format.MessageHandshakeHeaderSize+format.PlaintextRecordHeaderSize)
-		if fragmentLength <= constants.MinFragmentBodySize && fragmentLength != len(msg.Body)-fragmentOffset {
-			return 0, 0 // do not send tiny records at the end of datagram
+		remainingSpace := len(datagram) - format.MessageHandshakeHeaderSize + format.PlaintextRecordHeaderSize
+		if remainingSpace <= 0 {
+			return 0, 0, rn
 		}
-		msg.Header.FragmentLength = uint32(fragmentLength)
-		da := hctx.constructPlaintextRecord(conn, datagram[:0], msg)
-		if len(da) != fragmentLength+format.MessageHandshakeHeaderSize+format.PlaintextRecordHeaderSize {
+		fragmentLength = min(maxFragmentLength, uint32(remainingSpace))
+		if fragmentLength <= constants.MinFragmentBodySize && fragmentLength != maxFragmentLength {
+			return 0, 0, rn // do not send tiny records at the end of datagram
+		}
+		msg.Header.FragmentLength = fragmentLength
+		da, rn := conn.constructPlaintextRecord(datagram[:0], msg)
+		if uint32(len(da)) != fragmentLength+format.MessageHandshakeHeaderSize+format.PlaintextRecordHeaderSize {
 			panic("plaintext handshake record construction length invariant failed")
 		}
-		return len(da), fragmentLength
+		return len(da), fragmentLength, rn
 	}
-	fragmentLength = min(len(msg.Body)-fragmentOffset, len(datagram)-format.MessageHandshakeHeaderSize-format.MaxOutgoingCiphertextRecordOverhead-constants.AEADSealSize)
-	if fragmentLength <= constants.MinFragmentBodySize && fragmentLength != len(msg.Body)-fragmentOffset {
-		return 0, 0 // do not send tiny records at the end of datagram
+	remainingSpace := len(datagram) - format.MessageHandshakeHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+	if remainingSpace <= 0 {
+		return 0, 0, rn
 	}
-	msg.Header.FragmentLength = uint32(fragmentLength) // those are scratch space inside header
-	msg.Header.FragmentLength = uint32(fragmentLength)
-	da := hctx.constructCiphertextRecord(conn, datagram[:0], msg)
+	fragmentLength = min(maxFragmentLength, uint32(remainingSpace))
+	if fragmentLength <= constants.MinFragmentBodySize && fragmentLength != maxFragmentLength {
+		return 0, 0, rn // do not send tiny records at the end of datagram
+	}
+	msg.Header.FragmentLength = fragmentLength // those are scratch space inside header
+	da, rn := conn.constructCiphertextRecord(datagram[:0], msg)
 	if len(da) > len(datagram) {
 		panic("ciphertext handshake record construction length invariant failed")
 	}
-	return len(da), fragmentLength
+	return len(da), fragmentLength, rn
 }
 
-func (hctx *HandshakeConnection) constructPlaintextRecord(conn *ConnectionImpl, data []byte, msg format.MessageHandshake) []byte {
+func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg format.MessageHandshake) ([]byte, format.RecordNumber) {
+	rn := format.RecordNumberWith(0, conn.Keys.Send.NextEpoch0Sequence)
 	recordHdr := format.PlaintextRecordHeader{
 		ContentType:    format.PlaintextContentTypeHandshake,
 		SequenceNumber: conn.Keys.Send.NextEpoch0Sequence,
@@ -237,12 +215,13 @@ func (hctx *HandshakeConnection) constructPlaintextRecord(conn *ConnectionImpl, 
 	data = recordHdr.Write(data, format.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
 	data = msg.Header.Write(data)
 	data = append(data, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
-	return data
+	return data, rn
 }
 
-func (hctx *HandshakeConnection) constructCiphertextRecord(conn *ConnectionImpl, datagram []byte, msg format.MessageHandshake) []byte {
+func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg format.MessageHandshake) ([]byte, format.RecordNumber) {
 	send := &conn.Keys.Send
 	epoch := send.Epoch
+	rn := format.RecordNumberWith(epoch, conn.Keys.Send.NextSegmentSequence)
 	seq := send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
 	send.NextSegmentSequence++
 	log.Printf("constructing ciphertext with seq: %d", seq)
@@ -284,10 +263,10 @@ func (hctx *HandshakeConnection) constructCiphertextRecord(conn *ConnectionImpl,
 		}
 	}
 	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
-	return datagram
+	return datagram, rn
 }
 
-func (hctx *HandshakeConnection) constructCiphertextAck(conn *ConnectionImpl, datagram []byte, acks []format.RecordNumber) []byte {
+func (conn *ConnectionImpl) constructCiphertextAck(datagram []byte, acks []format.RecordNumber) []byte {
 	// TODO - harmonize with code above
 	send := &conn.Keys.Send
 	epoch := send.Epoch
@@ -309,7 +288,7 @@ func (hctx *HandshakeConnection) constructCiphertextAck(conn *ConnectionImpl, da
 	datagram, mark := format.MarkUint16Offset(datagram)
 	for _, ack := range acks {
 		datagram = binary.BigEndian.AppendUint64(datagram, uint64(ack.Epoch()))
-		datagram = binary.BigEndian.AppendUint64(datagram, uint64(ack.SeqNum()))
+		datagram = binary.BigEndian.AppendUint64(datagram, ack.SeqNum())
 	}
 	format.FillUint16Offset(datagram, mark)
 	datagram = append(datagram, format.PlaintextContentTypeAck)

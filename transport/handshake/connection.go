@@ -42,21 +42,23 @@ type ConnectionHandler interface {
 // all other information is in HandshakeContext structure and will be reused
 // after handshake finish
 type ConnectionImpl struct {
-	InSenderQueue bool // intrusive, must not be changed except by sender, protected by sender mutex
+	// variables below mu are protected by mu, except where noted
+	mu   sync.Mutex     // TODO - check that mutex is alwasy taken
+	Addr netip.AddrPort // changes very rarely
+	Keys keys.Keys
 
-	// variables below mu are protected by mu
-	mu         sync.Mutex     // TODO - check that mutex is alwasy taken
-	Addr       netip.AddrPort // changes very rarely
-	RoleServer bool           // changes very rarely
-	Keys       keys.Keys
-	// ConnectionImpl is owned by Receiver, Calculator and User.
-	// Reused once refCount reached 0
-	// ConnectionImpl pointer can still stay in Sender and Clock, but
-	// closed bool // if true, every owner releases connection
-	// refCount byte - TODO
-	// inCalculator bool - TODO
-	Handshake *HandshakeConnection // content is also protected by mutex above
-	Handler   ConnectionHandler
+	// we do not support those messages to be fragmented, because we do not want
+	// to allocate memory for reassembly
+	ackKeyUpdate                 format.RecordNumber // if != 0, send ack
+	ackKeyNewSessionTicket       format.RecordNumber // if != 0, send ack
+	sendKeyUpdateSequnce         format.RecordNumber // if != 0, send KeyUpdate until acked
+	sendNewSessionTicketSequence format.RecordNumber // if != 0, send NewSessionTicket until acked
+
+	Handshake  *HandshakeConnection // content is also protected by mutex above
+	Handler    ConnectionHandler
+	RoleServer bool // changes very rarely
+
+	InSenderQueue bool // intrusive, must not be changed except by sender, protected by sender mutex
 }
 
 // must not write over len(datagram), returns part of datagram filled

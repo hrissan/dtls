@@ -5,8 +5,10 @@ import (
 	"log"
 	"math"
 	"net/netip"
+	"slices"
 	"sync"
 
+	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
 	"github.com/hrissan/tinydtls/transport/options"
@@ -73,6 +75,24 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 			return // do not mix - TODO - mix
 		}
 	}
+	sendAcks := make([]format.RecordNumber, 0, 2) // probably on stack
+	if conn.ackKeyUpdate != (format.RecordNumber{}) {
+		sendAcks = append(sendAcks, conn.ackKeyUpdate)
+	}
+	if conn.ackKeyNewSessionTicket != (format.RecordNumber{}) {
+		sendAcks = append(sendAcks, conn.ackKeyNewSessionTicket)
+	}
+	acksSpace := len(datagram) - datagramSize - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+	if len(sendAcks) != 0 && acksSpace >= 2*format.MessageAckRecordNumberSize {
+		slices.SortFunc(sendAcks, format.RecordNumberCmp)
+		da := conn.constructCiphertextAck(datagram[datagramSize:datagramSize], sendAcks)
+		if len(da) > len(datagram[datagramSize:]) {
+			panic("ciphertext ack record construction length invariant failed")
+		}
+		datagramSize += len(da)
+		conn.ackKeyUpdate = format.RecordNumber{}
+		conn.ackKeyNewSessionTicket = format.RecordNumber{}
+	}
 	// TODO - application data
 	// if conn.handler != nil {
 	//	recordSize, send, add := conn.handler.OnWriteApplicationRecord(datagram)
@@ -82,7 +102,7 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 
 var ErrUpdatingKeysWouldOverflowEpoch = errors.New("updating keys would overflow epoch")
 
-func (conn *ConnectionImpl) receivedNewSessionTicket(handshakeHdr format.MessageHandshakeHeader, body []byte) (registerInSender bool) {
+func (conn *ConnectionImpl) receivedNewSessionTicket(handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) (registerInSender bool) {
 	if handshakeHdr.IsFragmented() {
 		// alert - we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
@@ -90,6 +110,13 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(handshakeHdr format.Message
 	}
 	if conn.Handshake != nil {
 		return // alert - post-handshake message prohibited during handshake
+	}
+	if handshakeHdr.MessageSeq > conn.Keys.NextMessageSeqReceive {
+		return // totally ok to ignore
+	}
+	if conn.ackKeyNewSessionTicket == (format.RecordNumber{}) {
+		conn.ackKeyNewSessionTicket = rn
+		registerInSender = true
 	}
 	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
 		return // totally ok to ignore
@@ -99,7 +126,7 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(handshakeHdr format.Message
 	return
 }
 
-func (conn *ConnectionImpl) receivedKeyUpdate(handshakeHdr format.MessageHandshakeHeader, body []byte) (registerInSender bool) {
+func (conn *ConnectionImpl) receivedKeyUpdate(handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) (registerInSender bool) {
 	if handshakeHdr.IsFragmented() {
 		// alert - we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
@@ -107,6 +134,13 @@ func (conn *ConnectionImpl) receivedKeyUpdate(handshakeHdr format.MessageHandsha
 	}
 	if conn.Handshake != nil {
 		return // alert - post-handshake message prohibited during handshake
+	}
+	if handshakeHdr.MessageSeq > conn.Keys.NextMessageSeqReceive {
+		return // totally ok to ignore
+	}
+	if conn.ackKeyUpdate == (format.RecordNumber{}) {
+		conn.ackKeyUpdate = rn
+		registerInSender = true
 	}
 	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
 		return // totally ok to ignore
@@ -201,10 +235,10 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 			}
 			switch handshakeHdr.HandshakeType {
 			case format.HandshakeTypeNewSessionTicket:
-				registerInSender = conn.receivedNewSessionTicket(handshakeHdr, body)
+				registerInSender = conn.receivedNewSessionTicket(handshakeHdr, body, rn)
 				continue
 			case format.HandshakeTypeKeyUpdate:
-				registerInSender = conn.receivedKeyUpdate(handshakeHdr, body)
+				registerInSender = conn.receivedKeyUpdate(handshakeHdr, body, rn)
 				continue
 			}
 			if conn.Handshake != nil {

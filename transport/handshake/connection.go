@@ -216,7 +216,7 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 			}
 			return // TODO - more checks
 		case format.PlaintextContentTypeApplicationData:
-			log.Printf("dtls: got application_data(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)
+			log.Printf("dtls: got application_data(encrypted) %v from %v, message: %q", hdr, addr, messageData)
 			return // TODO - more checks
 		default: // never, because checked in format.IsPlaintextRecord()
 			panic("unknown content type")

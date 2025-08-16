@@ -5,6 +5,7 @@ import (
 	"hash"
 	"log"
 	"math"
+	"slices"
 
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/format"
@@ -151,15 +152,17 @@ func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, flight byte, 
 // also, should return addToSendQueue=true, if it needs to send more datagrams.
 // returning (0, true) makes no sense and will panic
 func (hctx *HandshakeConnection) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (datagramSize int, addToSendQueue bool) {
+	// we decided to first send our messages, then acks.
+	// because message has a chance to ack the whole flight
 	for {
 		if hctx.SendQueueMessageOffset > len(hctx.messagesSendQueue) {
 			panic("invariant of send queue message offset violated")
 		}
 		if hctx.SendQueueMessageOffset == len(hctx.messagesSendQueue) {
-			return len(datagram), false // everything sent, wait for ack (TODO) or local timer to start from the scratch
+			break
 		}
 		msg := hctx.messagesSendQueue[hctx.SendQueueMessageOffset]
-		recordSize, fragmentLength := hctx.constructDatagram(conn, datagram[datagramSize:], msg, hctx.SendQueueFragmentOffset)
+		recordSize, fragmentLength := hctx.constructRecord(conn, datagram[datagramSize:], msg, hctx.SendQueueFragmentOffset)
 		if recordSize == 0 {
 			return datagramSize, true
 		}
@@ -171,9 +174,36 @@ func (hctx *HandshakeConnection) ConstructDatagram(conn *ConnectionImpl, datagra
 			hctx.SendQueueFragmentOffset = 0
 		}
 	}
+	if len(hctx.sendAcks) != 0 && conn.Keys.Send.Epoch != 0 {
+		// TODO - we shuold send only encrypted acks, but is the second condition correct?
+		acksSpace := len(datagram) - datagramSize - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+		if acksSpace < format.MessageAckRecordNumberSize { // not a single one fits
+			return datagramSize, true
+		}
+		acksCount := acksSpace / format.MessageAckRecordNumberSize
+		if acksSpace < constants.MinFragmentBodySize && acksCount != len(hctx.sendAcks) {
+			return datagramSize, true // do not send tiny records at the end of datagram
+		}
+		// TODO - this algorithm looks expensive, test and replace with linear search during adding ack?
+		sortedAcks := make([]format.RecordNumber, 0, constants.MaxSendAcks)
+		for ack := range hctx.sendAcks { // we must sort all acks, not random acksCount only
+			sortedAcks = append(sortedAcks, ack)
+		}
+		slices.SortFunc(sortedAcks, format.RecordNumberCmp)
+		for _, ack := range sortedAcks {
+			delete(hctx.sendAcks, ack)
+		}
+		da := hctx.constructCiphertextAck(conn, datagram[datagramSize:datagramSize], sortedAcks)
+		if len(da) > len(datagram[datagramSize:]) {
+			panic("ciphertext ack record construction length invariant failed")
+		}
+		datagramSize += len(da)
+		return datagramSize, len(hctx.sendAcks) != 0
+	}
+	return datagramSize, false // everything sent, wait for ack (TODO) or local timer to start from the scratch
 }
 
-func (hctx *HandshakeConnection) constructDatagram(conn *ConnectionImpl, datagram []byte, msg format.MessageHandshake, fragmentOffset int) (datagramSize int, fragmentLength int) {
+func (hctx *HandshakeConnection) constructRecord(conn *ConnectionImpl, datagram []byte, msg format.MessageHandshake, fragmentOffset int) (recordSize int, fragmentLength int) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
 	if fragmentOffset >= len(msg.Body) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
 		panic("invariant of send queue fragment offset violated")
@@ -183,24 +213,24 @@ func (hctx *HandshakeConnection) constructDatagram(conn *ConnectionImpl, datagra
 	if msg.Header.HandshakeType == format.HandshakeTypeClientHello || msg.Header.HandshakeType == format.HandshakeTypeServerHello {
 		fragmentLength = min(len(msg.Body)-fragmentOffset, len(datagram)-format.MessageHandshakeHeaderSize+format.PlaintextRecordHeaderSize)
 		if fragmentLength <= constants.MinFragmentBodySize && fragmentLength != len(msg.Body)-fragmentOffset {
-			return 0, 0
+			return 0, 0 // do not send tiny records at the end of datagram
 		}
 		msg.Header.FragmentLength = uint32(fragmentLength)
 		da := hctx.constructPlaintextRecord(conn, datagram[:0], msg)
 		if len(da) != fragmentLength+format.MessageHandshakeHeaderSize+format.PlaintextRecordHeaderSize {
-			panic("packet construction invariant failed")
+			panic("plaintext handshake record construction length invariant failed")
 		}
 		return len(da), fragmentLength
 	}
 	fragmentLength = min(len(msg.Body)-fragmentOffset, len(datagram)-format.MessageHandshakeHeaderSize-format.MaxOutgoingCiphertextRecordOverhead-constants.AEADSealSize)
 	if fragmentLength <= constants.MinFragmentBodySize && fragmentLength != len(msg.Body)-fragmentOffset {
-		return 0, 0
+		return 0, 0 // do not send tiny records at the end of datagram
 	}
 	msg.Header.FragmentLength = uint32(fragmentLength) // those are scratch space inside header
 	msg.Header.FragmentLength = uint32(fragmentLength)
 	da := hctx.constructCiphertextRecord(conn, datagram[:0], msg)
 	if len(da) > len(datagram) {
-		panic("packet construction invariant failed")
+		panic("ciphertext handshake record construction length invariant failed")
 	}
 	return len(da), fragmentLength
 }
@@ -240,11 +270,11 @@ func (hctx *HandshakeConnection) constructCiphertextRecord(conn *ConnectionImpl,
 	datagram = append(datagram, format.PlaintextContentTypeHandshake)
 
 	padding := len(datagram) % 4 // test our code with different padding. TODO - remove later
+	// max padding max correspond to format.MaxOutgoingCiphertextRecordOverhead
 	for i := 0; i != padding+constants.AEADSealSize; i++ {
 		datagram = append(datagram, 0)
 	}
 
-	// TODO - subtract max overhead we add here on the 1 leel above, so we do not end up with larger fragment than allowed
 	binary.BigEndian.PutUint16(datagram[startRecordOffset+3:], uint16(len(datagram)-startBodyOFfset))
 
 	encrypted := gcm.Seal(datagram[startBodyOFfset:startBodyOFfset], iv[:], datagram[startBodyOFfset:len(datagram)-constants.AEADSealSize], datagram[startRecordOffset:startBodyOFfset])
@@ -257,6 +287,58 @@ func (hctx *HandshakeConnection) constructCiphertextRecord(conn *ConnectionImpl,
 
 	if !conn.Keys.DoNotEncryptSequenceNumbers {
 		if err := send.Symmetric.EncryptSequenceNumbers(datagram[startRecordOffset+1:startRecordOffset+3], datagram[startBodyOFfset:]); err != nil {
+			panic("cipher text too short when sending")
+		}
+	}
+	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
+	return datagram
+}
+
+func (hctx *HandshakeConnection) constructCiphertextAck(conn *ConnectionImpl, datagram []byte, acks []format.RecordNumber) []byte {
+	// TODO - harmonize with code above
+	send := &conn.Keys.Send
+	epoch := send.Epoch
+	seq := send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
+	send.NextSegmentSequence++
+	log.Printf("constructing ciphertext with seq: %d", seq)
+
+	gcm := send.Symmetric.Write
+	iv := send.Symmetric.WriteIV
+	keys.FillIVSequence(iv[:], seq)
+
+	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
+	hdr := format.NewCiphertextRecordHeader(false, true, true, epoch)
+	datagram = append(datagram, hdr.FirstByte)
+	datagram = binary.BigEndian.AppendUint16(datagram, uint16(seq))
+	datagram = append(datagram, 0, 0) // fill length later
+	startBodyOFfset := len(datagram)
+	// serialization of ack message, TODO - move out?
+	datagram, mark := format.MarkUint16Offset(datagram)
+	for _, ack := range acks {
+		datagram = binary.BigEndian.AppendUint64(datagram, uint64(ack.Epoch()))
+		datagram = binary.BigEndian.AppendUint64(datagram, uint64(ack.SeqNum()))
+	}
+	format.FillUint16Offset(datagram, mark)
+	datagram = append(datagram, format.PlaintextContentTypeAck)
+
+	padding := len(datagram) % 4 // test our code with different padding. TODO - remove later
+	// max padding max correspond to format.MaxOutgoingCiphertextRecordOverhead
+	for i := 0; i != padding+constants.AEADSealSize; i++ {
+		datagram = append(datagram, 0)
+	}
+
+	binary.BigEndian.PutUint16(datagram[3:], uint16(len(datagram)-startBodyOFfset))
+
+	encrypted := gcm.Seal(datagram[startBodyOFfset:startBodyOFfset], iv[:], datagram[startBodyOFfset:len(datagram)-constants.AEADSealSize], datagram[:startBodyOFfset])
+	if &encrypted[0] != &datagram[startBodyOFfset] {
+		panic("gcm.Seal reallocated datagram storage")
+	}
+	if len(encrypted) != len(datagram[startBodyOFfset:]) {
+		panic("gcm.Seal length mismatch")
+	}
+
+	if !conn.Keys.DoNotEncryptSequenceNumbers {
+		if err := send.Symmetric.EncryptSequenceNumbers(datagram[1:3], datagram[startBodyOFfset:]); err != nil {
 			panic("cipher text too short when sending")
 		}
 	}

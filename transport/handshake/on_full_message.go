@@ -54,29 +54,19 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 		// [rfc8446:4.4.3] - certificate verification
 		var certVerifyTranscriptHashStorage [constants.MaxHashLength]byte
 		certVerifyTranscriptHash := hctx.TranscriptHasher.Sum(certVerifyTranscriptHashStorage[:0])
-		sigMessage := []byte("                                                                " +
-			"TLS 1.3, server CertificateVerify")
-		sigMessage = append(sigMessage, 0)
-		sigMessage = append(sigMessage, certVerifyTranscriptHash...)
 
-		sigMessageHash := sha256.Sum256(sigMessage)
 		// TODO - offload to calc goroutine here
 		var sigMessageHashStorage [constants.MaxHashLength]byte
-		sigMessageHash2 := signature.CalculateCoveredContentHash(sha256.New(), certVerifyTranscriptHash, sigMessageHashStorage[:0])
-
-		// TODO - remove inplace calculation
-		if string(sigMessageHash[:]) != string(sigMessageHash2[:]) {
-			panic("hren")
-		}
+		sigMessageHash := signature.CalculateCoveredContentHash(sha256.New(), certVerifyTranscriptHash, sigMessageHashStorage[:0])
 
 		cert, err := x509.ParseCertificate(hctx.certificateChain.Certificates[0].CertData) // TODO - reuse certificates
 		if err != nil {
 			return dtlserrors.ErrCertificateLoadError
 		}
-		if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash2, msg.Signature); err != nil {
+		if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash, msg.Signature); err != nil {
 			return dtlserrors.ErrCertificateSignatureInvalid
 		}
-		log.Printf("certificate verify parsed: %+v", msg)
+		log.Printf("certificate verify ok: %+v", msg)
 		handshakeHdr.AddToHash(hctx.TranscriptHasher)
 		_, _ = hctx.TranscriptHasher.Write(body)
 		return nil
@@ -108,7 +98,6 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 		// server finished is not part of traffic secret transcript
 		handshakeHdr.AddToHash(hctx.TranscriptHasher)
 		_, _ = hctx.TranscriptHasher.Write(body)
-		// TODO - on server, secrets must be calculated, when sending server finished, not here
 
 		var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 		handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
@@ -124,7 +113,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 	case format.HandshakeTypeNewSessionTicket:
 		panic("handled in ProcessCiphertextRecord")
 	default:
-		// TODO - process message in standard, generate error for the rest
+		// TODO - process all messages in standard, generate error for the rest
 		log.Printf("TODO - encrypted message type %d not supported", handshakeHdr.HandshakeType)
 	}
 	return nil

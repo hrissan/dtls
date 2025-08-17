@@ -25,7 +25,7 @@ type TransportOptions struct {
 	SocketWriteErrorDelay  time.Duration
 	CookieValidDuration    time.Duration
 	MaxHelloRetryQueueSize int
-	MaxHandshakes          int // TODO
+	MaxHandshakes          int // TODO - implement actual limit
 	MaxConnections         int
 	CIDLength              int // We use fixed size connection ID, so we can parse ciphertext records easily [rfc9147:9.1]
 

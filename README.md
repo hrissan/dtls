@@ -169,15 +169,21 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 # TODO list (not in particular order)
 
-* Support retransmissions
+* Support retransmissions, actually start/stop retransmission timers based on connection state
 
+* Replay protection for both plaintext (?) and ciphertext records.
+ 
 * Harmonize errors. Before error is returned, pring context (message/record data, etc.)
 
 * Process fatal errors to terminate connections.
 
 * Ciphersuite TLS_AES_256_GCM_SHA384, support hashes of various sizes
 
+* Support KeyUpdate for both sending and receiving keys
+
 * Support fragmented Server Hello message
+
+* Support client certificates
 
 * Pack several handshake message into single record (now they are in separate)
 
@@ -231,6 +237,3 @@ that fail deprotection, and they could be from an attacker.
 * offload long calculations (ECC, RSA, etc.) to separate goroutine(s)
 
 * integrational throughput and latency benchmarks, comparison with UDP without encryption. 
-
-* Actually start/stop retransmission timers based on connection state
-

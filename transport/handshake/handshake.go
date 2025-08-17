@@ -321,9 +321,10 @@ func (conn *ConnectionImpl) constructCiphertextApplication(record []byte) []byte
 	// TODO - harmonize with code above
 	send := &conn.Keys.Send
 	epoch := send.Epoch
+	rn := format.RecordNumberWith(epoch, conn.Keys.Send.NextSegmentSequence)
 	seq := send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
 	send.NextSegmentSequence++
-	log.Printf("constructing ciphertext application with seq: %d", seq)
+	log.Printf("constructing ciphertext application with seq: %v", rn)
 
 	gcm := send.Symmetric.Write
 	iv := send.Symmetric.WriteIV

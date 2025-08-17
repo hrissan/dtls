@@ -71,8 +71,12 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 	defer conn.mu.Unlock()
 	if conn.Handshake != nil {
 		datagramSize, addToSendQueue = conn.Handshake.ConstructDatagram(conn, datagram)
+		// If we remove "if" below, we put ack for client_hello together with
+		// application data into the same datagram. Then wolfSSL_connect will return
+		// err = -441, Application data is available for reading
+		// TODO: contact WolfSSL team
 		if datagramSize > 0 {
-			return // do not mix - TODO - mix
+			return datagramSize, true
 		}
 	}
 	sendAcks := make([]format.RecordNumber, 0, 2) // probably on stack
@@ -284,6 +288,10 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 			return // TODO - more checks
 		case format.PlaintextContentTypeApplicationData:
 			log.Printf("dtls: got application_data(encrypted) %v from %v, message: %q", hdr, addr, messageData)
+			//if conn.Handshake != nil { // TODO - remove
+			//	conn.Handler = &exampleHandler{toSend: "tinydtls hears you: " + string(messageData)}
+			//	registerInSender = true
+			//}
 			return // TODO - more checks
 		default: // never, because checked in format.IsPlaintextRecord()
 			panic("unknown content type")

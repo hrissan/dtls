@@ -23,9 +23,8 @@ type HandshakeConnection struct {
 
 	currentFlight byte // both send and receive
 
-	receivedPartialMessageSet    bool // if set, Header.MessageSeq == Keys.NextMessageSeqReceive
-	receivedPartialMessage       format.MessageHandshake
-	receivedPartialMessageOffset uint32 // we do not support holes for now. TODO - support holes
+	receivedPartialMessageSet bool // if set, Header.MessageSeq == Keys.NextMessageSeqReceive
+	receivedPartialMessage    OutgoingHandshakeMessage
 
 	// end of previous flight, all messages before are implicitly acked by any message from messages
 	sendAcksfromMessageSeq uint16
@@ -91,33 +90,46 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 			conn.Keys.NextMessageSeqReceive++
 			return hctx.receivedFullMessage(conn, handshakeHdr, body)
 		}
-		hctx.receivedPartialMessageSet = true
-		hctx.receivedPartialMessageOffset = 0
 		// TODO - take body from pool
-		hctx.receivedPartialMessage.Body = append(hctx.receivedPartialMessage.Body[:0], make([]byte, handshakeHdr.Length)...)
-		hctx.receivedPartialMessage.Header = handshakeHdr
+		hctx.receivedPartialMessage = OutgoingHandshakeMessage{
+			Header: MessageHeaderMinimal{
+				HandshakeType: handshakeHdr.HandshakeType,
+				MessageSeq:    handshakeHdr.MessageSeq,
+			},
+			Body:       append(hctx.receivedPartialMessage.Body[:0], make([]byte, handshakeHdr.Length)...),
+			SendOffset: 0,
+			SendEnd:    handshakeHdr.Length,
+		}
+		hctx.receivedPartialMessageSet = true
 		// now process partial message below
 	}
-	if handshakeHdr.Length != hctx.receivedPartialMessage.Header.Length {
+	if handshakeHdr.Length != uint32(len(hctx.receivedPartialMessage.Body)) {
 		// TODO - alert and close connection, invariant violated
 		return false
 	}
-	if handshakeHdr.FragmentOffset > hctx.receivedPartialMessageOffset {
+	if handshakeHdr.HandshakeType != hctx.receivedPartialMessage.Header.HandshakeType {
+		// TODO - alert and close connection, invariant violated
+		return false
+	}
+	shouldAck, changed := hctx.receivedPartialMessage.Ack(handshakeHdr.FragmentOffset, handshakeHdr.FragmentLength)
+	if !shouldAck {
 		return false // we do not support holes, ignore, wait for earlier message first
 	}
 	hctx.AddAck(handshakeHdr.MessageSeq, rn) // should ack it independent of conditions below
-	newOffset := handshakeHdr.FragmentOffset + handshakeHdr.FragmentLength
-	if newOffset <= hctx.receivedPartialMessageOffset {
-		return false // nothing new, ignore
+	if !changed {                            // nothing new, ignore
+		return false
 	}
-	copy(hctx.receivedPartialMessage.Body[handshakeHdr.FragmentOffset:], body)
-	hctx.receivedPartialMessageOffset = newOffset
-	if hctx.receivedPartialMessageOffset != handshakeHdr.Length {
+	copy(hctx.receivedPartialMessage.Body[handshakeHdr.FragmentOffset:], body) // copy all bytes for simplicity
+	if !hctx.receivedPartialMessage.FullyAcked() {
 		return false // ok, waiting for more fragments
 	}
+	body = hctx.receivedPartialMessage.Body
+	hctx.receivedPartialMessage = OutgoingHandshakeMessage{}
 	hctx.receivedPartialMessageSet = false
 	conn.Keys.NextMessageSeqReceive++
-	registerInSender = hctx.receivedFullMessage(conn, hctx.receivedPartialMessage.Header, hctx.receivedPartialMessage.Body)
+	handshakeHdr.FragmentOffset = 0
+	handshakeHdr.FragmentLength = handshakeHdr.Length
+	registerInSender = hctx.receivedFullMessage(conn, handshakeHdr, body)
 	// TODO - return message body to pool here
 	return registerInSender
 }

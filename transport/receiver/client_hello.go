@@ -167,11 +167,8 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 
 	hctx.PushMessage(conn, hctx.GenerateFinished(conn))
 
-	// TODO - compute application data secret here, compute keys as soon as previous epoch not needed
 	handshakeTranscriptHash = hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 	conn.Keys.ComputeApplicationTrafficSecret(true, hctx.MasterSecret[:], handshakeTranscriptHash)
-	//hctx.Keys.ComputeServerApplicationKeys()
-	//hctx.Keys.ComputeClientApplicationKeys()
 
 	rc.snd.RegisterConnectionForSend(conn)
 }

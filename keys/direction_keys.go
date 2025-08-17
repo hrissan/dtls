@@ -2,6 +2,7 @@ package keys
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"hash"
 	"log"
@@ -71,13 +72,21 @@ func (keys *DirectionKeys) ComputeApplicationTrafficSecret(serverKeys bool, mast
 	//		"traffic upd", "", Hash.length)
 }
 
-// TODO - optimize
 // contentType is the first non-zero byte from the end
 func findPaddingOffsetContentType(data []byte) (paddingOffset int, contentType byte) {
-	for i := len(data) - 1; i >= 0; i-- {
-		b := data[i]
+	offset := len(data)
+	for ; offset > 16; offset -= 16 {
+		if binary.LittleEndian.Uint64(data[offset-16:]) != 0 {
+			break
+		}
+		if binary.LittleEndian.Uint64(data[offset-8:]) != 0 {
+			break
+		}
+	}
+	for ; offset > 0; offset-- {
+		b := data[offset-1]
 		if b != 0 {
-			return i, b
+			return offset - 1, b
 		}
 	}
 	return -1, 0

@@ -2,8 +2,6 @@ package handshake
 
 import "github.com/hrissan/tinydtls/format"
 
-// type Flight byte - TODO use go types instead of simple types
-
 const (
 	// zero is reserved as a flag for "flight not set"
 	MessagesFlightClientHello1               = 1
@@ -12,8 +10,6 @@ const (
 	MessagesFlightServerHello_Finished       = 4 // ServerHello, EncryptedExtensions, CertificateRequest, Certificate, CertificateVerify, Finished
 	MessagesFlightClientCertificate_Finished = 5 // Certificate, CertificateVerify, Finished
 )
-
-// TODO - let server hello message be fragmented
 
 // returns 0 for messages not related to handshake flights
 // we need this function, because we want to clear acks for previous flight when we receive

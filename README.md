@@ -8,7 +8,7 @@ DTLS 1.3 only, no support for older standards.
 
 Very few dependencies, ideally zero.
 
-Must interoperate with other known implementations. TODO - integration tests with OpenSSL, WolfSSL, BoringSSL, rusty-dtls, etc.
+Must interoperate with other known implementations.
 
 Implement only extensions we really need, or which are easy to support,
 
@@ -30,8 +30,7 @@ Must make zero allocations on the fast paths, almost zero allocations on slow pa
 
 Must be fixed memory for everything. Every object allocated on heap must be recycled indefinitely (except in standard crypto, we do not control). 
 
-Must use as little memory per established connection as possible (1.5 kilobytes?). We need this implementation for mesh with at least 100K connections per service, so literally every byte counts.
-TODO - benchmark and fill in number here after connection actually works.
+Must use as little memory per established connection as possible (1.5 kilobytes). We need this implementation for mesh with at least 100K connections per service, so literally every byte counts.
 
 Must have separate memory limit for established connections.
 If the limit is reached, new handshakes cannot start.
@@ -167,3 +166,61 @@ wolfssl-examples/dtls %  LD_LIBRARY_PATH=/home/user/devbox/wolfssl/src/.libs ./c
 Adding TLS 1.3 seems easy, as TLS is DTLS without complicated datagram state machine.
 
 This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GOST, etc.).
+
+# TODO list (not in particular order)
+
+* Support retransmissions
+
+* Ciphersuite TLS_AES_256_GCM_SHA384, support hashes of various sizes
+
+* Support fragmented Server Hello message
+
+* Pack several message in single record
+
+* Integrational test against OpenSSL, BoringSSL, rusty-dtls, etc.
+
+* Support SNI extension
+
+* Fuzz all data structures
+
+* Fuzz incoming path
+
+* Server + client connections together with packet loss and reordering
+
+* Rearrange/refactor code
+
+* Make handshake state machine explicit
+
+* Send alerts
+
+* Test with 2 or more sockets listening on different interfaces
+
+* (Not planned) Connection ID
+
+* Protect against connection disruption by off-path attacker.
+If client receives unencrypted alert, this might be result of
+either server restarted and forgot connection, or
+attacker sending packet to client.
+Client has to send client_hello, but if server still has connection,
+it will send encrypted empty ack, then server_hello.
+When client receives fresh encrypted ack, it will cancel new connection
+establishment and instead continue connection it already has.
+We have to test this algorithm during fuzzing.
+
+* Protect against handshake disruption by off-path attacker.
+If client or server receive unencrypted alert during handshake, 
+we should mostly ignore it.
+
+* Do not allow SeqNum to go over minumum of 2^48 (limit of format/records.go) and ciphersuite limit.
+If `limit/2` is reached on send half, start KeyUpdate.
+If `limit/2` is reached on receiving side, send KeyUpdateRequest. This can happen because we count packets
+that fail deprotection, and they could be from an attacker.
+
+* Use rope for all variable memory chunks
+
+* use actual types for various objects (type Flight byte, instead of simply byte, etc.)
+
+* limit max number of parallel handshakes, clear items by LRU
+
+* limit on how much memory single handshake uses for all messages
+

@@ -15,7 +15,7 @@ import (
 
 type HandshakeConnection struct {
 	LocalRandom  [32]byte
-	X25519Secret *ecdh.PrivateKey // TODO - compute in calculator goroutine
+	X25519Secret *ecdh.PrivateKey // Tons of allocations here. TODO - compute in calculator goroutine
 
 	HandshakeTrafficSecretSend    [32]byte // we need to keep this for finished message.
 	HandshakeTrafficSecretReceive [32]byte // we need to keep this for finished message.
@@ -145,7 +145,7 @@ func (hctx *HandshakeConnection) ConstructDatagram(conn *ConnectionImpl, datagra
 	// because message has a chance to ack the whole flight
 	datagramSize, addToSendQueue = hctx.SendQueue.ConstructDatagram(conn, datagram)
 	if hctx.sendAcks.Size() != 0 && conn.Keys.Send.Symmetric.Epoch != 0 {
-		// TODO - we shuold send only encrypted acks, but is the second condition correct?
+		// We send only encrypted acks
 		acksSpace := len(datagram) - datagramSize - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 		if acksSpace < format.MessageAckRecordNumberSize { // not a single one fits
 			return datagramSize, true

@@ -38,7 +38,9 @@ type ExtensionsSet struct {
 	Cookie cookie.Cookie
 
 	KeyShareSet bool
-	KeyShare    KeyShareSet // must be last (no idea why). TODO - add link to RFC
+	KeyShare    KeyShareSet
+
+	// "pre_shared_key" must be last [rfc8446:4.2.11] (which MUST be the last extension in the ClientHello)
 }
 
 func (msg *ExtensionsSet) parseCookie(body []byte) (err error) {

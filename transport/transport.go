@@ -22,7 +22,6 @@ type Transport struct {
 	rc  *receiver.Receiver
 
 	handshakesConnectionsMu sync.RWMutex
-	// TODO - limit on max number of parallel handshakes, clear items by LRU
 	// only ClientHello with correct cookie and larger timestamp replaces previous handshake here [rfc9147:5.11]
 	// handshakes map[netip.AddrPort]*HandshakeContext
 

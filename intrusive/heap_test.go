@@ -42,30 +42,49 @@ func FuzzHeap(f *testing.F) {
 			switch {
 			case c == 0:
 				if len(mirror) != 0 {
-					storage = append(storage, mirror[0])
 					// checked equality above
 					heap.PopFront()
 					mirror = mirror[1:]
 				}
-			case c == 1:
-				if len(storage) != 0 {
-					el := storage[int(c)%len(storage)]
-					heap.Erase(el, &el.HeapIndex) // NOP
-				}
 			case c < 128:
-				if len(storage) != 0 {
-					ind := int(c) % len(storage)
-					el := storage[ind]
-					storage = append(storage[:ind], storage[ind+1:]...)
-					heap.Insert(el, &el.HeapIndex)
+				el := storage[int(c)%len(storage)]
+				mirrorIndex := -1
+				for i, m := range mirror {
+					if el == m {
+						mirrorIndex = i
+						break
+					}
+				}
+				inserted := heap.Insert(el, &el.HeapIndex)
+				if inserted {
+					if mirrorIndex != -1 {
+						t.FailNow()
+					}
 					mirror = append(mirror, el)
+				} else {
+					if mirrorIndex == -1 {
+						t.FailNow()
+					}
 				}
 			default:
-				if len(mirror) != 0 {
-					ind := int(c) % len(mirror)
-					el := mirror[ind]
-					heap.Erase(el, &el.HeapIndex)
-					mirror = append(mirror[:ind], mirror[ind+1:]...)
+				el := storage[int(c)%len(storage)]
+				mirrorIndex := -1
+				for i, m := range mirror {
+					if el == m {
+						mirrorIndex = i
+						break
+					}
+				}
+				erased := heap.Erase(el, &el.HeapIndex)
+				if erased {
+					if mirrorIndex == -1 {
+						t.FailNow()
+					}
+					mirror = append(mirror[:mirrorIndex], mirror[mirrorIndex+1:]...)
+				} else {
+					if mirrorIndex != -1 {
+						t.FailNow()
+					}
 				}
 			}
 		}

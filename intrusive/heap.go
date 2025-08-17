@@ -24,7 +24,7 @@ type pair[T any] struct {
 }
 
 type IntrusiveHeap[T any] struct {
-	storage []pair[T]
+	storage []pair[T] // element 0 is reserved, so heap_index 0 means "not in heap"
 	pred    func(*T, *T) bool
 }
 

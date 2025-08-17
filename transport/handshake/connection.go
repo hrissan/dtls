@@ -62,7 +62,8 @@ type ConnectionImpl struct {
 	sendKeyUpdate        bool
 	sendNewSessionTicket bool
 
-	InSenderQueue bool // intrusive, must not be changed except by sender, protected by sender mutex
+	InSenderQueue  bool // intrusive, must not be changed except by sender, protected by sender mutex
+	TimerHeapIndex int  // intrusive, must not be changed except by clock, protected by clock mutex
 }
 
 // must not write over len(datagram), returns part of datagram filled
@@ -298,6 +299,9 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 		}
 	}
 	return
+}
+
+func (conn *ConnectionImpl) OnTimer() {
 }
 
 type exampleHandler struct {

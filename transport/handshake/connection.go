@@ -22,15 +22,12 @@ type ConnectionHandler interface {
 	// if connection was register for send with transport, this method will be called
 	// in the near future. record is allocated and resized to maximum size application
 	// is allowed to write.
-	// There is 3 possible outcomes
-	// 1. Application already has nothing to send,
-	//    should return <anything>, false, false
-	// 2. Application filled record, and now has nothing to send
-	//    should return recordSize, true, false. recordSize can be 0, then empty record will be sent.
-	// 3. Application filled record, but still has more data to send, which did not fit
-	//    should return recordSize, true, true. recordSize can be 0, empty record will be sent
-	// returning recordSize > len(record) || send = false, addToSendQueue = true is immediate panic (API violation)
-	OnWriteApplicationRecord(record []byte) (recordSize int, send bool, addToSendQueue bool)
+	// Application sets send = true, if it filled record. recordSize is # of bytes filled
+	// (recordSize can be 0 to send 0-size record, if recordSize > len(record), then panic)
+	// Application sets moreData if it still has more data to send.
+	// Application can set send = false, and moreData = true only in case it did not want
+	// to send short record (application may prefer to send longer record on the next call).
+	OnWriteApplicationRecord(record []byte) (recordSize int, send bool, moreData bool)
 
 	// every record sent will be delivered as is. Sent empty records are delivered as empty records.
 	// record points to buffer inside transport and must not be retained.
@@ -58,6 +55,7 @@ type ConnectionImpl struct {
 
 	Handshake            *HandshakeConnection // content is also protected by mutex above
 	Handler              ConnectionHandler
+	HandlerHasMoreData   bool // set when user signals it has data, clears after OnWriteRecord returns false
 	RoleServer           bool // changes very rarely
 	sendKeyUpdate        bool
 	sendNewSessionTicket bool
@@ -67,19 +65,29 @@ type ConnectionImpl struct {
 	FireTimeUnixNano int64 // time.Time object is larger and might be invalid as a heap predicate
 }
 
+func (conn *ConnectionImpl) HasDataToSend() bool {
+	hctx := conn.Handshake
+	if hctx != nil && hctx.SendQueue.HasDataToSend() {
+		return true
+	}
+	if hctx != nil && hctx.sendAcks.HasDataToSend(conn) {
+		return true
+	}
+	return conn.HandlerHasMoreData ||
+		conn.ackKeyUpdate != (format.RecordNumber{}) ||
+		conn.ackKeyNewSessionTicket != (format.RecordNumber{})
+}
+
 // must not write over len(datagram), returns part of datagram filled
 func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int, addToSendQueue bool) {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
-	if conn.Handshake != nil {
-		datagramSize, addToSendQueue = conn.Handshake.ConstructDatagram(conn, datagram)
-		// If we remove "if" below, we put ack for client_hello together with
-		// application data into the same datagram. Then wolfSSL_connect will return
-		// err = -441, Application data is available for reading
-		// TODO: contact WolfSSL team
-		if datagramSize > 0 {
-			return datagramSize, true
-		}
+	hctx := conn.Handshake
+	if hctx != nil {
+		// we decided to first send our messages, then acks.
+		// because message has a chance to ack the whole flight
+		datagramSize += hctx.SendQueue.ConstructDatagram(conn, datagram[datagramSize:])
+		datagramSize += hctx.sendAcks.ConstructDatagram(conn, datagram[datagramSize:])
 	}
 	sendAcks := make([]format.RecordNumber, 0, 2) // probably on stack
 	if conn.ackKeyUpdate != (format.RecordNumber{}) {
@@ -99,8 +107,14 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 		conn.ackKeyUpdate = format.RecordNumber{}
 		conn.ackKeyNewSessionTicket = format.RecordNumber{}
 	}
-	// TODO - application data
-	if conn.Handler != nil {
+	if conn.Handler != nil { // application data
+		// If we remove "if" below, we put ack for client_hello together with
+		// application data into the same datagram. Then wolfSSL_connect will return
+		// err = -441, Application data is available for reading
+		// TODO: contact WolfSSL team
+		if datagramSize > 0 {
+			return datagramSize, true
+		}
 		userSpace := len(datagram) - datagramSize - 1 - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 		if userSpace >= constants.MinFragmentBodySize {
 			record := datagram[datagramSize+format.OutgoingCiphertextRecordHeader : datagramSize+format.OutgoingCiphertextRecordHeader+userSpace]
@@ -114,11 +128,13 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 					panic("ciphertext application record construction length invariant failed")
 				}
 				datagramSize += len(da)
-				addToSendQueue = addToSendQueue || add
+			}
+			if !add {
+				conn.HandlerHasMoreData = false
 			}
 		}
 	}
-	return
+	return datagramSize, conn.HasDataToSend()
 }
 
 var ErrUpdatingKeysWouldOverflowEpoch = errors.New("updating keys would overflow epoch")

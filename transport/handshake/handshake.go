@@ -150,34 +150,6 @@ func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg format.Me
 	_, _ = hctx.TranscriptHasher.Write(msg.Body)
 }
 
-// must not write over len(datagram), returns part of datagram filled
-func (hctx *HandshakeConnection) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (datagramSize int, addToSendQueue bool) {
-	// we decided to first send our messages, then acks.
-	// because message has a chance to ack the whole flight
-	datagramSize, addToSendQueue = hctx.SendQueue.ConstructDatagram(conn, datagram)
-	if hctx.sendAcks.Size() != 0 && conn.Keys.Send.Symmetric.Epoch != 0 {
-		// We send only encrypted acks
-		acksSpace := len(datagram) - datagramSize - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
-		if acksSpace < format.MessageAckRecordNumberSize { // not a single one fits
-			return datagramSize, true
-		}
-		acksCount := min(hctx.sendAcks.Size(), acksSpace/format.MessageAckRecordNumberSize)
-		if acksSpace < constants.MinFragmentBodySize && acksCount != hctx.sendAcks.Size() {
-			return datagramSize, true // do not send tiny records at the end of datagram
-		}
-		sendAcks := hctx.sendAcks.PopSorted(acksCount)
-
-		da := conn.constructCiphertextAck(datagram[datagramSize:datagramSize], sendAcks)
-
-		if len(da) > len(datagram[datagramSize:]) {
-			panic("ciphertext ack record construction length invariant failed")
-		}
-		datagramSize += len(da)
-		addToSendQueue = addToSendQueue || hctx.sendAcks.Size() != 0
-	}
-	return
-}
-
 func (conn *ConnectionImpl) constructRecord(datagram []byte, header MessageHeaderMinimal, body []byte, fragmentOffset uint32, maxFragmentLength uint32) (recordSize int, fragmentInfo format.FragmentInfo, rn format.RecordNumber) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
 	if fragmentOffset >= uint32(len(body)) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0

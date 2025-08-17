@@ -69,3 +69,30 @@ func (conn *ConnectionImpl) ReceiveAcks(insideBody []byte) (registerInSender boo
 	}
 	return
 }
+
+func (a *AcksSet) HasDataToSend(conn *ConnectionImpl) bool {
+	return a.Size() != 0 && conn.Keys.Send.Symmetric.Epoch != 0 // We send only encrypted acks
+}
+
+func (a *AcksSet) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (datagramSize int) {
+	if !a.HasDataToSend(conn) {
+		return
+	}
+	acksSpace := len(datagram) - datagramSize - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+	if acksSpace < format.MessageAckRecordNumberSize { // not a single one fits
+		return
+	}
+	acksCount := min(a.Size(), acksSpace/format.MessageAckRecordNumberSize)
+	if acksSpace < constants.MinFragmentBodySize && acksCount != a.Size() {
+		return // do not send tiny records at the end of datagram
+	}
+	sendAcks := a.PopSorted(acksCount)
+
+	da := conn.constructCiphertextAck(datagram[datagramSize:datagramSize], sendAcks)
+
+	if len(da) > len(datagram[datagramSize:]) {
+		panic("ciphertext ack record construction length invariant failed")
+	}
+	datagramSize += len(da)
+	return
+}

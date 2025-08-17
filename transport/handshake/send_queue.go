@@ -53,7 +53,11 @@ func (sq *SendQueue) PushMessage(msg format.MessageHandshake) {
 	})
 }
 
-func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (datagramSize int, addToSendQueue bool) {
+func (sq *SendQueue) HasDataToSend() bool {
+	return sq.messageOffset < sq.messages.Len() && len(sq.sentRecords) < constants.MaxSendRecordsQueue
+}
+
+func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (datagramSize int) {
 	// we decided to first send our messages, then acks.
 	// because message has a chance to ack the whole flight
 	for {
@@ -78,7 +82,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (d
 				outgoing.Header, outgoing.Body,
 				sq.fragmentOffset, outgoing.SendEnd-sq.fragmentOffset)
 			if recordSize == 0 {
-				return datagramSize, true
+				break
 			}
 			sq.sentRecords[rn] = fragmentInfo
 			datagramSize += recordSize

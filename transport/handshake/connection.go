@@ -265,7 +265,8 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 		switch contentType {
 		case format.PlaintextContentTypeAlert:
 			log.Printf("dtls: got alert(encrypted) %v from %v, message(hex): %x", hdr, conn.Addr, messageData)
-			// TODO - parse alert here, and probably continue to the next record (but read the standard)
+			// messageData must be 2 bytes, TODO - parse and process alert
+			// record with an Alert type MUST contain exactly one message. [rfc8446:5.1]
 			return nil
 		case format.PlaintextContentTypeHandshake:
 			log.Printf("dtls: got handshake(encrypted) %v from %v, message(hex): %x", hdr, conn.Addr, messageData)
@@ -319,13 +320,9 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 				conn.Handler = &exampleHandler{toSend: "Hello from client\n"}
 				conn.HandlerHasMoreData = true
 			}
-			return nil // acks occupy full record
+			return nil // ack occupies full record
 		case format.PlaintextContentTypeApplicationData:
 			log.Printf("dtls: got application_data(encrypted) %v from %v, message: %q", hdr, conn.Addr, messageData)
-			//if conn.Handshake != nil { // TODO - remove
-			//	conn.Handler = &exampleHandler{toSend: "tinydtls hears you: " + string(messageData)}
-			//	registerInSender = true
-			//}
 			return nil // application data occupies full record
 		default:
 			panic("content type checked in format.IsPlaintextRecord()")

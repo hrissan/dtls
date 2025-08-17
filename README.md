@@ -89,26 +89,12 @@ which might change state and wake up sending goroutine or add connection back to
 
 ### timers goroutine
 
-Maintains a list of connections with timer set (max size of the queue is equal to # of handshakes).
+Maintains an intrusive heap of connections with timer set (max size of the queue is equal to # of handshakes).
 When timer expires, calls OnTimer function on connection,
 which might change state and wake up some other goroutine or set timer again.
 
-We do not want to use complicated data structures, like B-tree or intrusive heap.
-
-So we have only 2 simple queues for short (50ms) and long (1s) timers, each sorted by expiration time simply because of the push order.
-
-When we set 5-second timer, we'd set timer deadline to +5s, but add it to the 1s queue.
-
-Goroutine will wake up and examine timers at the head of both queues.
-If the timer reached deadline, it fires timer, otherwise adds to the queue again, until deadline is reached.
-
-Then goroutine will select how long it should sleep, set timer and wait on both timer and wake-up struct{} channel.
-
-If timer is added with deadline less than sleep deadline, wake-up channel is signalled.
-
-Each connection can be added to both queues, but only once to each one.
-
-TODO - maybe we need 3 or 4 queues with different timeouts ladder.
+Connection must remember fire time under lock, because timers goroutine can call OnTimer even
+after timer is removed from heap.
 
 ## Links to other implementations
 

@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/format"
@@ -64,6 +65,7 @@ type ConnectionImpl struct {
 
 	InSenderQueue  bool // intrusive, must not be changed except by sender, protected by sender mutex
 	TimerHeapIndex int  // intrusive, must not be changed except by clock, protected by clock mutex
+	FireTime       time.Time
 }
 
 // must not write over len(datagram), returns part of datagram filled

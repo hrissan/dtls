@@ -224,3 +224,7 @@ that fail deprotection, and they could be from an attacker.
 
 * limit on how much memory single handshake uses for all messages
 
+* offload long calculations (ECC, RSA, etc.) to separate goroutine(s)
+
+* integrational throughput and latency benchmarks, comparison with UDP without encryption. 
+

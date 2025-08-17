@@ -1,9 +1,13 @@
 package handshake
 
-import "github.com/hrissan/tinydtls/format"
+type MessageHeaderMinimal struct {
+	HandshakeType byte
+	MessageSeq    uint16
+}
 
 type OutgoingHandshakeMessage struct {
-	Message format.MessageHandshake
+	Header MessageHeaderMinimal
+	Body   []byte // TODO - reuse in rope
 	// We support acks from both sides, but no holes for simplicity.
 	// Once SendOffset == SendEnd, message is fully sent
 	SendOffset uint32

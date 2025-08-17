@@ -43,7 +43,11 @@ func (sq *SendQueue) PushMessage(msg format.MessageHandshake) {
 		panic("too many messages are generated at once")
 	}
 	sq.messages.PushBack(OutgoingHandshakeMessage{
-		Message:    msg,
+		Header: MessageHeaderMinimal{
+			HandshakeType: msg.Header.HandshakeType,
+			MessageSeq:    msg.Header.MessageSeq,
+		},
+		Body:       msg.Body,
 		SendOffset: 0,
 		SendEnd:    msg.Header.Length,
 	})
@@ -70,7 +74,8 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (d
 			if sq.fragmentOffset >= outgoing.SendEnd { // never due to combination of checks above
 				panic("invariant violation")
 			}
-			recordSize, fragmentInfo, rn := conn.constructRecord(datagram[datagramSize:], outgoing.Message,
+			recordSize, fragmentInfo, rn := conn.constructRecord(datagram[datagramSize:],
+				outgoing.Header, outgoing.Body,
 				sq.fragmentOffset, outgoing.SendEnd-sq.fragmentOffset)
 			if recordSize == 0 {
 				return datagramSize, true

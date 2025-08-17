@@ -17,10 +17,9 @@ type HandshakeConnection struct {
 	LocalRandom  [32]byte
 	X25519Secret *ecdh.PrivateKey // Tons of allocations here. TODO - compute in calculator goroutine
 
-	HandshakeTrafficSecretSend    [32]byte // we need to keep this for finished message.
-	HandshakeTrafficSecretReceive [32]byte // we need to keep this for finished message.
-
-	MasterSecret [32]byte
+	MasterSecret                  [32]byte
+	HandshakeTrafficSecretSend    [32]byte // we need this to generate finished message.
+	HandshakeTrafficSecretReceive [32]byte // we need this to check peer's finished message.
 
 	currentFlight byte // both send and receive
 
@@ -167,17 +166,24 @@ func (hctx *HandshakeConnection) ConstructDatagram(conn *ConnectionImpl, datagra
 	return
 }
 
-func (conn *ConnectionImpl) constructRecord(datagram []byte, msg format.MessageHandshake, fragmentOffset uint32, maxFragmentLength uint32) (recordSize int, fragmentInfo format.FragmentInfo, rn format.RecordNumber) {
+func (conn *ConnectionImpl) constructRecord(datagram []byte, header MessageHeaderMinimal, body []byte, fragmentOffset uint32, maxFragmentLength uint32) (recordSize int, fragmentInfo format.FragmentInfo, rn format.RecordNumber) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
-	if msg.Header.Length != uint32(len(msg.Body)) {
+	if fragmentOffset >= uint32(len(body)) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
 		panic("invariant of send queue fragment offset violated")
 	}
-	if fragmentOffset >= msg.Header.Length { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
-		panic("invariant of send queue fragment offset violated")
+	msg := format.MessageHandshake{
+		Header: format.MessageHandshakeHeader{
+			HandshakeType: header.HandshakeType,
+			Length:        uint32(len(body)),
+			FragmentInfo: format.FragmentInfo{
+				MessageSeq:     header.MessageSeq,
+				FragmentOffset: fragmentOffset,
+				FragmentLength: 0,
+			},
+		},
+		Body: body,
 	}
-	msg.Header.FragmentOffset = fragmentOffset
-
-	if msg.Header.HandshakeType == format.HandshakeTypeClientHello || msg.Header.HandshakeType == format.HandshakeTypeServerHello {
+	if header.HandshakeType == format.HandshakeTypeClientHello || header.HandshakeType == format.HandshakeTypeServerHello {
 		remainingSpace := len(datagram) - format.MessageHandshakeHeaderSize + format.PlaintextRecordHeaderSize
 		if remainingSpace <= 0 {
 			return

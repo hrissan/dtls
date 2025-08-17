@@ -102,8 +102,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	masterSecret := conn.Keys.ComputeHandshakeKeys(false, sharedSecret, handshakeTranscriptHash)
-	copy(hctx.MasterSecret[:], masterSecret)
+	hctx.MasterSecret, hctx.HandshakeTrafficSecretSend, hctx.HandshakeTrafficSecretReceive = conn.Keys.ComputeHandshakeKeys(false, sharedSecret, handshakeTranscriptHash)
 
 	log.Printf("processed server hello")
 	return nil, nil

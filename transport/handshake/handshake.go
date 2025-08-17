@@ -17,6 +17,9 @@ type HandshakeConnection struct {
 	X25519Secret [32]byte
 	X25519Public [32]byte // TODO - compute in calculator goroutine
 
+	HandshakeTrafficSecretSend    [32]byte // we need to keep this for finished message.
+	HandshakeTrafficSecretReceive [32]byte // we need to keep this for finished message.
+
 	MasterSecret [32]byte
 
 	currentFlight byte // both send and receive

@@ -12,7 +12,7 @@ func (hctx *HandshakeConnection) GenerateFinished(conn *ConnectionImpl) format.M
 	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
 	finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
-	mustBeFinished := conn.Keys.Send.ComputeFinished(sha256.New(), finishedTranscriptHash)
+	mustBeFinished := conn.Keys.Send.ComputeFinished(sha256.New(), hctx.HandshakeTrafficSecretSend[:], finishedTranscriptHash)
 
 	msg := format.MessageFinished{
 		VerifyDataLength: len(mustBeFinished),

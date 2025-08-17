@@ -47,7 +47,8 @@ func NewGCMCipher(block cipher.Block) cipher.AEAD {
 	return c
 }
 
-func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trHash []byte) (masterSecret []byte) {
+func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trHash []byte) (
+	masterSecret [32]byte, handshakeTrafficSecretSend [32]byte, handshakeTrafficSecretReceive [32]byte) {
 	hasher := sha256.New()
 	emptyHash := sha256.Sum256(nil)
 
@@ -58,13 +59,15 @@ func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trH
 	derivedSecret := deriveSecret(hasher, earlySecret, "derived", emptyHash[:])
 	handshakeSecret := hkdf.Extract(hasher, derivedSecret, sharedSecret)
 
-	keys.Send.ComputeHandshakeKeys(serverRole, handshakeSecret, trHash)
-	keys.Receive.ComputeHandshakeKeys(!serverRole, handshakeSecret, trHash)
+	handshakeTrafficSecretSend = keys.Send.ComputeHandshakeKeys(serverRole, handshakeSecret, trHash)
+	handshakeTrafficSecretReceive = keys.Receive.ComputeHandshakeKeys(!serverRole, handshakeSecret, trHash)
 	keys.ExpectEpochUpdate = true
 
 	derivedSecret = deriveSecret(hasher, handshakeSecret, "derived", emptyHash[:])
 	zeros := [32]byte{}
-	return hkdf.Extract(hasher, derivedSecret, zeros[:])
+	masterSecretSlice := hkdf.Extract(hasher, derivedSecret, zeros[:])
+	copy(masterSecret[:], masterSecretSlice)
+	return
 }
 
 func (keys *Keys) ComputeApplicationTrafficSecret(serverRole bool, masterSecret []byte, trHash []byte) {

@@ -14,7 +14,6 @@ var ErrCipherTextAllZeroPadding = errors.New("ciphertext all zero padding")
 
 type DirectionKeys struct {
 	// fields sorted to minimize padding
-	HandshakeTrafficSecret   [32]byte // we need to keep this for finished message. TODO - move into HandshakeContext
 	ApplicationTrafficSecret [32]byte // we need to keep this for key update
 
 	// for ServerHello retransmit and replay protection
@@ -30,28 +29,29 @@ type DirectionKeys struct {
 	// so without unsafe tricks our direction keys total size is ~100 plus 480 (no seq encryption) or 960 (seq encryption)
 }
 
-func (keys *DirectionKeys) ComputeHandshakeKeys(serverKeys bool, handshakeSecret []byte, trHash []byte) {
+func (keys *DirectionKeys) ComputeHandshakeKeys(serverKeys bool, handshakeSecret []byte, trHash []byte) (handshakeTrafficSecret [32]byte) {
 	if keys.Epoch != 0 {
 		panic("handshake keys state machine violation")
 	}
 
 	hasher := sha256.New()
 	if serverKeys {
-		copy(keys.HandshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "s hs traffic", trHash[:]))
-		log.Printf("server2 handshake traffic secret: %x\n", keys.HandshakeTrafficSecret)
+		copy(handshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "s hs traffic", trHash[:]))
+		log.Printf("server2 handshake traffic secret: %x\n", handshakeTrafficSecret)
 	} else {
-		copy(keys.HandshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "c hs traffic", trHash[:]))
-		log.Printf("client2 handshake traffic secret: %x\n", keys.HandshakeTrafficSecret)
+		copy(handshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "c hs traffic", trHash[:]))
+		log.Printf("client2 handshake traffic secret: %x\n", handshakeTrafficSecret)
 	}
-	keys.Symmetric.ComputeKeys(keys.HandshakeTrafficSecret[:])
+	keys.Symmetric.ComputeKeys(handshakeTrafficSecret[:])
 
 	keys.Epoch = 2
 	keys.NextSegmentSequence = 0
+	return handshakeTrafficSecret
 }
 
 // TODO - remove allocations
-func (keys *DirectionKeys) ComputeFinished(hasher hash.Hash, transcriptHash []byte) []byte {
-	finishedKey := hkdf.ExpandLabel(hasher, keys.HandshakeTrafficSecret[:], "finished", []byte{}, hasher.Size())
+func (keys *DirectionKeys) ComputeFinished(hasher hash.Hash, HandshakeTrafficSecret []byte, transcriptHash []byte) []byte {
+	finishedKey := hkdf.ExpandLabel(hasher, HandshakeTrafficSecret, "finished", []byte{}, hasher.Size())
 	//transcriptHash := sha256.Sum256(conn.transcript)
 	return hkdf.HMAC(finishedKey, transcriptHash[:], hasher)
 }

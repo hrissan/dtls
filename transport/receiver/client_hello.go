@@ -154,8 +154,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	masterSecret := conn.Keys.ComputeHandshakeKeys(true, sharedSecret, handshakeTranscriptHash)
-	copy(hctx.MasterSecret[:], masterSecret)
+	hctx.MasterSecret, hctx.HandshakeTrafficSecretSend, hctx.HandshakeTrafficSecretReceive = conn.Keys.ComputeHandshakeKeys(true, sharedSecret, handshakeTranscriptHash)
 
 	hctx.PushMessage(conn, rc.generateEncryptedExtensions(hctx))
 

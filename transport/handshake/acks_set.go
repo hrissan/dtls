@@ -6,7 +6,9 @@ import (
 	"slices"
 
 	"github.com/hrissan/tinydtls/constants"
+	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/transport/options"
 )
 
 type AcksSet struct {
@@ -46,12 +48,12 @@ func (a *AcksSet) PopSorted(maxCount int) []format.RecordNumber {
 }
 
 // TODO - move out
-func (conn *ConnectionImpl) ReceiveAcks(insideBody []byte) (registerInSender bool) {
+func (conn *ConnectionImpl) ReceiveAcks(opts *options.TransportOptions, insideBody []byte) {
 	for ; len(insideBody) >= format.MessageAckRecordNumberSize; insideBody = insideBody[format.MessageAckRecordNumberSize:] {
 		epoch := binary.BigEndian.Uint64(insideBody)
 		seq := binary.BigEndian.Uint64(insideBody[8:])
 		if epoch > math.MaxUint16 {
-			// TODO - alert?
+			opts.Stats.Warning(conn.Addr, dtlserrors.WarnAckEpochOverflow)
 			continue // prevent overflow below
 		}
 		rn := format.RecordNumberWith(uint16(epoch), seq)
@@ -67,7 +69,6 @@ func (conn *ConnectionImpl) ReceiveAcks(insideBody []byte) (registerInSender boo
 			conn.sendNewSessionTicket = false
 		}
 	}
-	return
 }
 
 func (a *AcksSet) HasDataToSend(conn *ConnectionImpl) bool {

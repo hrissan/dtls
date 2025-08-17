@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/hrissan/tinydtls/constants"
+	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
 	"github.com/hrissan/tinydtls/transport/options"
@@ -66,6 +67,12 @@ type ConnectionImpl struct {
 }
 
 func (conn *ConnectionImpl) HasDataToSend() bool {
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
+	return conn.hasDataToSendLocked()
+}
+
+func (conn *ConnectionImpl) hasDataToSendLocked() bool {
 	hctx := conn.Handshake
 	if hctx != nil && hctx.SendQueue.HasDataToSend() {
 		return true
@@ -134,57 +141,60 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 			}
 		}
 	}
-	return datagramSize, conn.HasDataToSend()
+	return datagramSize, conn.hasDataToSendLocked()
 }
 
 var ErrUpdatingKeysWouldOverflowEpoch = errors.New("updating keys would overflow epoch")
+var ErrNewSessionTicketFragmented = errors.New("fragmented NewSessionTicket message not supported")
 
-func (conn *ConnectionImpl) receivedNewSessionTicket(handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) (registerInSender bool) {
+func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOptions, handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) error {
 	if handshakeHdr.IsFragmented() {
-		// alert - we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
+		// we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
-		return
+		opts.Stats.Warning(conn.Addr, dtlserrors.WarnNewSessionTicketFragmented)
+		return nil
 	}
 	if conn.Handshake != nil {
-		return // alert - post-handshake message prohibited during handshake
+		opts.Stats.Warning(conn.Addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
+		return nil
 	}
 	if handshakeHdr.MessageSeq > conn.Keys.NextMessageSeqReceive {
-		return // totally ok to ignore
+		return nil // totally ok to ignore
 	}
 	if conn.ackKeyNewSessionTicket == (format.RecordNumber{}) {
 		conn.ackKeyNewSessionTicket = rn
-		registerInSender = true
 	}
 	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
-		return // totally ok to ignore
+		return nil // totally ok to ignore
 	}
 	conn.Keys.NextMessageSeqReceive++
 	log.Printf("received and ignored NewSessionTicket") // TODO
-	return
+	return nil
 }
 
-func (conn *ConnectionImpl) receivedKeyUpdate(handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) (registerInSender bool) {
+func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) error {
 	if handshakeHdr.IsFragmented() {
 		// alert - we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
-		return
+		opts.Stats.Warning(conn.Addr, dtlserrors.WarnKeyUpdateFragmented)
+		return nil
 	}
 	if conn.Handshake != nil {
-		return // alert - post-handshake message prohibited during handshake
+		opts.Stats.Warning(conn.Addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
+		return nil
 	}
 	if handshakeHdr.MessageSeq > conn.Keys.NextMessageSeqReceive {
-		return // totally ok to ignore
+		return nil // totally ok to ignore
 	}
 	if conn.ackKeyUpdate == (format.RecordNumber{}) {
 		conn.ackKeyUpdate = rn
-		registerInSender = true
 	}
 	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
-		return // totally ok to ignore
+		return nil // totally ok to ignore
 	}
 	conn.Keys.NextMessageSeqReceive++
 	log.Printf("received and ignored KeyUpdate") // TODO
-	return
+	return nil
 }
 
 func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, seqNumData []byte, header []byte, body []byte) (decrypted []byte, rn format.RecordNumber, contentType byte, err error) {
@@ -234,66 +244,72 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 	return
 }
 
-func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptions, hdr format.CiphertextRecordHeader, cid []byte, seqNumData []byte, header []byte, body []byte, addr netip.AddrPort) (registerInSender bool) {
+func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptions, hdr format.CiphertextRecordHeader, cid []byte, seqNumData []byte, header []byte, body []byte) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	decrypted, rn, contentType, err := conn.deprotectLocked(hdr, seqNumData, header, body)
-	if err != nil {
-		// TODO - alert, either garbage, attack or epoch wrapping
-		return
+	if err != nil { // TODO - deprotectLocked should return dtlserror.Error
+		opts.Stats.Warning(conn.Addr, dtlserrors.WarnFailedToDeprotectRecord)
+		// either garbage, attack or epoch wrapping
+		return nil
 	}
-	log.Printf("dtls: ciphertext %v deprotected with rn=%v cid(hex): %x from %v, body(hex): %x", hdr, rn, cid, addr, decrypted)
+	log.Printf("dtls: ciphertext %v deprotected with rn=%v cid(hex): %x from %v, body(hex): %x", hdr, rn, cid, conn.Addr, decrypted)
 	if !format.IsInnerPlaintextRecord(contentType) {
-		// TODO - send alert
-		return
+		// warning instead of error here is debatable, probably some DTLSv1.2 message from mixed implementation
+		opts.Stats.Warning(conn.Addr, dtlserrors.WarnUnknownInnerPlaintextRecordType)
+		return nil
 	}
 	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
 	for messageOffset < len(decrypted) {
 		messageData := decrypted[messageOffset:]
 		switch contentType {
 		case format.PlaintextContentTypeAlert:
-			log.Printf("dtls: got alert(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)
-			return // TODO - more checks
+			log.Printf("dtls: got alert(encrypted) %v from %v, message(hex): %x", hdr, conn.Addr, messageData)
+			// TODO - parse alert here, and probably continue to the next record (but read the standard)
+			return nil
 		case format.PlaintextContentTypeHandshake:
-			log.Printf("dtls: got handshake(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)
+			log.Printf("dtls: got handshake(encrypted) %v from %v, message(hex): %x", hdr, conn.Addr, messageData)
 			var handshakeHdr format.MessageHandshakeHeader
 			n, body, err := handshakeHdr.ParseWithBody(messageData)
 			if err != nil {
-				opts.Stats.BadMessageHeader("handshake(encrypted)", messageOffset, len(decrypted), addr, err)
-				// TODO: alert here, and we cannot continue to the next record.
-				return
+				opts.Stats.BadMessageHeader("handshake(encrypted)", messageOffset, len(decrypted), conn.Addr, err)
+				return dtlserrors.ErrEncryptedHandshakeMessageHeaderParsing
 			}
 			messageData = messageData[:n]
 			messageOffset += n
-			if handshakeHdr.HandshakeType == format.HandshakeTypeClientHello || handshakeHdr.HandshakeType == format.HandshakeTypeServerHello {
-				opts.Stats.MustNotBeEncrypted("handshake(encrypted)", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)
-				// TODO: alert here, and we do not want to continue to the next record.
-				return
-			}
 			switch handshakeHdr.HandshakeType {
+			case format.HandshakeTypeClientHello:
+				opts.Stats.MustNotBeEncrypted("handshake(encrypted)", format.HandshakeTypeToName(handshakeHdr.HandshakeType), conn.Addr, handshakeHdr)
+				return dtlserrors.ErrClientHelloMustNotBeEncrypted
+			case format.HandshakeTypeServerHello:
+				opts.Stats.MustNotBeEncrypted("handshake(encrypted)", format.HandshakeTypeToName(handshakeHdr.HandshakeType), conn.Addr, handshakeHdr)
+				return dtlserrors.ErrServerHelloMustNotBeEncrypted
 			case format.HandshakeTypeNewSessionTicket:
-				registerInSender = conn.receivedNewSessionTicket(handshakeHdr, body, rn)
-				continue
+				if err := conn.receivedNewSessionTicket(opts, handshakeHdr, body, rn); err != nil {
+					return err
+				}
 			case format.HandshakeTypeKeyUpdate:
-				registerInSender = conn.receivedKeyUpdate(handshakeHdr, body, rn)
-				continue
-			}
-			if conn.Handshake != nil {
-				flight := HandshakeTypeToFlight(handshakeHdr.HandshakeType, conn.RoleServer) // zero if unknown
-				conn.Handshake.ReceivedFlight(conn, flight)
-				// receiving any chunk from the next flight will remove all acks for previous flights
-				// before this and subsequent chunks are added to hctx.acks
-				registerInSender = conn.Handshake.ReceivedMessage(conn, handshakeHdr, body, rn) || registerInSender
+				if err := conn.receivedKeyUpdate(opts, handshakeHdr, body, rn); err != nil {
+					return err
+				}
+			default:
+				if conn.Handshake != nil {
+					flight := HandshakeTypeToFlight(handshakeHdr.HandshakeType, conn.RoleServer) // zero if unknown
+					conn.Handshake.ReceivedFlight(conn, flight)
+					// receiving any chunk from the next flight will remove all acks for previous flights
+					// before this and subsequent chunks are added to hctx.acks
+					if err := conn.Handshake.ReceivedMessage(conn, handshakeHdr, body, rn); err != nil {
+						return err
+					}
+				}
 			}
 		case format.PlaintextContentTypeAck:
 			var insideBody []byte
 			if insideBody, err = format.ParseMessageAcks(messageData); err != nil {
-				log.Printf("tinydtls: failed to parse ack header: %v", err)
-				return
+				return dtlserrors.ErrEncryptedAckMessageHeaderParsing
 			}
-			registerInSender = conn.ReceiveAcks(insideBody)
-
-			log.Printf("dtls: got ack(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)
+			conn.ReceiveAcks(opts, insideBody)
+			log.Printf("dtls: got ack(encrypted) %v from %v, message(hex): %x", hdr, conn.Addr, messageData)
 			// if all messages from epoch 2 acked, then switch sending epoch
 			if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Symmetric.Epoch == 2 {
 				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
@@ -301,21 +317,21 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 				conn.Keys.Send.NextSegmentSequence = 0
 				conn.Handshake = nil // TODO - reuse into pool
 				conn.Handler = &exampleHandler{toSend: "Hello from client\n"}
-				registerInSender = true
+				conn.HandlerHasMoreData = true
 			}
-			return // TODO - more checks
+			return nil // acks occupy full record
 		case format.PlaintextContentTypeApplicationData:
-			log.Printf("dtls: got application_data(encrypted) %v from %v, message: %q", hdr, addr, messageData)
+			log.Printf("dtls: got application_data(encrypted) %v from %v, message: %q", hdr, conn.Addr, messageData)
 			//if conn.Handshake != nil { // TODO - remove
 			//	conn.Handler = &exampleHandler{toSend: "tinydtls hears you: " + string(messageData)}
 			//	registerInSender = true
 			//}
-			return // TODO - more checks
-		default: // never, because checked in format.IsPlaintextRecord()
-			panic("unknown content type")
+			return nil // application data occupies full record
+		default:
+			panic("content type checked in format.IsPlaintextRecord()")
 		}
 	}
-	return
+	return nil // TODO - we allow empty records of handshake type, must fix
 }
 
 func (conn *ConnectionImpl) OnTimer() {

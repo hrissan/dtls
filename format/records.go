@@ -71,6 +71,9 @@ func (hdr *PlaintextRecordHeader) Parse(datagram []byte) (n int, body []byte, er
 	}
 	hdr.SequenceNumber = binary.BigEndian.Uint64(datagram[3:11]) & 0xFFFFFFFFFFFF
 	length := int(binary.BigEndian.Uint16(datagram[11:13]))
+	if length == 0 {
+		return 0, nil, ErrPlaintextRecordBodyTooShort
+	}
 	if length > MaxPlaintextRecordLength { // TODO - generate record_overflow alert
 		return 0, nil, ErrPlaintextRecordBodyTooLong
 	}

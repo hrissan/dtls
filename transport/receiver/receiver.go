@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hrissan/tinydtls/cookie"
+	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/transport/handshake"
 	"github.com/hrissan/tinydtls/transport/options"
@@ -75,6 +76,24 @@ func (rc *Receiver) GoRunUDP(socket *net.UDPConn) {
 }
 
 func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
+	conn, err := rc.processDatagramImpl(datagram, addr)
+	if conn != nil {
+		if err != nil {
+			log.Printf("TODO - send alert and close connection")
+		} else {
+			if conn.HasDataToSend() {
+				// We postpone sending responses until full datagram processed
+				rc.snd.RegisterConnectionForSend(conn)
+			}
+		}
+	} else {
+		if err != nil {
+			log.Printf("TODO - send stateless alert")
+		}
+	}
+}
+
+func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
 	var conn *handshake.ConnectionImpl
 	connSet := false
 
@@ -86,8 +105,10 @@ func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
 			n, cid, seqNum, header, body, err := hdr.Parse(datagram[recordOffset:], rc.opts.CIDLength) // TODO - CID
 			if err != nil {
 				rc.opts.Stats.BadRecord("ciphertext", recordOffset, len(datagram), addr, err)
-				// TODO: alert here, and we cannot continue to the next record.
-				return
+				rc.opts.Stats.Warning(addr, dtlserrors.WarnCiphertextRecordParsing)
+				// Anyone can send garbage, ignore.
+				// We cannot continue to the next record.
+				return conn, nil
 			}
 			recordOffset += n
 			if !connSet { // look up connection only once per datagram, not record
@@ -98,10 +119,13 @@ func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
 			}
 			if conn != nil {
 				log.Printf("dtls: got ciphertext %v cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, body)
-				registerInSender := conn.ProcessCiphertextRecord(rc.opts, hdr, cid, seqNum, header, body, addr) // errors inside do not conflict with our ability to process next record
-				if registerInSender {
-					rc.snd.RegisterConnectionForSend(conn) // TODO - postpone all responses until full datagram processed
+				if err := conn.ProcessCiphertextRecord(rc.opts, hdr, cid, seqNum, header, body); err != nil {
+					return conn, err
 				}
+				// Problems inside record do not conflict with our ability to process next record
+			} else {
+				rc.opts.Stats.Warning(addr, dtlserrors.WarnCiphertextNoConnection)
+				// Alert is must here, otherwise client will not know we forgot their connection
 			}
 			continue
 		}
@@ -110,17 +134,26 @@ func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
 			n, body, err := hdr.Parse(datagram[recordOffset:])
 			if err != nil {
 				rc.opts.Stats.BadRecord("plaintext", recordOffset, len(datagram), addr, err)
-				// TODO: alert here, and we cannot continue to the next record.
-				return
+				rc.opts.Stats.Warning(addr, dtlserrors.WarnPlaintextRecordParsing)
+				// Anyone can send garbage, ignore.
+				// We cannot continue to the next record.
+				return conn, nil
 			}
 			recordOffset += n
-			rc.processPlaintextRecord(hdr, body, addr) // errors inside do not conflict with our ability to process next record
+			if err := rc.processPlaintextRecord(hdr, body, addr); err != nil {
+				rc.opts.Stats.Warning(addr, err)
+			}
+			// Anyone can send garbage, ignore.
+			// Errors inside do not conflict with our ability to process next record
 			continue
 		}
 		rc.opts.Stats.BadRecord("unknown", recordOffset, len(datagram), addr, format.ErrRecordTypeFailedToParse)
-		// TODO: alert here, and we cannot continue to the next record.
-		return
+		rc.opts.Stats.Warning(addr, dtlserrors.WarnUnknownRecordType)
+		// Anyone can send garbage, ignore.
+		// We cannot continue to the next record.
+		return conn, nil
 	}
+	return conn, nil
 }
 
 func (rc *Receiver) StartConnection(peerAddr netip.AddrPort) error {

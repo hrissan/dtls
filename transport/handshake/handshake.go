@@ -8,6 +8,7 @@ import (
 	"math"
 
 	"github.com/hrissan/tinydtls/constants"
+	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
@@ -75,13 +76,13 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	return true
 }
 
-func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) (registerInSender bool) {
+func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) error {
 	if handshakeHdr.MessageSeq < conn.Keys.NextMessageSeqReceive {
 		hctx.AddAck(handshakeHdr.MessageSeq, rn) // otherwise, peer will send those messages forever
-		return false                             // totally ok to ignore
+		return nil                               // totally ok to ignore
 	}
 	if handshakeHdr.MessageSeq > conn.Keys.NextMessageSeqReceive {
-		return false // totally ok to ignore
+		return nil // totally ok to ignore
 	}
 	// we do not check that message is full here, because if partial message set, we want to clear that by common code
 	if !hctx.receivedPartialMessageSet {
@@ -105,23 +106,23 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 	}
 	if handshakeHdr.Length != uint32(len(hctx.receivedPartialMessage.Body)) {
 		// TODO - alert and close connection, invariant violated
-		return false
+		return dtlserrors.ErrHandshakeMessageFragmentLengthMismatch
 	}
 	if handshakeHdr.HandshakeType != hctx.receivedPartialMessage.Header.HandshakeType {
 		// TODO - alert and close connection, invariant violated
-		return false
+		return dtlserrors.ErrHandshakeMessageFragmentTypeMismatch
 	}
 	shouldAck, changed := hctx.receivedPartialMessage.Ack(handshakeHdr.FragmentOffset, handshakeHdr.FragmentLength)
 	if !shouldAck {
-		return false // we do not support holes, ignore, wait for earlier message first
+		return nil // we do not support holes, ignore, wait for earlier or later fragment first
 	}
 	hctx.AddAck(handshakeHdr.MessageSeq, rn) // should ack it independent of conditions below
 	if !changed {                            // nothing new, ignore
-		return false
+		return nil
 	}
 	copy(hctx.receivedPartialMessage.Body[handshakeHdr.FragmentOffset:], body) // copy all bytes for simplicity
 	if !hctx.receivedPartialMessage.FullyAcked() {
-		return false // ok, waiting for more fragments
+		return nil // ok, waiting for more fragments
 	}
 	body = hctx.receivedPartialMessage.Body
 	hctx.receivedPartialMessage = OutgoingHandshakeMessage{}
@@ -129,9 +130,9 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 	conn.Keys.NextMessageSeqReceive++
 	handshakeHdr.FragmentOffset = 0
 	handshakeHdr.FragmentLength = handshakeHdr.Length
-	registerInSender = hctx.receivedFullMessage(conn, handshakeHdr, body)
+	err := hctx.receivedFullMessage(conn, handshakeHdr, body)
 	// TODO - return message body to pool here
-	return registerInSender
+	return err
 }
 
 // also acks (removes) all previous flights

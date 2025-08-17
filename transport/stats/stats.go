@@ -10,6 +10,8 @@ import (
 )
 
 type Stats interface {
+	Warning(addr netip.AddrPort, err error)
+
 	// transport layer
 	SocketReadError(n int, addr netip.AddrPort, err error)
 	SocketWriteError(n int, addr netip.AddrPort, err error)
@@ -54,6 +56,13 @@ func NewStatsLogVerbose() *StatsLog {
 	s.printDatagrams.Store(false)
 	s.printMessages.Store(true)
 	return s
+}
+
+func (s *StatsLog) Warning(addr netip.AddrPort, err error) {
+	if s.level.Load() < 0 {
+		return
+	}
+	log.Printf("tinydtls: warning addr=%v: %v", addr, err)
 }
 
 func (s *StatsLog) SocketReadError(n int, addr netip.AddrPort, err error) {

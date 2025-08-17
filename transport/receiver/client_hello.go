@@ -1,6 +1,7 @@
 package receiver
 
 import (
+	"crypto/ecdh"
 	"crypto/rsa"
 	"crypto/sha256"
 	"errors"
@@ -14,7 +15,6 @@ import (
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/signature"
 	"github.com/hrissan/tinydtls/transport/handshake"
-	"golang.org/x/crypto/curve25519"
 )
 
 func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort) {
@@ -121,8 +121,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	}
 	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", keyShareSet, initialHelloTranscriptHash)
 	rc.opts.Rnd.ReadMust(hctx.LocalRandom[:])
-	rc.opts.Rnd.ReadMust(hctx.X25519Secret[:])
-	hctx.ComputeKeyShare()
+	hctx.ComputeKeyShare(rc.opts.Rnd)
 
 	serverHello := format.ServerHello{
 		Random:      hctx.LocalRandom,
@@ -132,7 +131,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	serverHello.Extensions.SupportedVersions.SelectedVersion = format.DTLS_VERSION_13
 	serverHello.Extensions.KeyShareSet = true
 	serverHello.Extensions.KeyShare.X25519PublicKeySet = true
-	serverHello.Extensions.KeyShare.X25519PublicKey = hctx.X25519Public
+	copy(serverHello.Extensions.KeyShare.X25519PublicKey[:], hctx.X25519Secret.PublicKey().Bytes())
 	// TODO - get body from the rope
 	serverHelloBody := serverHello.Write(nil)
 	serverHelloMessage := format.MessageHandshake{
@@ -150,7 +149,11 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
 	// TODO - move to calculator goroutine
-	sharedSecret, err := curve25519.X25519(hctx.X25519Secret[:], msg.Extensions.KeyShare.X25519PublicKey[:])
+	remotePublic, err := ecdh.X25519().NewPublicKey(msg.Extensions.KeyShare.X25519PublicKey[:])
+	if err != nil {
+		panic("curve25519.X25519 failed")
+	}
+	sharedSecret, err := hctx.X25519Secret.ECDH(remotePublic)
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}

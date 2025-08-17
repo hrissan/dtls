@@ -10,39 +10,42 @@ import (
 )
 
 type AcksSet struct {
-	sendAcks       [constants.MaxSendAcks]format.RecordNumber // sorted before sending
-	sendAcksOffset int                                        // this is reversed queue
+	// sorted before sending, elements are at the back
+	sendAcks     [constants.MaxSendAcks]format.RecordNumber
+	sendAcksSize int
 }
 
 func (a *AcksSet) Clear() {
-	a.sendAcksOffset = constants.MaxSendAcks
+	a.sendAcksSize = 0
 }
 
 func (a *AcksSet) Size() int {
-	return constants.MaxSendAcks - a.sendAcksOffset
+	return a.sendAcksSize
 }
 
 func (a *AcksSet) Add(rn format.RecordNumber) {
-	if a.sendAcksOffset == 0 {
+	sendAcksOffset := len(a.sendAcks) - a.sendAcksSize
+	if sendAcksOffset == 0 {
 		return
 	}
-	for _, ack := range a.sendAcks[a.sendAcksOffset:] {
+	for _, ack := range a.sendAcks[sendAcksOffset:] {
 		if ack == rn {
 			return
 		}
 	}
-	a.sendAcksOffset--
-	a.sendAcks[a.sendAcksOffset] = rn
+	a.sendAcksSize++
+	a.sendAcks[sendAcksOffset-1] = rn
 }
 
 func (a *AcksSet) PopSorted(maxCount int) []format.RecordNumber {
+	sendAcksOffset := len(a.sendAcks) - a.sendAcksSize
 	// sort all first, otherwise we get random set
-	slices.SortFunc(a.sendAcks[a.sendAcksOffset:], format.RecordNumberCmp)
-	result := a.sendAcks[a.sendAcksOffset : a.sendAcksOffset+maxCount]
-	a.sendAcksOffset += maxCount
-	return result
+	slices.SortFunc(a.sendAcks[sendAcksOffset:], format.RecordNumberCmp)
+	a.sendAcksSize -= maxCount
+	return a.sendAcks[sendAcksOffset : sendAcksOffset+maxCount]
 }
 
+// TODO - move out
 func (conn *ConnectionImpl) ReceiveAcks(insideBody []byte) (registerInSender bool) {
 	for ; len(insideBody) >= format.MessageAckRecordNumberSize; insideBody = insideBody[format.MessageAckRecordNumberSize:] {
 		epoch := binary.BigEndian.Uint64(insideBody)

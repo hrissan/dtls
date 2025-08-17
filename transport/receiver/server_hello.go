@@ -1,6 +1,7 @@
 package receiver
 
 import (
+	"crypto/ecdh"
 	"errors"
 	"log"
 	"net/netip"
@@ -9,7 +10,6 @@ import (
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/transport/handshake"
-	"golang.org/x/crypto/curve25519"
 )
 
 var ErrServerHRRContainsNoCookie = errors.New("server HRR contains no cookie")
@@ -98,7 +98,11 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
 	// TODO - move to calculator goroutine
-	sharedSecret, err := curve25519.X25519(hctx.X25519Secret[:], serverHello.Extensions.KeyShare.X25519PublicKey[:])
+	remotePublic, err := ecdh.X25519().NewPublicKey(serverHello.Extensions.KeyShare.X25519PublicKey[:])
+	if err != nil {
+		panic("curve25519.X25519 failed")
+	}
+	sharedSecret, err := hctx.X25519Secret.ECDH(remotePublic)
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
@@ -127,7 +131,7 @@ func (rc *Receiver) generateClientHello(hctx *handshake.HandshakeConnection, set
 	// TODO - contact wolfssl team?
 	clientHello.Extensions.KeyShareSet = true
 	clientHello.Extensions.KeyShare.X25519PublicKeySet = true
-	clientHello.Extensions.KeyShare.X25519PublicKey = hctx.X25519Public
+	copy(clientHello.Extensions.KeyShare.X25519PublicKey[:], hctx.X25519Secret.PublicKey().Bytes())
 
 	// We need signature algorithms to sign and check certificate_verify,
 	// so we need to support lots of them.

@@ -8,15 +8,14 @@ import (
 	"math"
 
 	"github.com/hrissan/tinydtls/constants"
+	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
-	"golang.org/x/crypto/curve25519"
 )
 
 type HandshakeConnection struct {
 	LocalRandom  [32]byte
-	X25519Secret [32]byte
-	X25519Public [32]byte // TODO - compute in calculator goroutine
+	X25519Secret *ecdh.PrivateKey // TODO - compute in calculator goroutine
 
 	HandshakeTrafficSecretSend    [32]byte // we need to keep this for finished message.
 	HandshakeTrafficSecretReceive [32]byte // we need to keep this for finished message.
@@ -44,25 +43,18 @@ func NewHandshakeConnection(hasher hash.Hash) *HandshakeConnection {
 	hctx := &HandshakeConnection{
 		TranscriptHasher: hasher,
 	}
-	hctx.sendAcks.Clear() // starts in full state, but not a big deal
 	hctx.SendQueue.Reserve()
 	return hctx
 }
 
-func (hctx *HandshakeConnection) ComputeKeyShare() {
-	priv, err := ecdh.X25519().NewPrivateKey(hctx.X25519Secret[:])
+func (hctx *HandshakeConnection) ComputeKeyShare(rnd dtlsrand.Rand) {
+	var X25519Secret [32]byte
+	rnd.ReadMust(X25519Secret[:])
+	priv, err := ecdh.X25519().NewPrivateKey(X25519Secret[:])
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	pubBytes := priv.PublicKey().Bytes()
-	x25519Public, err := curve25519.X25519(hctx.X25519Secret[:], curve25519.Basepoint)
-	if err != nil {
-		panic("curve25519.X25519 failed")
-	}
-	if string(pubBytes) != string(x25519Public) {
-		panic("curve25519.X25519 failed")
-	}
-	copy(hctx.X25519Public[:], x25519Public)
+	hctx.X25519Secret = priv
 }
 
 func (hctx *HandshakeConnection) AddAck(messageSeq uint16, rn format.RecordNumber) {

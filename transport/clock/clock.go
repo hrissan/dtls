@@ -39,7 +39,6 @@ func (cl *Clock) signal() {
 	}
 }
 
-// socket must be closed by socket owner (externally)
 func (cl *Clock) Close() {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()

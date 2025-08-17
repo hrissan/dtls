@@ -7,7 +7,6 @@ import (
 	"net/netip"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/format"
@@ -63,9 +62,9 @@ type ConnectionImpl struct {
 	sendKeyUpdate        bool
 	sendNewSessionTicket bool
 
-	InSenderQueue  bool // intrusive, must not be changed except by sender, protected by sender mutex
-	TimerHeapIndex int  // intrusive, must not be changed except by clock, protected by clock mutex
-	FireTime       time.Time
+	InSenderQueue    bool  // intrusive, must not be changed except by sender, protected by sender mutex
+	TimerHeapIndex   int   // intrusive, must not be changed except by clock, protected by clock mutex
+	FireTimeUnixNano int64 // time.Time object is larger and might be invalid as a heap predicate
 }
 
 // must not write over len(datagram), returns part of datagram filled

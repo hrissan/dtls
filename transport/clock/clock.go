@@ -10,21 +10,19 @@ import (
 )
 
 type Clock struct {
-	sendMu   sync.Mutex
-	sendCond chan struct{}
+	mu       sync.Mutex
+	cond     chan struct{}
 	shutdown bool
 
-	// hello retry request is stateless.
-	// we limit (options.HelloRetryQueueSize) how many such datagrams we wish to store
 	timers *intrusive.IntrusiveHeap[handshake.ConnectionImpl]
 }
 
 func heapPred(a, b *handshake.ConnectionImpl) bool {
-	return a.FireTime.After(b.FireTime)
+	return a.FireTimeUnixNano < b.FireTimeUnixNano
 }
 
-func NewSender(opts *options.TransportOptions) *Clock {
-	cl := &Clock{sendCond: make(chan struct{})}
+func NewClock(opts *options.TransportOptions) *Clock {
+	cl := &Clock{cond: make(chan struct{})}
 
 	if opts.Preallocate {
 		cl.timers = intrusive.NewIntrusiveHeap(heapPred, opts.MaxConnections)
@@ -36,15 +34,15 @@ func NewSender(opts *options.TransportOptions) *Clock {
 
 func (cl *Clock) signal() {
 	select {
-	case cl.sendCond <- struct{}{}:
+	case cl.cond <- struct{}{}:
 	default:
 	}
 }
 
 // socket must be closed by socket owner (externally)
 func (cl *Clock) Close() {
-	cl.sendMu.Lock()
-	defer cl.sendMu.Unlock()
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
 	cl.shutdown = true
 	cl.signal()
 }
@@ -57,24 +55,24 @@ func (cl *Clock) GoRun() {
 		<-t.C
 	}
 	for {
-		cl.sendMu.Lock()
+		cl.mu.Lock()
 		var fireDur time.Duration
 		var conn *handshake.ConnectionImpl
 		if cl.timers.Len() != 0 {
 			conn = cl.timers.Front()
-			fireDur = conn.FireTime.Sub(time.Now())
+			fireDur = time.Duration(conn.FireTimeUnixNano - time.Now().UnixNano())
 			if fireDur <= 0 {
-				conn.FireTime = time.Time{}
+				conn.FireTimeUnixNano = 0
 				cl.timers.PopFront()
 			}
 		}
 		shutdown := cl.shutdown
-		cl.sendMu.Unlock()
+		cl.mu.Unlock()
 		if shutdown {
 			return
 		}
 		if conn == nil {
-			<-cl.sendCond
+			<-cl.cond
 			continue
 		}
 		if fireDur <= 0 {
@@ -85,7 +83,7 @@ func (cl *Clock) GoRun() {
 		select {
 		case <-t.C:
 			break
-		case <-cl.sendCond:
+		case <-cl.cond:
 			if t.Stop() {
 				<-t.C
 			}
@@ -94,13 +92,20 @@ func (cl *Clock) GoRun() {
 	}
 }
 
-func (cl *Clock) SetTimer(conn *handshake.ConnectionImpl, deadline time.Time) {
-	cl.sendMu.Lock()
-	defer cl.sendMu.Unlock()
+func (cl *Clock) StopTimer(conn *handshake.ConnectionImpl) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
 	cl.timers.Erase(conn, &conn.TimerHeapIndex)
-	conn.FireTime = deadline
+	conn.FireTimeUnixNano = 0
+}
+
+func (cl *Clock) SetTimer(conn *handshake.ConnectionImpl, deadline time.Time) {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+	cl.timers.Erase(conn, &conn.TimerHeapIndex)
+	conn.FireTimeUnixNano = deadline.UnixNano()
 	cl.timers.Insert(conn, &conn.TimerHeapIndex)
-	if cl.timers.Front() == conn {
+	if cl.timers.Front() == conn { // we do not care if it was in front position before erase
 		cl.signal()
 	}
 }

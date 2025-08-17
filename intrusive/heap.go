@@ -8,15 +8,15 @@ package intrusive
 // index == 0 is special value and means "not in a heap"
 // Unlike intrusive list, it does not allow unlinking object without reference to heap
 
-// This is max heap (like in std::), so if less is used, front will be the largest element
+// This is min heap, so if less is used, front will be the smallest element
 
 // due to Go limitations, we actually store 2 separate pointer,
 // one to heap element, another to intrusive index.
-// distance between them unsafe.Pointer(a) - unsafe.Pointer(b) is always the same.
-// but we do not want unsafe hack here
-// BTW: storing interface values would take the same 2 pointers.
+// distance between them unsafe.Pointer(a) - unsafe.Pointer(b) is always the same for given type.
+// but we do not want to use unsafe here.
+// BTW: storing interface values would take the same 2 pointers, plus bew slower due to interface calls.
 
-const healthChecks = true
+const healthChecks = false
 
 type pair[T any] struct {
 	ptr        *T
@@ -128,7 +128,7 @@ func (h *IntrusiveHeap[T]) checkHeap() {
 func (h *IntrusiveHeap[T]) isHeapUntil(storage []pair[T]) int {
 	p := 0
 	for c := 1; c < len(storage); c++ {
-		if h.pred(storage[p].ptr, storage[c].ptr) {
+		if !h.pred(storage[p].ptr, storage[c].ptr) {
 			return c
 		}
 		if (c & 1) == 0 {
@@ -139,7 +139,7 @@ func (h *IntrusiveHeap[T]) isHeapUntil(storage []pair[T]) int {
 }
 
 func (h *IntrusiveHeap[T]) adjust(ind int) {
-	if ind > 1 && !h.pred(h.storage[ind].ptr, h.storage[ind/2].ptr) {
+	if ind > 1 && h.pred(h.storage[ind].ptr, h.storage[ind/2].ptr) {
 		h.moveUp(ind)
 	} else {
 		h.moveDown(ind)
@@ -156,11 +156,11 @@ func (h *IntrusiveHeap[T]) moveDown(ind int) {
 			break
 		}
 
-		if lc+1 < size && h.pred(h.storage[lc].ptr, h.storage[lc+1].ptr) {
+		if lc+1 < size && !h.pred(h.storage[lc].ptr, h.storage[lc+1].ptr) {
 			lc++
 		}
 
-		if h.pred(h.storage[lc].ptr, data.ptr) {
+		if !h.pred(h.storage[lc].ptr, data.ptr) {
 			break
 		}
 		h.storage[ind] = h.storage[lc]
@@ -178,7 +178,7 @@ func (h *IntrusiveHeap[T]) moveUp(ind int) {
 	for {
 		p := ind / 2
 
-		if p == 0 || h.pred(data.ptr, h.storage[p].ptr) {
+		if p == 0 || !h.pred(data.ptr, h.storage[p].ptr) {
 			break
 		}
 		h.storage[ind] = h.storage[p]

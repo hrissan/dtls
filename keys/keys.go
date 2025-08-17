@@ -17,7 +17,7 @@ type Keys struct {
 	Send    DirectionKeys
 	Receive DirectionKeys
 
-	NewReceiveKeys SymmetricKeys // always correspond to Receive.Epoch + 1
+	NewReceiveKeys SymmetricKeys // always correspond to Receive.Symmetric.Epoch + 1
 
 	FailedDeprotectionCounter               uint64
 	NewReceiveKeysFailedDeprotectionCounter uint64

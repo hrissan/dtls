@@ -143,7 +143,7 @@ func (hctx *HandshakeConnection) ConstructDatagram(conn *ConnectionImpl, datagra
 	// we decided to first send our messages, then acks.
 	// because message has a chance to ack the whole flight
 	datagramSize, addToSendQueue = hctx.SendQueue.ConstructDatagram(conn, datagram)
-	if hctx.sendAcks.Size() != 0 && conn.Keys.Send.Epoch != 0 {
+	if hctx.sendAcks.Size() != 0 && conn.Keys.Send.Symmetric.Epoch != 0 {
 		// TODO - we shuold send only encrypted acks, but is the second condition correct?
 		acksSpace := len(datagram) - datagramSize - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 		if acksSpace < format.MessageAckRecordNumberSize { // not a single one fits
@@ -221,7 +221,7 @@ func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg format.Mes
 
 func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg format.MessageHandshake) ([]byte, format.RecordNumber) {
 	send := &conn.Keys.Send
-	epoch := send.Epoch
+	epoch := send.Symmetric.Epoch
 	rn := format.RecordNumberWith(epoch, conn.Keys.Send.NextSegmentSequence)
 	seq := send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
 	send.NextSegmentSequence++
@@ -270,7 +270,7 @@ func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg forma
 func (conn *ConnectionImpl) constructCiphertextAck(datagram []byte, acks []format.RecordNumber) []byte {
 	// TODO - harmonize with code above
 	send := &conn.Keys.Send
-	epoch := send.Epoch
+	epoch := send.Symmetric.Epoch
 	rn := format.RecordNumberWith(epoch, conn.Keys.Send.NextSegmentSequence)
 	seq := send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
 	send.NextSegmentSequence++
@@ -323,7 +323,7 @@ func (conn *ConnectionImpl) constructCiphertextAck(datagram []byte, acks []forma
 func (conn *ConnectionImpl) constructCiphertextApplication(record []byte) []byte {
 	// TODO - harmonize with code above
 	send := &conn.Keys.Send
-	epoch := send.Epoch
+	epoch := send.Symmetric.Epoch
 	rn := format.RecordNumberWith(epoch, conn.Keys.Send.NextSegmentSequence)
 	seq := send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
 	send.NextSegmentSequence++

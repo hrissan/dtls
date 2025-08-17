@@ -175,7 +175,7 @@ func (conn *ConnectionImpl) receivedKeyUpdate(handshakeHdr format.MessageHandsha
 func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, seqNumData []byte, header []byte, body []byte) (decrypted []byte, rn format.RecordNumber, contentType byte, err error) {
 	receiver := &conn.Keys.Receive
 	var seq uint64
-	if hdr.MatchesEpoch(receiver.Epoch) {
+	if hdr.MatchesEpoch(receiver.Symmetric.Epoch) {
 		decrypted, seq, contentType, err = receiver.Symmetric.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, conn.Keys.Receive.NextSegmentSequence,
 			seqNumData, header, body)
 		if err != nil {
@@ -186,7 +186,7 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 		conn.Keys.Receive.NextSegmentSequence = seq + 1 // TODO - update replay window
 	} else {
 		// We should check here that receiver.Epoch+1 does not overflow, because we increment it below
-		if !conn.Keys.ExpectEpochUpdate || receiver.Epoch == math.MaxUint16 || !hdr.MatchesEpoch(receiver.Epoch+1) {
+		if !conn.Keys.ExpectEpochUpdate || receiver.Symmetric.Epoch == math.MaxUint16 || !hdr.MatchesEpoch(receiver.Symmetric.Epoch+1) {
 			err = ErrUpdatingKeysWouldOverflowEpoch
 			return
 		}
@@ -196,6 +196,7 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 		// So, we decided we better store new keys
 		if !conn.Keys.NewReceiveKeysSet {
 			conn.Keys.NewReceiveKeysSet = true
+			conn.Keys.NewReceiveKeys.Epoch = receiver.Symmetric.Epoch + 1
 			conn.Keys.NewReceiveKeys.ComputeKeys(receiver.ApplicationTrafficSecret[:]) // next application traffic secret is calculated from the previous one
 			conn.Keys.NewReceiveKeysFailedDeprotectionCounter = 0
 		}
@@ -207,15 +208,14 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 			return
 		}
 		conn.Keys.ExpectEpochUpdate = false
-		receiver.Symmetric = conn.Keys.NewReceiveKeys
-		receiver.NextSegmentSequence = seq + 1 // TODO - update replay window
-		receiver.Epoch++
+		receiver.Symmetric = conn.Keys.NewReceiveKeys // epoch is also copied
+		receiver.NextSegmentSequence = seq + 1        // TODO - update replay window
 		conn.Keys.FailedDeprotectionCounter = conn.Keys.NewReceiveKeysFailedDeprotectionCounter
 		conn.Keys.NewReceiveKeys = keys.SymmetricKeys{} // remove alias
 		conn.Keys.NewReceiveKeysSet = false
 		conn.Keys.NewReceiveKeysFailedDeprotectionCounter = 0
 	}
-	rn = format.RecordNumberWith(receiver.Epoch, seq)
+	rn = format.RecordNumberWith(receiver.Symmetric.Epoch, seq)
 	return
 }
 
@@ -280,9 +280,9 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 
 			log.Printf("dtls: got ack(encrypted) %v from %v, message(hex): %x", hdr, addr, messageData)
 			// if all messages from epoch 2 acked, then switch sending epoch
-			if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Epoch == 2 {
+			if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Symmetric.Epoch == 2 {
 				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
-				conn.Keys.Send.Epoch++
+				conn.Keys.Send.Symmetric.Epoch++
 				conn.Keys.Send.NextSegmentSequence = 0
 				conn.Handshake = nil // TODO - reuse into pool
 				conn.Handler = &exampleHandler{toSend: "Hello from client\n"}

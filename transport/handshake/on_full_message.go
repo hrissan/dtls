@@ -103,9 +103,9 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 		}
 		log.Printf("finished message verify ok: %+v", msg)
 		if conn.RoleServer {
-			if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Epoch == 2 {
+			if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Symmetric.Epoch == 2 {
 				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
-				conn.Keys.Send.Epoch++
+				conn.Keys.Send.Symmetric.Epoch++
 				conn.Keys.Send.NextSegmentSequence = 0
 				//conn.Handshake = nil // TODO - reuse into pool
 				conn.Handler = &exampleHandler{toSend: "Hello from server\n"}

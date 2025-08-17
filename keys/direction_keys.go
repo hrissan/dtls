@@ -22,15 +22,13 @@ type DirectionKeys struct {
 
 	Symmetric SymmetricKeys
 
-	Epoch uint16 // TODO - move into SymmetricKeys (to save sizeof due to alignment)
-
 	// total size ~100 plus 240 (no seq encryption) or 480 (seq encryption)
 	// but crypto.Block in standard golang's crypto contains both encrypting and decrypting halves,
 	// so without unsafe tricks our direction keys total size is ~100 plus 480 (no seq encryption) or 960 (seq encryption)
 }
 
 func (keys *DirectionKeys) ComputeHandshakeKeys(serverKeys bool, handshakeSecret []byte, trHash []byte) (handshakeTrafficSecret [32]byte) {
-	if keys.Epoch != 0 {
+	if keys.Symmetric.Epoch != 0 {
 		panic("handshake keys state machine violation")
 	}
 
@@ -44,7 +42,7 @@ func (keys *DirectionKeys) ComputeHandshakeKeys(serverKeys bool, handshakeSecret
 	}
 	keys.Symmetric.ComputeKeys(handshakeTrafficSecret[:])
 
-	keys.Epoch = 2
+	keys.Symmetric.Epoch = 2
 	keys.NextSegmentSequence = 0
 	return handshakeTrafficSecret
 }

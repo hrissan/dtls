@@ -46,7 +46,7 @@ func NewSender(opts *options.TransportOptions) *Sender {
 
 	if opts.Preallocate {
 		snd.helloRetryQueue.Reserve(opts.MaxHelloRetryQueueSize)
-		snd.helloRetryPool = make([]*[512]byte, 0, opts.MaxHelloRetryQueueSize)
+		snd.helloRetryPool = make([]*[constants.MaxOutgoingHRRDatagramLength]byte, 0, opts.MaxHelloRetryQueueSize)
 		snd.wantToWriteQueue.Reserve(opts.MaxConnections)
 	}
 	return snd

@@ -11,6 +11,9 @@ import (
 	"github.com/hrissan/tinydtls/transport/stats"
 )
 
+// TODO - set limits in bytes of memory, let implementation calculate
+// internal limits to stay within memory limit
+
 type TransportOptions struct {
 	RoleServer bool
 	Rnd        dtlsrand.Rand
@@ -22,6 +25,7 @@ type TransportOptions struct {
 	SocketWriteErrorDelay  time.Duration
 	CookieValidDuration    time.Duration
 	MaxHelloRetryQueueSize int
+	MaxHandshakes          int // TODO
 	MaxConnections         int
 	CIDLength              int // We use fixed size connection ID, so we can parse ciphertext records easily [rfc9147:9.1]
 
@@ -38,6 +42,7 @@ func DefaultTransportOptions(roleServer bool, rnd dtlsrand.Rand, stats stats.Sta
 		SocketWriteErrorDelay:  5 * time.Millisecond,
 		CookieValidDuration:    120 * time.Second, // larger value for debug
 		MaxHelloRetryQueueSize: 10_000,
+		MaxHandshakes:          1000,
 		MaxConnections:         100_000,
 		CIDLength:              0,
 	}

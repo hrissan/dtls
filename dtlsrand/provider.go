@@ -5,7 +5,7 @@ import (
 	"io"
 )
 
-// We need to fix randoms for tests, hence abstraction
+// We need to fix randoms for tests, plus do not want to check error every time
 
 type Rand interface {
 	io.Reader

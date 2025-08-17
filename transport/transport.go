@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/netip"
@@ -30,14 +31,16 @@ type Transport struct {
 }
 
 func NewTransport(opts *options.TransportOptions) *Transport {
-	log.Printf(
-		`Connection object size: %d
-Handshake object size: %d
-Keys size: %d
-Directional Keys size: %d
-Symmetric Keys size: %d`,
-		unsafe.Sizeof(handshake.ConnectionImpl{}),
+	fmt.Printf(
+		`Sizeof(various objects):
+Handshake:        %d (+large buffers for message reassembly, released after successful handshake)
+Connection:       %d (+960 bytes (+480 if using plaintext sequence numbers) in AES contexts)
+Keys:             %d (part of Connection, contain pair of Directional Keys + Symmetric Keys for next receiving epoch)
+Directional Keys: %d (Contain Symmetric Keys + Secrets for key update) 
+Symmetric Keys:   %d (For TLS_AES_128_GCM_SHA256)
+`,
 		unsafe.Sizeof(handshake.HandshakeConnection{}),
+		unsafe.Sizeof(handshake.ConnectionImpl{}),
 		unsafe.Sizeof(keys.Keys{}),
 		unsafe.Sizeof(keys.DirectionKeys{}),
 		unsafe.Sizeof(keys.SymmetricKeys{}))

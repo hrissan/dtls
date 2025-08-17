@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"crypto/ecdh"
 	"encoding/binary"
 	"hash"
 	"log"
@@ -49,8 +50,16 @@ func NewHandshakeConnection(hasher hash.Hash) *HandshakeConnection {
 }
 
 func (hctx *HandshakeConnection) ComputeKeyShare() {
+	priv, err := ecdh.X25519().NewPrivateKey(hctx.X25519Secret[:])
+	if err != nil {
+		panic("curve25519.X25519 failed")
+	}
+	pubBytes := priv.PublicKey().Bytes()
 	x25519Public, err := curve25519.X25519(hctx.X25519Secret[:], curve25519.Basepoint)
 	if err != nil {
+		panic("curve25519.X25519 failed")
+	}
+	if string(pubBytes) != string(x25519Public) {
 		panic("curve25519.X25519 failed")
 	}
 	copy(hctx.X25519Public[:], x25519Public)

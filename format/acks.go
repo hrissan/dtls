@@ -6,15 +6,16 @@ import (
 )
 
 // TODO - do not allow SeqNum to go over 2^48
-// this is bad idea without key update for AEAD anyway
+// this is bad idea anyway, because of AEAD limits
 
 const MessageAckHeaderSize = 2
 const MessageAckRecordNumberSize = 16
 
 const maxUint48 = 0xFFFFFFFFFFFF
 
-// simple implementation for easy debugging
-// uncomment compact implementation below after testing
+// two implementation, one for easy debugging, one compact
+
+/*
 
 type RecordNumber struct {
 	epoch  uint16
@@ -42,10 +43,10 @@ func RecordNumberCmp(a, b RecordNumber) int {
 	}
 	return cmp.Compare(a.seqNum, b.seqNum)
 }
+*/
 
 // optimal implementation for production
 
-/*
 type RecordNumber struct {
 	epochSeqNum uint64
 }
@@ -68,8 +69,6 @@ func (r RecordNumber) SeqNum() uint64 {
 func RecordNumberCmp(a, b RecordNumber) int {
 	return cmp.Compare(a.epochSeqNum, b.epochSeqNum)
 }
-
-*/
 
 var ErrAckMessageWrongSize = errors.New("ack record size not multiple of 16")
 

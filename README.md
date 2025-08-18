@@ -171,8 +171,6 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 * Support retransmissions, actually start/stop retransmission timers based on connection state
 
-* Replay protection for both plaintext (?) and ciphertext records.
- 
 * Harmonize errors. Before error is returned, pring context (message/record data, etc.)
 
 * Process fatal errors to terminate connections.
@@ -181,7 +179,7 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 * Support KeyUpdate for both sending and receiving keys
 
-* Support fragmented Server Hello message
+* Support fragmented Server Hello message. Plus replay protection for plaintext records.
 
 * Support client certificates
 

@@ -8,64 +8,57 @@ import (
 
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/cookie"
+	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/transport/handshake"
 )
 
 var ErrServerHRRContainsNoCookie = errors.New("server HRR contains no cookie")
 
-func (rc *Receiver) OnServerHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort, rn format.RecordNumber) {
+func (rc *Receiver) OnServerHello(conn *handshake.ConnectionImpl, messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort, rn format.RecordNumber) error {
 	if rc.opts.RoleServer {
 		rc.opts.Stats.ErrorServerReceivedServerHello(addr)
-		// TODO - send alert
-		return
+		return dtlserrors.ErrServerHelloReceivedByServer
 	}
-	hctxToSend, err := rc.onServerHello(messageBody, handshakeHdr, serverHello, addr, rn)
-	if hctxToSend != nil { // motivation: do not register under our lock
-		rc.snd.RegisterConnectionForSend(hctxToSend)
+	if conn == nil {
+		return dtlserrors.ErrServerHelloNoActiveConnection
 	}
-	if err != nil {
-		rc.opts.Stats.ErrorServerHelloUnsupportedParams(handshakeHdr, serverHello, addr, err)
-		// TODO - send alert
+
+	if err := rc.onServerHello(conn, messageBody, handshakeHdr, serverHello, addr, rn); err != nil {
+		return err
 	}
+	rc.snd.RegisterConnectionForSend(conn)
+	return nil
 }
 
-func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort, rn format.RecordNumber) (*handshake.ConnectionImpl, error) {
-	rc.handMu.Lock()
-	conn := rc.connections[addr]
-	rc.handMu.Unlock()
-	if conn == nil {
-		// TODO - send alert here
-		return nil, nil
-	}
+func (rc *Receiver) onServerHello(conn *handshake.ConnectionImpl, messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort, rn format.RecordNumber) error {
 	if conn.Handshake == nil {
-		// TODO - send alert here
-		return nil, nil
+		return nil // retransmission after connection already established, ignore
 	}
 	hctx := conn.Handshake
 	if serverHello.Extensions.SupportedVersions.SelectedVersion != format.DTLS_VERSION_13 {
-		return nil, ErrSupportOnlyDTLS13
+		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
 	if serverHello.CipherSuite != format.CypherSuite_TLS_AES_128_GCM_SHA256 {
-		return nil, ErrSupportOnlyTLS_AES_128_GCM_SHA256
+		return dtlserrors.ErrParamsSupportCiphersuites
 	}
 	// TODO - should we check received record sequence number?
 	if serverHello.IsHelloRetryRequest() {
 		// HRR is never acked, because there is no context on server for that
 		if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
-			return nil, nil
+			return dtlserrors.ErrClientHelloUnsupportedParams
 		}
 		if handshakeHdr.MessageSeq != 0 {
 			// TODO - fatal alert. Looks dangerous for state machine
 			log.Printf("ServerHelloRetryRequest has MessageSeq != 0, ignoring")
-			return nil, nil
+			return dtlserrors.ErrClientHelloUnsupportedParams
 		}
 		conn.Keys.NextMessageSeqReceive++ // never overflows due to check above
 		if !serverHello.Extensions.CookieSet {
-			return nil, ErrServerHRRContainsNoCookie
+			return dtlserrors.ErrServerHRRMustContainCookie
 		}
 		if !hctx.ReceivedFlight(conn, handshake.MessagesFlightServerHRR) {
-			return nil, nil
+			return nil
 		}
 		// [rfc8446:4.4.1] replace initial hello message with its hash if HRR was used
 		var initialHelloTranscriptHashStorage [constants.MaxHashLength]byte
@@ -80,28 +73,28 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 
 		clientHelloMsg := rc.generateClientHello(hctx, true, serverHello.Extensions.Cookie)
 		hctx.PushMessage(conn, clientHelloMsg)
-		return conn, nil
+		return nil
 	}
 	// ServerHello can have messageSeq 0 or 1, depending on whether server used HRR
 	if handshakeHdr.MessageSeq < conn.Keys.NextMessageSeqReceive {
 		hctx.AddAck(handshakeHdr.MessageSeq, rn)
-		return nil, nil // repeat of server hello, because we did not ack it yet
+		return nil // repeat of server hello, because we did not ack it yet
 	}
 	if handshakeHdr.MessageSeq > conn.Keys.NextMessageSeqReceive {
-		return nil, nil // not expecting message
+		return nil // not expecting message
 	}
 	if handshakeHdr.MessageSeq >= 2 {
 		// TODO - fatal alert. Looks dangerous for state machine
 		log.Printf("ServerHello has MessageSeq >= 2, ignoring")
-		return nil, nil
+		return dtlserrors.ErrClientHelloUnsupportedParams
 	}
 	conn.Keys.NextMessageSeqReceive++ // never overflows due to check above
 
 	if !serverHello.Extensions.KeyShare.X25519PublicKeySet {
-		return nil, ErrSupportOnlyX25519
+		return dtlserrors.ErrParamsSupportKeyShare
 	}
 	if !hctx.ReceivedFlight(conn, handshake.MessagesFlightServerHello_Finished) {
-		return nil, nil
+		return nil
 	}
 	handshakeHdr.AddToHash(hctx.TranscriptHasher)
 	_, _ = hctx.TranscriptHasher.Write(messageBody)
@@ -122,7 +115,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	conn.Keys.SequenceNumberLimitExp = 5 // TODO - set for actual cipher suite. Small value is for testing.
 
 	log.Printf("processed server hello")
-	return nil, nil
+	return nil
 }
 
 func (rc *Receiver) generateClientHello(hctx *handshake.HandshakeConnection, setCookie bool, ck cookie.Cookie) format.MessageHandshake {

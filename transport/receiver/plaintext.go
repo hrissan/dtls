@@ -55,7 +55,9 @@ func (rc *Receiver) processPlaintextHandshake(conn *handshake.ConnectionImpl, hd
 				return conn, dtlserrors.WarnPlaintextServerHelloParsing
 			}
 			rc.opts.Stats.ServerHelloMessage(handshakeHdr, msg, addr)
-			rc.OnServerHello(body, handshakeHdr, msg, addr, format.RecordNumberWith(0, hdr.SequenceNumber))
+			if err = rc.OnServerHello(conn, body, handshakeHdr, msg, addr, format.RecordNumberWith(0, hdr.SequenceNumber)); err != nil {
+				return conn, err
+			}
 			// TODO - return err from rc.OnServerHello
 		default:
 			rc.opts.Stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)

@@ -1,6 +1,7 @@
 package dtlserrors
 
 import (
+	"errors"
 	"fmt"
 )
 
@@ -89,10 +90,17 @@ var WarnHandshakeMessageMustBeEncrypted = NewWarning(-700, "plaintext handshake 
 var ErrEncryptedExtensionsReceivedByServer = NewWarning(-701, "EncryptedExtensions handshake message rsceived by server")
 var ErrClientHelloReceivedByClient = NewWarning(-702, "ClientHello handshake message rsceived by client")
 var ErrServerHelloReceivedByServer = NewWarning(-703, "ServerHello handshake message rsceived by server")
-var ErrClientHelloUnsupportedParams = NewWarning(-704, "ClientHello params (version, ciphersuite, groups, etc) not supported by server") // TODO - more granular error
+var ErrClientHelloUnsupportedParams = NewWarning(-704, "ClientHello unsupported params (version, ciphersuite, groups, etc)") // TODO - more granular error
+
+var ErrParamsSupportOnlyDTLS13 = NewWarning(-705, "unsupported version - only DTLSv1.3 supported")
+var ErrParamsSupportCiphersuites = NewWarning(-705, "unsupported ciphersuite - only TLS_AES_128_GCM_SHA256 supported")
+var ErrParamsSupportKeyShare = NewWarning(-705, "unsupported key share - only X25519 supported")
+var ErrServerHRRMustContainCookie = errors.New("server HelloRetryRequest must contain valid cookie")
+
 var ErrClientHelloCookieInvalid = NewWarning(-705, "ClientHello cookie failed validation")
 var ErrClientHelloCookieAge = NewWarning(-706, "ClientHello cookie expired")
 var ErrServerHelloRetryRequestQueueFull = NewWarning(-707, "Server's HelloRetryRequest queue is full, dropping ClientHello")
+var ErrServerHelloNoActiveConnection = NewWarning(-708, "client received ServerHello, but has no active connection to address")
 
 // crypto related
 var ErrCertificateVerifyMessageSignature = NewWarning(-800, "failed to sign CertificateVerify handshake message")

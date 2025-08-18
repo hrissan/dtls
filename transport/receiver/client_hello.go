@@ -21,7 +21,7 @@ func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []
 
 	if err := IsSupportedClientHello(&msg); err != nil {
 		rc.opts.Stats.ErrorClientHelloUnsupportedParams(handshakeHdr, msg, addr, err)
-		return conn, dtlserrors.ErrClientHelloUnsupportedParams
+		return conn, err
 	}
 	// ClientHello is stateless, so we cannot check record sequence number.
 	// If client follows protocol and sends the same client hello,
@@ -62,8 +62,7 @@ func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []
 	}
 	if !msg.Extensions.KeyShare.X25519PublicKeySet {
 		// we asked for this key_share above, but client disrespected our demand
-		rc.opts.Stats.ErrorClientHelloUnsupportedParams(handshakeHdr, msg, addr, ErrSupportOnlyX25519)
-		return conn, dtlserrors.ErrClientHelloUnsupportedParams
+		return conn, dtlserrors.ErrParamsSupportKeyShare
 	}
 	valid, age, initialHelloTranscriptHash, keyShareSet := rc.cookieState.IsCookieValid(addr, msg.Extensions.Cookie, time.Now())
 	if !valid {
@@ -92,21 +91,19 @@ func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []
 	return conn, nil
 }
 
-var ErrSupportOnlyDTLS13 = errors.New("we support only DTLS 1.3")
-var ErrSupportOnlyTLS_AES_128_GCM_SHA256 = errors.New("we support only TLS_AES_128_GCM_SHA256 ciphersuite for now")
-var ErrSupportOnlyX25519 = errors.New("we support only X25519 key share for now")
 var ErrClientHelloWithoutCookieMsgSeqNum = errors.New("client hello without cookie must have msg_seq_num 0")
 var ErrClientHelloWithCookieMsgSeqNum = errors.New("client hello with cookie must have msg_seq_num 1")
 
 func IsSupportedClientHello(msg *format.ClientHello) error {
 	if !msg.Extensions.SupportedVersions.DTLS_13 {
-		return ErrSupportOnlyDTLS13
+		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
 	if !msg.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 {
-		return ErrSupportOnlyTLS_AES_128_GCM_SHA256
+
+		return dtlserrors.ErrParamsSupportCiphersuites
 	}
 	if !msg.Extensions.SupportedGroups.X25519 {
-		return ErrSupportOnlyX25519
+		return dtlserrors.ErrParamsSupportKeyShare
 	}
 	return nil
 }

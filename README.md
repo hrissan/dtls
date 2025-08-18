@@ -177,7 +177,7 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 * Ciphersuite TLS_AES_256_GCM_SHA384, support hashes of various sizes
 
-* Support fragmented Server Hello message. Plus replay protection for plaintext records.
+* Support fragmented Server Hello message. Plus replay protection for plaintext records (?).
 
 * Support client certificates
 
@@ -216,11 +216,6 @@ We have to test this algorithm during fuzzing.
 * Protect against handshake disruption by off-path attacker.
 If client or server receive unencrypted alert during handshake, 
 we should mostly ignore it.
-
-* Do not allow SeqNum to go over minumum of 2^48 (limit of format/records.go) and ciphersuite limit.
-If `limit/2` is reached on send half, start KeyUpdate.
-If `limit/2` is reached on receiving side, send KeyUpdateRequest. This can happen because we count packets
-that fail deprotection, and they could be from an attacker.
 
 * Use rope for all variable memory chunks
 

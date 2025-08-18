@@ -87,7 +87,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 		if conn.RoleServer {
 			if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Symmetric.Epoch == 2 {
 				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
-				conn.Keys.Send.Symmetric.Epoch++
+				conn.Keys.Send.Symmetric.Epoch = 3
 				conn.Keys.SendNextSegmentSequence = 0
 				// conn.Handshake = nil
 				// TODO - why wolf closes connection if we send application data immediately?

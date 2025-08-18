@@ -57,7 +57,8 @@ func (sq *SendQueue) HasDataToSend() bool {
 	return sq.messageOffset < sq.messages.Len() && len(sq.sentRecords) < constants.MaxSendRecordsQueue
 }
 
-func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (datagramSize int) {
+func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (int, error) {
+	var datagramSize int
 	// we decided to first send our messages, then acks.
 	// because message has a chance to ack the whole flight
 	for {
@@ -74,7 +75,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (d
 		if sq.fragmentOffset < outgoing.SendOffset { // some were acked
 			sq.fragmentOffset = outgoing.SendOffset
 		}
-		var sendNextSegmentSequenceEpoch0 *uint64
+		var sendNextSegmentSequenceEpoch0 *uint16
 		if outgoing.Header.HandshakeType == format.HandshakeTypeClientHello || outgoing.Header.HandshakeType == format.HandshakeTypeServerHello {
 			if conn.Handshake != nil {
 				sendNextSegmentSequenceEpoch0 = &conn.Handshake.SendNextSegmentSequenceEpoch0
@@ -88,9 +89,12 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (d
 			if sq.fragmentOffset >= outgoing.SendEnd { // never due to combination of checks above
 				panic("invariant violation")
 			}
-			recordSize, fragmentInfo, rn := conn.constructRecord(datagram[datagramSize:],
+			recordSize, fragmentInfo, rn, err := conn.constructRecord(datagram[datagramSize:],
 				outgoing.Header, outgoing.Body,
 				sq.fragmentOffset, outgoing.SendEnd-sq.fragmentOffset, sendNextSegmentSequenceEpoch0)
+			if err != nil {
+				return 0, err
+			}
 			if recordSize == 0 {
 				break
 			}
@@ -106,7 +110,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (d
 			sq.fragmentOffset = 0
 		}
 	}
-	return
+	return datagramSize, nil
 }
 
 func (sq *SendQueue) Ack(conn *ConnectionImpl, rn format.RecordNumber) {

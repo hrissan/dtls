@@ -79,7 +79,7 @@ func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
 	conn, err := rc.processDatagramImpl(datagram, addr)
 	if conn != nil {
 		if err != nil {
-			log.Printf("TODO - send alert and close connection")
+			log.Printf("TODO - send alert and close connection: %v", err)
 		} else {
 			if conn.HasDataToSend() {
 				// We postpone sending responses until full datagram processed

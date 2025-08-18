@@ -93,12 +93,36 @@ func (conn *ConnectionImpl) hasDataToSendLocked() bool {
 func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int, addToSendQueue bool) {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
+	var err error
+	datagramSize, addToSendQueue, err = conn.constructDatagram(datagram)
+	if err != nil {
+		log.Printf("TODO - close connection")
+	}
+	return
+}
+
+func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error) {
+	var datagramSize int
 	hctx := conn.Handshake
 	if hctx != nil {
 		// we decided to first send our messages, then acks.
 		// because message has a chance to ack the whole flight
-		datagramSize += hctx.SendQueue.ConstructDatagram(conn, datagram[datagramSize:])
-		datagramSize += hctx.sendAcks.ConstructDatagram(conn, datagram[datagramSize:])
+		if recordSize, err := hctx.SendQueue.ConstructDatagram(conn, datagram[datagramSize:]); err != nil {
+			return 0, false, err
+		} else {
+			datagramSize += recordSize
+		}
+		if datagramSize != 0 {
+			return datagramSize, true, nil
+		}
+		if recordSize, err := hctx.sendAcks.ConstructDatagram(conn, datagram[datagramSize:]); err != nil {
+			return 0, false, err
+		} else {
+			datagramSize += recordSize
+		}
+		if datagramSize != 0 {
+			return datagramSize, true, nil
+		}
 	}
 	if conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == format.RecordNumber{}) {
 		msgBody := make([]byte, 0, 1) // must be stack-allocated
@@ -114,15 +138,21 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 			SendOffset: 0,
 			SendEnd:    lenBody,
 		}
-		recordSize, fragmentInfo, rn := conn.constructRecord(datagram[datagramSize:],
+		recordSize, fragmentInfo, rn, err := conn.constructRecord(datagram[datagramSize:],
 			outgoing.Header, outgoing.Body,
 			0, lenBody, nil)
+		if err != nil {
+			return 0, false, err
+		}
 		if recordSize != 0 {
 			if fragmentInfo.FragmentOffset != 0 || fragmentInfo.FragmentLength != lenBody {
 				panic("outgoing KeyUpdate must not be fragmented")
 			}
 			datagramSize += recordSize
 			conn.sendKeyUpdateRN = rn
+		}
+		if datagramSize != 0 {
+			return datagramSize, true, nil
 		}
 	}
 	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sendNewSessionTicketRN != format.RecordNumber{}) {
@@ -138,13 +168,19 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 	acksSpace := len(datagram) - datagramSize - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 	if len(sendAcks) != 0 && acksSpace >= 2*format.MessageAckRecordNumberSize {
 		slices.SortFunc(sendAcks, format.RecordNumberCmp)
-		da := conn.constructCiphertextAck(datagram[datagramSize:datagramSize], sendAcks)
+		da, err := conn.constructCiphertextAck(datagram[datagramSize:datagramSize], sendAcks)
+		if err != nil {
+			return 0, false, err
+		}
 		if len(da) > len(datagram[datagramSize:]) {
 			panic("ciphertext ack record construction length invariant failed")
 		}
 		datagramSize += len(da)
 		conn.ackKeyUpdate = format.RecordNumber{}
 		conn.ackKeyNewSessionTicket = format.RecordNumber{}
+		if datagramSize != 0 {
+			return datagramSize, true, nil
+		}
 	}
 	if conn.Handler != nil { // application data
 		// If we remove "if" below, we put ack for client finished together with
@@ -152,7 +188,7 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 		// err = -441, Application data is available for reading
 		// TODO: contact WolfSSL team
 		if datagramSize > 0 {
-			return datagramSize, true
+			return datagramSize, true, nil
 		}
 		userSpace := len(datagram) - datagramSize - 1 - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 		if userSpace >= constants.MinFragmentBodySize {
@@ -162,7 +198,10 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 				panic("ciphertext user handler overflows allowed record")
 			}
 			if send {
-				da := conn.constructCiphertextApplication(datagram[datagramSize : datagramSize+format.OutgoingCiphertextRecordHeader+recordSize])
+				da, err := conn.constructCiphertextApplication(datagram[datagramSize : datagramSize+format.OutgoingCiphertextRecordHeader+recordSize])
+				if err != nil {
+					return 0, false, err
+				}
 				if len(da) > len(datagram[datagramSize:]) {
 					panic("ciphertext application record construction length invariant failed")
 				}
@@ -173,7 +212,7 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 			}
 		}
 	}
-	return datagramSize, conn.hasDataToSendLocked()
+	return datagramSize, conn.hasDataToSendLocked(), nil
 }
 
 var ErrUpdatingKeysWouldOverflowEpoch = errors.New("updating keys would overflow epoch")
@@ -239,7 +278,7 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, ha
 	}
 	conn.Keys.NextMessageSeqReceive++ // never due to check above
 	log.Printf("received KeyUpdate")
-	conn.Keys.ExpectEpochUpdate = true
+	conn.Keys.ExpectReceiveEpochUpdate = true // if this leads to epoch overflow, we'll generate error later in the function which actually increments epoch
 	if msg.UpdateRequested {
 		if err := conn.startKeyUpdate(false); err != nil { // do not request update, when responding to request
 			return err
@@ -249,6 +288,9 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, ha
 }
 
 func (conn *ConnectionImpl) startKeyUpdate(updateRequested bool) error {
+	if conn.sendKeyUpdateMessageSeq != 0 {
+		return nil // KeyUpdate in progress
+	}
 	if conn.Keys.NextMessageSeqSend == math.MaxUint16 {
 		return dtlserrors.ErrSendMessageSeqOverflow
 	}
@@ -261,9 +303,10 @@ func (conn *ConnectionImpl) startKeyUpdate(updateRequested bool) error {
 }
 
 func (conn *ConnectionImpl) processKeyUpdateAck(rn format.RecordNumber) {
-	if conn.sendKeyUpdateRN == (format.RecordNumber{}) || conn.sendKeyUpdateRN != rn {
+	if conn.sendKeyUpdateMessageSeq != 0 && conn.sendKeyUpdateRN == (format.RecordNumber{}) || conn.sendKeyUpdateRN != rn {
 		return
 	}
+	log.Printf("KeyUpdate ack received")
 	conn.sendKeyUpdateMessageSeq = 0
 	conn.sendKeyUpdateRN = format.RecordNumber{}
 	conn.sendKeyUpdateUpdateRequested = false // must not be necessary
@@ -291,7 +334,7 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 		}
 	} else {
 		// We should check here that receiver.Epoch+1 does not overflow, because we increment it below
-		if !conn.Keys.ExpectEpochUpdate || receiver.Symmetric.Epoch == math.MaxUint16 || !hdr.MatchesEpoch(receiver.Symmetric.Epoch+1) {
+		if !conn.Keys.ExpectReceiveEpochUpdate || receiver.Symmetric.Epoch == math.MaxUint16 || !hdr.MatchesEpoch(receiver.Symmetric.Epoch+1) {
 			err = ErrUpdatingKeysWouldOverflowEpoch
 			return
 		}
@@ -303,32 +346,59 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 			conn.Keys.NewReceiveKeysSet = true
 			conn.Keys.NewReceiveKeys.Epoch = receiver.Symmetric.Epoch + 1
 			conn.Keys.NewReceiveKeys.ComputeKeys(receiver.ApplicationTrafficSecret[:])
-			conn.Keys.NewReceiveKeysFailedDeprotectionCounter = 0
+			conn.Keys.FailedDeprotectionCounterNewReceiveKeys = 0
 			receiver.ComputeNextApplicationTrafficSecret(!conn.RoleServer) // next application traffic secret is calculated from the previous one
 		}
 		decrypted, seq, contentType, err = conn.Keys.NewReceiveKeys.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, 0,
 			seqNumData, header, body)
 		if err != nil {
 			// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
-			conn.Keys.NewReceiveKeysFailedDeprotectionCounter++
+			conn.Keys.FailedDeprotectionCounterNewReceiveKeys++
 			return
 		}
-		conn.Keys.ExpectEpochUpdate = false
+		conn.Keys.ExpectReceiveEpochUpdate = false
 		receiver.Symmetric = conn.Keys.NewReceiveKeys // epoch is also copied
 		conn.Keys.ReceiveNextSegmentSequence.Reset()
 		_ = conn.Keys.ReceiveNextSegmentSequence.SetReceivedIsUnique(seq + 1) // always unique
-		conn.Keys.FailedDeprotectionCounter = conn.Keys.NewReceiveKeysFailedDeprotectionCounter
+		conn.Keys.FailedDeprotectionCounter = conn.Keys.FailedDeprotectionCounterNewReceiveKeys
 		conn.Keys.NewReceiveKeys = keys.SymmetricKeys{} // remove alias
 		conn.Keys.NewReceiveKeysSet = false
-		conn.Keys.NewReceiveKeysFailedDeprotectionCounter = 0
+		conn.Keys.FailedDeprotectionCounterNewReceiveKeys = 0
+		conn.Keys.RequestedReceiveEpochUpdate = false
 	}
 	rn = format.RecordNumberWith(receiver.Symmetric.Epoch, seq)
 	return
 }
 
+// update receiving keys does not always work with wolf
+// TODO - investigate, seems one of us has incorrect state machine
+func (conn *ConnectionImpl) checkReceiveLimits() error {
+	receiveLimit := conn.Keys.SequenceNumberLimit()
+	//if conn.Keys.FailedDeprotectionCounterNewReceiveKeys >= receiveLimit {
+	//	return dtlserrors.ErrReceiveRecordSeqOverflowNextEpoch
+	//}
+	// we cannot request update of NewReceiveKeys, but if peer rotates them before
+	// error above, we will request update.
+	receivedCurrentEpoch := conn.Keys.FailedDeprotectionCounter + conn.Keys.ReceiveNextSegmentSequence.GetNextReceivedSeq()
+	if receivedCurrentEpoch >= receiveLimit {
+		return dtlserrors.ErrReceiveRecordSeqOverflow
+	}
+	if conn.Keys.Receive.Symmetric.Epoch < 3 || receivedCurrentEpoch < receiveLimit*3/4 { // simple heuristics
+		return nil
+	}
+	if conn.Keys.RequestedReceiveEpochUpdate {
+		return nil
+	}
+	conn.Keys.RequestedReceiveEpochUpdate = true
+	return conn.startKeyUpdate(true)
+}
+
 func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptions, hdr format.CiphertextRecordHeader, cid []byte, seqNumData []byte, header []byte, body []byte) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
+	if err := conn.checkReceiveLimits(); err != nil {
+		return err
+	}
 	decrypted, rn, contentType, err := conn.deprotectLocked(hdr, seqNumData, header, body)
 	if err != nil { // TODO - deprotectLocked should return dtlserror.Error
 		opts.Stats.Warning(conn.Addr, dtlserrors.WarnFailedToDeprotectRecord)
@@ -396,7 +466,7 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 			// if all messages from epoch 2 acked, then switch sending epoch
 			if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Symmetric.Epoch == 2 {
 				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
-				conn.Keys.Send.Symmetric.Epoch++
+				conn.Keys.Send.Symmetric.Epoch = 3
 				conn.Keys.SendNextSegmentSequence = 0
 				conn.Handshake = nil // TODO - reuse into pool
 				conn.Handler = &exampleHandler{toSend: "Hello from client\n"}
@@ -407,7 +477,12 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 			log.Printf("dtls: got application_data(encrypted) %v from %v, message: %q", hdr, conn.Addr, messageData)
 			if conn.RoleServer && conn.Handler != nil {
 				if strings.HasPrefix(string(messageData), "upds") && conn.sendKeyUpdateMessageSeq == 0 {
-					if conn.startKeyUpdate(true); err != nil {
+					if err := conn.startKeyUpdate(false); err != nil {
+						return err
+					}
+				}
+				if strings.HasPrefix(string(messageData), "upd2") && conn.sendKeyUpdateMessageSeq == 0 {
+					if err := conn.startKeyUpdate(true); err != nil {
 						return err
 					}
 				}

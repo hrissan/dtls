@@ -162,6 +162,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		panic("curve25519.X25519 failed")
 	}
 	hctx.MasterSecret, hctx.HandshakeTrafficSecretSend, hctx.HandshakeTrafficSecretReceive = conn.Keys.ComputeHandshakeKeys(true, sharedSecret, handshakeTranscriptHash)
+	conn.Keys.SequenceNumberLimitExp = 5 // TODO - set for actual cipher suite. Small value is for testing.
 
 	hctx.PushMessage(conn, rc.generateEncryptedExtensions(hctx))
 

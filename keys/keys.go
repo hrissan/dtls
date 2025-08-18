@@ -26,15 +26,40 @@ type Keys struct {
 	NewReceiveKeys SymmetricKeys // always correspond to Receive.Symmetric.Epoch + 1
 
 	FailedDeprotectionCounter               uint64
-	NewReceiveKeysFailedDeprotectionCounter uint64
+	FailedDeprotectionCounterNewReceiveKeys uint64 // separate counter for NewReceiveKeys
 
 	// this counter does not reset with a new epoch
 	NextMessageSeqSend    uint16
 	NextMessageSeqReceive uint16
 
-	DoNotEncryptSequenceNumbers bool // enabled extensions and saves us 50% memory on crypto contexts
-	ExpectEpochUpdate           bool // waiting for the next epoch during handshake or key update
-	NewReceiveKeysSet           bool
+	// enabled extensions and saves us 50% memory on crypto contexts
+	DoNotEncryptSequenceNumbers bool
+	// waiting for the next epoch during handshake or key update
+	ExpectReceiveEpochUpdate bool
+	// we should request update only once per epoch, and this must be separate flag from sendKeyUpdateUpdateRequested
+	// otherwise we will request update again after peer's ack, but before actual epoch update
+	RequestedReceiveEpochUpdate bool
+	// calculate NewReceiveKeys only once
+	NewReceiveKeysSet bool
+	// when we protect or deprotect 2^(exp-1) packets, we ask for KeyUpdate
+	// if peer does not respond quickly and we reach 2^exp, we close connection for good
+	SequenceNumberLimitExp byte
+}
+
+func (keys *Keys) SequenceNumberLimit() uint64 {
+	limitExp := keys.SequenceNumberLimitExp
+	if limitExp < 5 {
+		panic("do not set limitExp = 4 even for tests, as key update reaches hard limit before epoch will advance")
+	}
+	// with limitExp = 5 and very few packets you can continuously test key update state machine.
+	if limitExp > 48 {
+		// Our implementation pack 16-bit epoch with 48-bit sequence number for efficient storage.
+		// So we must prevent sequence number from ever reaching this limit.
+		// See for example format.RecordNumber
+		// Also, we must prevent overflow below.
+		limitExp = 48
+	}
+	return (uint64(1) << limitExp) - 1 // -1 gives us margin in case we actually store nextSeqNum in 48-bit field somewhere (we should not)
 }
 
 func NewAesCipher(key []byte) cipher.Block {
@@ -70,7 +95,7 @@ func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trH
 
 	handshakeTrafficSecretReceive = keys.Receive.ComputeHandshakeKeys(!serverRole, handshakeSecret, trHash)
 	keys.ReceiveNextSegmentSequence.Reset()
-	keys.ExpectEpochUpdate = true
+	keys.ExpectReceiveEpochUpdate = true
 
 	derivedSecret = deriveSecret(hasher, handshakeSecret, "derived", emptyHash[:])
 	zeros := [32]byte{}

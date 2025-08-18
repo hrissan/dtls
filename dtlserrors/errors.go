@@ -75,3 +75,8 @@ var ErrEncryptedAckMessageHeaderParsing = NewWarning(-516, "encrypted ack messag
 
 var ErrReceivedMessageSeqOverflow = NewWarning(-517, "received handshake message sequence limit of 2^16-1 reached, closing connection")
 var ErrSendMessageSeqOverflow = NewWarning(-517, "sent handshake message sequence limit of 2^16-1 reached, closing connection")
+
+var ErrSendEpoch0RecordSeqOverflow = NewWarning(-518, "sending plaintext record sequence number reached 2^16-1 (implementation limit), closing connection")
+var ErrSendRecordSeqOverflow = NewWarning(-519, "sending ciphertext record sequence number reached limit (peer did not ack our KeyUpdate?), closing connection")
+var ErrReceiveRecordSeqOverflow = NewWarning(-520, "receiving ciphertext record sequence number reached limit (peer did not react to our KeyUpdate request?), closing connection")
+var ErrReceiveRecordSeqOverflowNextEpoch = NewWarning(-520, "receiving ciphertext record sequence number for a new epoch reached limit, closing connection")

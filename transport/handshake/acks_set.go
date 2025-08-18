@@ -51,27 +51,28 @@ func (a *AcksSet) HasDataToSend(conn *ConnectionImpl) bool {
 	return a.Size() != 0 && conn.Keys.Send.Symmetric.Epoch != 0 // We send only encrypted acks
 }
 
-func (a *AcksSet) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (datagramSize int) {
+func (a *AcksSet) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (int, error) {
 	if !a.HasDataToSend(conn) {
-		return
+		return 0, nil
 	}
-	acksSpace := len(datagram) - datagramSize - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+	acksSpace := len(datagram) - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 	if acksSpace < format.MessageAckRecordNumberSize { // not a single one fits
-		return
+		return 0, nil
 	}
 	acksCount := min(a.Size(), acksSpace/format.MessageAckRecordNumberSize)
 	if acksSpace < constants.MinFragmentBodySize && acksCount != a.Size() {
-		return // do not send tiny records at the end of datagram
+		return 0, nil // do not send tiny records at the end of datagram
 	}
 	sendAcks := a.PopSorted(acksCount)
 
-	da := conn.constructCiphertextAck(datagram[datagramSize:datagramSize], sendAcks)
-
-	if len(da) > len(datagram[datagramSize:]) {
+	da, err := conn.constructCiphertextAck(datagram[:0], sendAcks)
+	if err != nil {
+		return 0, err
+	}
+	if len(da) > len(datagram) {
 		panic("ciphertext ack record construction length invariant failed")
 	}
-	datagramSize += len(da)
-	return
+	return len(da), nil
 }
 
 // TODO - move out

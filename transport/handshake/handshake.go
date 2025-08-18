@@ -22,6 +22,8 @@ type HandshakeConnection struct {
 	HandshakeTrafficSecretSend    [32]byte // we need this to generate finished message.
 	HandshakeTrafficSecretReceive [32]byte // we need this to check peer's finished message.
 
+	SendNextSegmentSequenceEpoch0 uint64 // for ServerHello retransmit and replay protection
+
 	currentFlight byte // both send and receive
 
 	receivedPartialMessageSet bool // if set, Header.MessageSeq == Keys.NextMessageSeqReceive
@@ -151,7 +153,7 @@ func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg format.Me
 	_, _ = hctx.TranscriptHasher.Write(msg.Body)
 }
 
-func (conn *ConnectionImpl) constructRecord(datagram []byte, header MessageHeaderMinimal, body []byte, fragmentOffset uint32, maxFragmentLength uint32) (recordSize int, fragmentInfo format.FragmentInfo, rn format.RecordNumber) {
+func (conn *ConnectionImpl) constructRecord(datagram []byte, header MessageHeaderMinimal, body []byte, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint64) (recordSize int, fragmentInfo format.FragmentInfo, rn format.RecordNumber) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
 	if fragmentOffset >= uint32(len(body)) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
 		panic("invariant of send queue fragment offset violated")
@@ -169,6 +171,9 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, header MessageHeade
 		Body: body,
 	}
 	if header.HandshakeType == format.HandshakeTypeClientHello || header.HandshakeType == format.HandshakeTypeServerHello {
+		if sendNextSegmentSequenceEpoch0 == nil {
+			panic("the same check for plaintext record should be above")
+		}
 		remainingSpace := len(datagram) - format.MessageHandshakeHeaderSize + format.PlaintextRecordHeaderSize
 		if remainingSpace <= 0 {
 			return
@@ -177,7 +182,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, header MessageHeade
 		if msg.Header.FragmentLength <= constants.MinFragmentBodySize && msg.Header.FragmentLength != maxFragmentLength {
 			return // do not send tiny records at the end of datagram
 		}
-		da, rn := conn.constructPlaintextRecord(datagram[:0], msg)
+		da, rn := conn.constructPlaintextRecord(datagram[:0], msg, sendNextSegmentSequenceEpoch0)
 		if uint32(len(da)) != msg.Header.FragmentLength+format.MessageHandshakeHeaderSize+format.PlaintextRecordHeaderSize {
 			panic("plaintext handshake record construction length invariant failed")
 		}
@@ -198,13 +203,13 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, header MessageHeade
 	return len(da), msg.Header.FragmentInfo, rn
 }
 
-func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg format.MessageHandshake) ([]byte, format.RecordNumber) {
-	rn := format.RecordNumberWith(0, conn.Keys.SendNextSegmentSequenceEpoch0)
+func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg format.MessageHandshake, sendNextSegmentSequenceEpoch0 *uint64) ([]byte, format.RecordNumber) {
+	rn := format.RecordNumberWith(0, *sendNextSegmentSequenceEpoch0)
 	recordHdr := format.PlaintextRecordHeader{
 		ContentType:    format.PlaintextContentTypeHandshake,
-		SequenceNumber: conn.Keys.SendNextSegmentSequenceEpoch0,
+		SequenceNumber: *sendNextSegmentSequenceEpoch0,
 	}
-	conn.Keys.SendNextSegmentSequenceEpoch0++
+	*sendNextSegmentSequenceEpoch0++
 	data = recordHdr.Write(data, format.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
 	data = msg.Header.Write(data)
 	data = append(data, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)

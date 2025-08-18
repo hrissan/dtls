@@ -8,6 +8,7 @@ import (
 	"hash"
 
 	"github.com/hrissan/tinydtls/hkdf"
+	"github.com/hrissan/tinydtls/replay"
 )
 
 var ErrCipherTextTooShortForSNDecryption = errors.New("ciphertext too short for SN decryption")
@@ -17,12 +18,10 @@ type Keys struct {
 	Send    DirectionKeys
 	Receive DirectionKeys
 
-	// for ServerHello retransmit and replay protection
-	SendNextSegmentSequenceEpoch0 uint64 // TODO - reduce to 16 bit?
-	SendNextSegmentSequence       uint64
+	SendNextSegmentSequence uint64
 
-	// No replay protection for Epoch 0
-	ReceiveNextSegmentSequence uint64
+	// We need no replay protection for Epoch 0
+	ReceiveNextSegmentSequence replay.Window // for Epoch > 0
 
 	NewReceiveKeys SymmetricKeys // always correspond to Receive.Symmetric.Epoch + 1
 
@@ -70,7 +69,7 @@ func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trH
 	keys.SendNextSegmentSequence = 0
 
 	handshakeTrafficSecretReceive = keys.Receive.ComputeHandshakeKeys(!serverRole, handshakeSecret, trHash)
-	keys.ReceiveNextSegmentSequence = 0
+	keys.ReceiveNextSegmentSequence.Reset()
 	keys.ExpectEpochUpdate = true
 
 	derivedSecret = deriveSecret(hasher, handshakeSecret, "derived", emptyHash[:])

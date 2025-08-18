@@ -201,14 +201,17 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 	receiver := &conn.Keys.Receive
 	var seq uint64
 	if hdr.MatchesEpoch(receiver.Symmetric.Epoch) {
-		decrypted, seq, contentType, err = receiver.Symmetric.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, conn.Keys.ReceiveNextSegmentSequence,
+		nextSeq := conn.Keys.ReceiveNextSegmentSequence.GetNextReceivedSeq()
+		decrypted, seq, contentType, err = receiver.Symmetric.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, nextSeq,
 			seqNumData, header, body)
 		if err != nil {
 			// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
 			conn.Keys.FailedDeprotectionCounter++
 			return
 		}
-		conn.Keys.ReceiveNextSegmentSequence = seq + 1 // TODO - update replay window
+		if !conn.Keys.ReceiveNextSegmentSequence.SetReceivedIsUnique(seq + 1) {
+			return // replay protection
+		}
 	} else {
 		// We should check here that receiver.Epoch+1 does not overflow, because we increment it below
 		if !conn.Keys.ExpectEpochUpdate || receiver.Symmetric.Epoch == math.MaxUint16 || !hdr.MatchesEpoch(receiver.Symmetric.Epoch+1) {
@@ -233,8 +236,9 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 			return
 		}
 		conn.Keys.ExpectEpochUpdate = false
-		receiver.Symmetric = conn.Keys.NewReceiveKeys  // epoch is also copied
-		conn.Keys.ReceiveNextSegmentSequence = seq + 1 // TODO - update replay window
+		receiver.Symmetric = conn.Keys.NewReceiveKeys // epoch is also copied
+		conn.Keys.ReceiveNextSegmentSequence.Reset()
+		_ = conn.Keys.ReceiveNextSegmentSequence.SetReceivedIsUnique(seq + 1) // always unique
 		conn.Keys.FailedDeprotectionCounter = conn.Keys.NewReceiveKeysFailedDeprotectionCounter
 		conn.Keys.NewReceiveKeys = keys.SymmetricKeys{} // remove alias
 		conn.Keys.NewReceiveKeysSet = false

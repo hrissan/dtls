@@ -99,7 +99,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	hctx := handshake.NewHandshakeConnection(sha256.New())
 	conn.Handshake = hctx
 
-	conn.Keys.SendNextSegmentSequenceEpoch0 = 1 // sequence 0 was HRR
+	conn.Handshake.SendNextSegmentSequenceEpoch0 = 1 // sequence 0 was HRR
 
 	conn.Keys.NextMessageSeqSend = 1    // message 0 was HRR
 	conn.Keys.NextMessageSeqReceive = 2 // message 0, 1 were initial client_hello, client_hello

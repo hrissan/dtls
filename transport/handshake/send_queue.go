@@ -74,13 +74,23 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (d
 		if sq.fragmentOffset < outgoing.SendOffset { // some were acked
 			sq.fragmentOffset = outgoing.SendOffset
 		}
+		var sendNextSegmentSequenceEpoch0 *uint64
+		if outgoing.Header.HandshakeType == format.HandshakeTypeClientHello || outgoing.Header.HandshakeType == format.HandshakeTypeServerHello {
+			if conn.Handshake != nil {
+				sendNextSegmentSequenceEpoch0 = &conn.Handshake.SendNextSegmentSequenceEpoch0
+			} else {
+				// We only can send that if we are still in handshake.
+				// If not, we simply pretend we sent it.
+				sq.fragmentOffset = outgoing.SendEnd
+			}
+		}
 		if !outgoing.FullyAcked() {
 			if sq.fragmentOffset >= outgoing.SendEnd { // never due to combination of checks above
 				panic("invariant violation")
 			}
 			recordSize, fragmentInfo, rn := conn.constructRecord(datagram[datagramSize:],
 				outgoing.Header, outgoing.Body,
-				sq.fragmentOffset, outgoing.SendEnd-sq.fragmentOffset)
+				sq.fragmentOffset, outgoing.SendEnd-sq.fragmentOffset, sendNextSegmentSequenceEpoch0)
 			if recordSize == 0 {
 				break
 			}

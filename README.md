@@ -177,7 +177,7 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 * Ciphersuite TLS_AES_256_GCM_SHA384, support hashes of various sizes
 
-* Support receiving fragmented Server Hello message. Plus replay protection for plaintext records (?).
+* Replay protection for plaintext records (?).
 
 * Support client certificates
 

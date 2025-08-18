@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/netip"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/hrissan/tinydtls/constants"
@@ -240,13 +241,37 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, ha
 	log.Printf("received KeyUpdate")
 	conn.Keys.ExpectEpochUpdate = true
 	if msg.UpdateRequested {
-		if conn.Keys.NextMessageSeqSend == math.MaxUint16 {
-			return dtlserrors.ErrSendMessageSeqOverflow
+		if err := conn.startKeyUpdate(false); err != nil { // do not request update, when responding to request
+			return err
 		}
-		conn.sendKeyUpdateMessageSeq = conn.Keys.NextMessageSeqSend
-		conn.Keys.NextMessageSeqSend++ // never due to check above
 	}
 	return nil
+}
+
+func (conn *ConnectionImpl) startKeyUpdate(updateRequested bool) error {
+	if conn.Keys.NextMessageSeqSend == math.MaxUint16 {
+		return dtlserrors.ErrSendMessageSeqOverflow
+	}
+	conn.sendKeyUpdateMessageSeq = conn.Keys.NextMessageSeqSend
+	conn.sendKeyUpdateRN = format.RecordNumber{}
+	conn.sendKeyUpdateUpdateRequested = updateRequested
+	conn.Keys.NextMessageSeqSend++ // never due to check above
+	log.Printf("KeyUpdate started (updateRequested=%v), messageSeq: %d", updateRequested, conn.sendKeyUpdateMessageSeq)
+	return nil
+}
+
+func (conn *ConnectionImpl) processKeyUpdateAck(rn format.RecordNumber) {
+	if conn.sendKeyUpdateRN == (format.RecordNumber{}) || conn.sendKeyUpdateRN != rn {
+		return
+	}
+	conn.sendKeyUpdateMessageSeq = 0
+	conn.sendKeyUpdateRN = format.RecordNumber{}
+	conn.sendKeyUpdateUpdateRequested = false // must not be necessary
+	// now when we received ack for KeyUpdate, we must update our keys
+	conn.Keys.Send.ComputeNextApplicationTrafficSecret(conn.RoleServer) // next application traffic secret is calculated from the previous one
+	conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
+	conn.Keys.Send.Symmetric.Epoch++
+	conn.Keys.SendNextSegmentSequence = 0
 }
 
 func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, seqNumData []byte, header []byte, body []byte) (decrypted []byte, rn format.RecordNumber, contentType byte, err error) {
@@ -381,6 +406,11 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 		case format.PlaintextContentTypeApplicationData:
 			log.Printf("dtls: got application_data(encrypted) %v from %v, message: %q", hdr, conn.Addr, messageData)
 			if conn.RoleServer && conn.Handler != nil {
+				if strings.HasPrefix(string(messageData), "upds") && conn.sendKeyUpdateMessageSeq == 0 {
+					if conn.startKeyUpdate(true); err != nil {
+						return err
+					}
+				}
 				if ha, ok := conn.Handler.(*exampleHandler); ok {
 					ha.toSend = string(messageData)
 					conn.HandlerHasMoreData = true

@@ -17,6 +17,13 @@ type Keys struct {
 	Send    DirectionKeys
 	Receive DirectionKeys
 
+	// for ServerHello retransmit and replay protection
+	SendNextEpoch0Sequence  uint64 // cannot reduce this, due to 48-bit value on the wire, this is for unencrypted client_hello/server_hello only, but peer can select very large value
+	SendNextSegmentSequence uint64
+
+	ReceiveNextEpoch0Sequence  uint64 // cannot reduce this, due to 48-bit value on the wire, this is for unencrypted client_hello/server_hello only, but peer can select very large value
+	ReceiveNextSegmentSequence uint64
+
 	NewReceiveKeys SymmetricKeys // always correspond to Receive.Symmetric.Epoch + 1
 
 	FailedDeprotectionCounter               uint64
@@ -60,7 +67,10 @@ func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trH
 	handshakeSecret := hkdf.Extract(hasher, derivedSecret, sharedSecret)
 
 	handshakeTrafficSecretSend = keys.Send.ComputeHandshakeKeys(serverRole, handshakeSecret, trHash)
+	keys.SendNextSegmentSequence = 0
+
 	handshakeTrafficSecretReceive = keys.Receive.ComputeHandshakeKeys(!serverRole, handshakeSecret, trHash)
+	keys.ReceiveNextSegmentSequence = 0
 	keys.ExpectEpochUpdate = true
 
 	derivedSecret = deriveSecret(hasher, handshakeSecret, "derived", emptyHash[:])

@@ -95,10 +95,11 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	hctx := handshake.NewHandshakeConnection(sha256.New())
 	conn.Handshake = hctx
 
-	conn.Keys.Receive.NextEpoch0Sequence = 1 // TODO - get from plaintext record we received
-	conn.Keys.Send.NextEpoch0Sequence = 1    // sequence 0 was HRR
-	conn.Keys.NextMessageSeqSend = 1         // message 0 was HRR
-	conn.Keys.NextMessageSeqReceive = 2      // message 0, 1 were initial client_hello, client_hello
+	conn.Keys.ReceiveNextEpoch0Sequence = 1 // TODO - get from plaintext record we received
+	conn.Keys.SendNextEpoch0Sequence = 1    // sequence 0 was HRR
+
+	conn.Keys.NextMessageSeqSend = 1    // message 0 was HRR
+	conn.Keys.NextMessageSeqReceive = 2 // message 0, 1 were initial client_hello, client_hello
 	// TODO - check if the same handshake by storing (age, initialHelloTranscriptHash, keyShareSet)
 	{
 		var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte

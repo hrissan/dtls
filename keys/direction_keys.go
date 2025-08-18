@@ -17,10 +17,6 @@ type DirectionKeys struct {
 	// fields sorted to minimize padding
 	ApplicationTrafficSecret [32]byte // we need to keep this for key update
 
-	// for ServerHello retransmit and replay protection
-	NextEpoch0Sequence  uint64 // cannot reduce this, due to 48-bit value on the wire, this is for unencrypted client_hello/server_hello only, but peer can select very large value
-	NextSegmentSequence uint64
-
 	Symmetric SymmetricKeys
 
 	// total size ~100 plus 240 (no seq encryption) or 480 (seq encryption)
@@ -44,7 +40,6 @@ func (keys *DirectionKeys) ComputeHandshakeKeys(serverKeys bool, handshakeSecret
 	keys.Symmetric.ComputeKeys(handshakeTrafficSecret[:])
 
 	keys.Symmetric.Epoch = 2
-	keys.NextSegmentSequence = 0
 	return handshakeTrafficSecret
 }
 

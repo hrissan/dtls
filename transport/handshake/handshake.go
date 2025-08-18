@@ -199,12 +199,12 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, header MessageHeade
 }
 
 func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg format.MessageHandshake) ([]byte, format.RecordNumber) {
-	rn := format.RecordNumberWith(0, conn.Keys.Send.NextEpoch0Sequence)
+	rn := format.RecordNumberWith(0, conn.Keys.SendNextEpoch0Sequence)
 	recordHdr := format.PlaintextRecordHeader{
 		ContentType:    format.PlaintextContentTypeHandshake,
-		SequenceNumber: conn.Keys.Send.NextEpoch0Sequence,
+		SequenceNumber: conn.Keys.SendNextEpoch0Sequence,
 	}
-	conn.Keys.Send.NextEpoch0Sequence++
+	conn.Keys.SendNextEpoch0Sequence++
 	data = recordHdr.Write(data, format.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
 	data = msg.Header.Write(data)
 	data = append(data, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
@@ -214,9 +214,9 @@ func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg format.Mes
 func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg format.MessageHandshake) ([]byte, format.RecordNumber) {
 	send := &conn.Keys.Send
 	epoch := send.Symmetric.Epoch
-	rn := format.RecordNumberWith(epoch, conn.Keys.Send.NextSegmentSequence)
-	seq := send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	send.NextSegmentSequence++
+	rn := format.RecordNumberWith(epoch, conn.Keys.SendNextSegmentSequence)
+	seq := conn.Keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
+	conn.Keys.SendNextSegmentSequence++
 	log.Printf("constructing ciphertext handshake with seq: %v", rn)
 
 	gcm := send.Symmetric.Write
@@ -263,9 +263,9 @@ func (conn *ConnectionImpl) constructCiphertextAck(datagram []byte, acks []forma
 	// TODO - harmonize with code above
 	send := &conn.Keys.Send
 	epoch := send.Symmetric.Epoch
-	rn := format.RecordNumberWith(epoch, conn.Keys.Send.NextSegmentSequence)
-	seq := send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	send.NextSegmentSequence++
+	rn := format.RecordNumberWith(epoch, conn.Keys.SendNextSegmentSequence)
+	seq := conn.Keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
+	conn.Keys.SendNextSegmentSequence++
 	log.Printf("constructing ciphertext ack with seq: %v", rn)
 
 	gcm := send.Symmetric.Write
@@ -316,9 +316,9 @@ func (conn *ConnectionImpl) constructCiphertextApplication(record []byte) []byte
 	// TODO - harmonize with code above
 	send := &conn.Keys.Send
 	epoch := send.Symmetric.Epoch
-	rn := format.RecordNumberWith(epoch, conn.Keys.Send.NextSegmentSequence)
-	seq := send.NextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	send.NextSegmentSequence++
+	rn := format.RecordNumberWith(epoch, conn.Keys.SendNextSegmentSequence)
+	seq := conn.Keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
+	conn.Keys.SendNextSegmentSequence++
 	log.Printf("constructing ciphertext application with seq: %v", rn)
 
 	gcm := send.Symmetric.Write

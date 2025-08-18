@@ -88,7 +88,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 			if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Symmetric.Epoch == 2 {
 				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
 				conn.Keys.Send.Symmetric.Epoch++
-				conn.Keys.Send.NextSegmentSequence = 0
+				conn.Keys.SendNextSegmentSequence = 0
 				//conn.Handshake = nil // TODO - reuse into pool
 				conn.Handler = &exampleHandler{toSend: "Hello from server\n"}
 				conn.HandlerHasMoreData = true

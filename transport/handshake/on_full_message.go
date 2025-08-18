@@ -116,7 +116,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 	case format.HandshakeTypeServerHello:
 	case format.HandshakeTypeKeyUpdate:
 	case format.HandshakeTypeNewSessionTicket:
-		panic("handled in ProcessCiphertextRecord")
+		panic("handled in ConnectionImpl.ProcessHandshake")
 	default:
 		// TODO - process all messages in standard, generate error for the rest
 		log.Printf("TODO - encrypted message type %d not supported", handshakeHdr.HandshakeType)

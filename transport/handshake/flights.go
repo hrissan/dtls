@@ -13,7 +13,7 @@ const (
 
 // returns 0 for messages not related to handshake flights
 // we need this function, because we want to clear acks for previous flight when we receive
-// part of the message from the next flight. If we wait until we reassemble complete message,
+// fragment of the message from the next flight. If we wait until we reassemble complete message,
 // we'd not be able to clear acks for previous messages.
 func HandshakeTypeToFlight(handshakeType byte, roleServer bool) byte {
 	switch handshakeType {

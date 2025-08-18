@@ -42,15 +42,6 @@ func IsCiphertextRecord(fb byte) bool {
 	return fb&0b11100000 == 0b00100000
 }
 
-func IsInnerPlaintextRecord(fb byte) bool {
-	// [rfc9147:4.1], but it seems acks must always be encrypted in DTLS1.3, so we do not classify them as valid here
-	return fb == PlaintextContentTypeAlert ||
-		fb == PlaintextContentTypeHandshake ||
-		fb == PlaintextContentTypeApplicationData ||
-		// fb == PlaintextContentTypeHeartbeat || - uncomment if we implement support
-		fb == PlaintextContentTypeAck
-}
-
 func IsPlaintextRecord(fb byte) bool {
 	// [rfc9147:4.1], but it seems acks must always be encrypted in DTLS1.3, so we do not classify them as valid here
 	// TODO - contact DTLS team to clarify standard

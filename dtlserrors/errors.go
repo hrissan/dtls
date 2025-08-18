@@ -40,7 +40,6 @@ var WarnServerHelloFragmented = NewWarning(-398, "fragmented ServerHello message
 var WarnClientHelloFragmented = NewWarning(-399, "fragmented ClientHello message not supported")
 var WarnNewSessionTicketFragmented = NewWarning(-400, "fragmented NewSessionTicket message not supported, waiting for retransmission")
 var WarnKeyUpdateFragmented = NewWarning(-401, "fragmented KeyUpdate message not supported, waiting for retransmission")
-var WarnUnknownInnerPlaintextRecordType = NewWarning(-402, "unknown inner plaintext record type")
 var WarnAckEpochOverflow = NewWarning(-403, "ack record epoch overflows 2^16")
 var WarnPlaintextRecordParsing = NewWarning(-405, "plaintext record header failed to parse")
 var WarnCiphertextRecordParsing = NewWarning(-406, "ciphertext record header failed to parse")
@@ -49,7 +48,6 @@ var WarnFailedToDeprotectRecord = NewWarning(-408, "failed to deprotect encrypte
 var WarnPlaintextHandshakeMessageHeaderParsing = NewWarning(-409, "plaintext handshake message header failed to parse")
 var WarnPlaintextClientHelloParsing = NewWarning(-410, "plaintext ClientHello message failed to parse")
 var WarnPlaintextServerHelloParsing = NewWarning(-411, "plaintext ServerHello message failed to parse")
-var WarnHandshakeMessageMustBeEncrypted = NewWarning(-412, "plaintext handshake messages other than ClientHello, ServerHello must be encrypted")
 var WarnUnknownRecordType = NewWarning(-413, "record header does not match plaintext or ciphertext format")
 
 var ErrUpdatingKeysWouldOverflowEpoch = NewFatal(-500, "updating keys would overflow epoch")
@@ -79,4 +77,13 @@ var ErrSendMessageSeqOverflow = NewWarning(-517, "sent handshake message sequenc
 var ErrSendEpoch0RecordSeqOverflow = NewWarning(-518, "sending plaintext record sequence number reached 2^16-1 (implementation limit), closing connection")
 var ErrSendRecordSeqOverflow = NewWarning(-519, "sending ciphertext record sequence number reached limit (peer did not ack our KeyUpdate?), closing connection")
 var ErrReceiveRecordSeqOverflow = NewWarning(-520, "receiving ciphertext record sequence number reached limit (peer did not react to our KeyUpdate request?), closing connection")
-var ErrReceiveRecordSeqOverflowNextEpoch = NewWarning(-520, "receiving ciphertext record sequence number for a new epoch reached limit, closing connection")
+var ErrReceiveRecordSeqOverflowNextEpoch = NewWarning(-521, "receiving ciphertext record sequence number for a new epoch reached limit, closing connection")
+
+// records format
+var ErrAckRecordMustBeEncrypted = NewWarning(-600, "ack record must always be encrypted")
+var ErrApplicationDataRecordMustBeEncrypted = NewWarning(-601, "application data record must always be encrypted")
+var ErrUnknownInnerPlaintextRecordType = NewWarning(-602, "unknown inner plaintext record type")
+var ErrHandshakeReecordEmpty = NewWarning(-603, "handshake record must not be empty")
+
+// handshake protocol
+var WarnHandshakeMessageMustBeEncrypted = NewWarning(-700, "plaintext handshake messages other than ClientHello, ServerHello must be encrypted")

@@ -171,13 +171,13 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 * Support retransmissions, actually start/stop retransmission timers based on connection state
 
-* Harmonize errors. Before error is returned, pring context (message/record data, etc.)
+* Harmonize errors. Before error is returned, print context (message/record data, etc.)
 
 * Process fatal errors to terminate connections.
 
 * Ciphersuite TLS_AES_256_GCM_SHA384, support hashes of various sizes
 
-* Support fragmented Server Hello message. Plus replay protection for plaintext records (?).
+* Support receiving fragmented Server Hello message. Plus replay protection for plaintext records (?).
 
 * Support client certificates
 

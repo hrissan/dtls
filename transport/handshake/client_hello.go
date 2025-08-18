@@ -15,7 +15,7 @@ import (
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
-func (conn *ConnectionImpl) ReceivedClientHello(opts *options.TransportOptions, messageBody []byte,
+func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions, messageBody []byte,
 	handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello,
 	initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error {
 

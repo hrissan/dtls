@@ -208,7 +208,7 @@ func (rc *Receiver) startConnection(addr netip.AddrPort) (*handshake.ConnectionI
 	// TODO - offload to separate goroutine
 	// TODO - contact wolfssl team?
 	hctx.ComputeKeyShare(rc.opts.Rnd)
-	clientHelloMsg := rc.generateClientHello(hctx, false, cookie.Cookie{})
+	clientHelloMsg := hctx.GenerateClientHello(false, cookie.Cookie{})
 
 	hctx.PushMessage(conn, clientHelloMsg)
 	return conn, nil

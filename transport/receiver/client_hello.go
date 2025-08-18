@@ -84,7 +84,7 @@ func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []
 		rc.connections[addr] = conn
 		rc.handMu.Unlock()
 	}
-	if err := conn.ReceivedClientHello(rc.opts, messageBody, handshakeHdr, msg, initialHelloTranscriptHash, keyShareSet); err != nil {
+	if err := conn.ReceivedClientHello2(rc.opts, messageBody, handshakeHdr, msg, initialHelloTranscriptHash, keyShareSet); err != nil {
 		return conn, err // TODO - close connection here
 	}
 	rc.snd.RegisterConnectionForSend(conn)

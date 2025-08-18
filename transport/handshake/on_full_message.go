@@ -13,6 +13,15 @@ import (
 
 func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte) error {
 	switch handshakeHdr.HandshakeType {
+	case format.HandshakeTypeServerHello:
+		if conn.RoleServer {
+			return dtlserrors.ErrServerHelloReceivedByServer
+		}
+		var msg format.ServerHello
+		if err := msg.Parse(body); err != nil {
+			return dtlserrors.WarnPlaintextServerHelloParsing
+		}
+		return hctx.onServerHello(conn, handshakeHdr, body, msg)
 	case format.HandshakeTypeEncryptedExtensions:
 		if conn.RoleServer {
 			return dtlserrors.ErrEncryptedExtensionsReceivedByServer
@@ -116,7 +125,6 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 		hctx.PushMessage(conn, hctx.GenerateFinished(conn))
 		return nil
 	case format.HandshakeTypeClientHello:
-	case format.HandshakeTypeServerHello:
 	case format.HandshakeTypeKeyUpdate:
 	case format.HandshakeTypeNewSessionTicket:
 		panic("handled in ConnectionImpl.ProcessHandshake")

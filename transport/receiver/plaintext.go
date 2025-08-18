@@ -44,21 +44,12 @@ func (rc *Receiver) processPlaintextHandshake(conn *handshake.ConnectionImpl, hd
 			}
 		case format.HandshakeTypeServerHello:
 			// on error, we could continue to the next fragment, but state machine will be broken, so we do not
-			// TODO - check
-			var msg format.ServerHello
-			if handshakeHdr.IsFragmented() {
-				rc.opts.Stats.MustNotBeFragmented(msg.MessageKind(), msg.MessageName(), addr, handshakeHdr)
-				return conn, dtlserrors.WarnServerHelloFragmented
+			if conn == nil {
+				return conn, dtlserrors.ErrServerHelloNoActiveConnection
 			}
-			if err := msg.Parse(body); err != nil {
-				rc.opts.Stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
-				return conn, dtlserrors.WarnPlaintextServerHelloParsing
-			}
-			rc.opts.Stats.ServerHelloMessage(handshakeHdr, msg, addr)
-			if err = rc.OnServerHello(conn, body, handshakeHdr, msg, addr, format.RecordNumberWith(0, hdr.SequenceNumber)); err != nil {
+			if err = conn.ProcessServerHello(handshakeHdr, body, format.RecordNumberWith(0, hdr.SequenceNumber)); err != nil {
 				return conn, err
 			}
-			// TODO - return err from rc.OnServerHello
 		default:
 			rc.opts.Stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)
 			// we can continue to the next message, but state machine will be broken

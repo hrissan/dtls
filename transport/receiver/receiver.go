@@ -141,6 +141,8 @@ func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 				return conn, nil
 			}
 			recordOffset += n
+			// TODO - should we check/remove replay received record sequence number?
+			// how to do this without state?
 			switch hdr.ContentType {
 			case format.PlaintextContentTypeAlert:
 				if conn != nil { // Will not respond with alert, otherwise endless cycle

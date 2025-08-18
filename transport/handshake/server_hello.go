@@ -3,7 +3,6 @@ package handshake
 import (
 	"crypto/ecdh"
 	"log"
-	"net/netip"
 
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/cookie"
@@ -11,31 +10,23 @@ import (
 	"github.com/hrissan/tinydtls/format"
 )
 
-func (conn *ConnectionImpl) OnServerHello(messageBody []byte, handshakeHdr format.MessageHandshakeHeader, serverHello format.ServerHello, addr netip.AddrPort, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr format.MessageHandshakeHeader, messageBody []byte, rn format.RecordNumber) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if conn.Handshake == nil {
-		return nil // retransmission after connection already established, ignore
+		return nil // retransmission, while connection already established
 	}
-	hctx := conn.Handshake
+	return conn.Handshake.ReceivedMessage(conn, handshakeHdr, messageBody, rn)
+}
+
+func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, messageBody []byte, serverHello format.ServerHello) error {
 	if serverHello.Extensions.SupportedVersions.SelectedVersion != format.DTLS_VERSION_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
 	if serverHello.CipherSuite != format.CypherSuite_TLS_AES_128_GCM_SHA256 {
 		return dtlserrors.ErrParamsSupportCiphersuites
 	}
-	// TODO - should we check received record sequence number?
 	if serverHello.IsHelloRetryRequest() {
-		// HRR is never acked, because there is no context on server for that
-		if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
-			return dtlserrors.ErrClientHelloUnsupportedParams
-		}
-		if handshakeHdr.MessageSeq != 0 {
-			// TODO - fatal alert. Looks dangerous for state machine
-			log.Printf("ServerHelloRetryRequest has MessageSeq != 0, ignoring")
-			return dtlserrors.ErrClientHelloUnsupportedParams
-		}
-		conn.Keys.NextMessageSeqReceive++ // never overflows due to check above
 		if !serverHello.Extensions.CookieSet {
 			return dtlserrors.ErrServerHRRMustContainCookie
 		}
@@ -58,19 +49,11 @@ func (conn *ConnectionImpl) OnServerHello(messageBody []byte, handshakeHdr forma
 		return nil
 	}
 	// ServerHello can have messageSeq 0 or 1, depending on whether server used HRR
-	if handshakeHdr.MessageSeq < conn.Keys.NextMessageSeqReceive {
-		hctx.AddAck(handshakeHdr.MessageSeq, rn)
-		return nil // repeat of server hello, because we did not ack it yet
-	}
-	if handshakeHdr.MessageSeq > conn.Keys.NextMessageSeqReceive {
-		return nil // not expecting message
-	}
 	if handshakeHdr.MessageSeq >= 2 {
 		// TODO - fatal alert. Looks dangerous for state machine
 		log.Printf("ServerHello has MessageSeq >= 2, ignoring")
 		return dtlserrors.ErrClientHelloUnsupportedParams
 	}
-	conn.Keys.NextMessageSeqReceive++ // never overflows due to check above
 
 	if !serverHello.Extensions.KeyShare.X25519PublicKeySet {
 		return dtlserrors.ErrParamsSupportKeyShare

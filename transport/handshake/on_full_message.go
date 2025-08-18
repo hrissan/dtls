@@ -101,7 +101,10 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
 				conn.Keys.Send.Symmetric.Epoch = 3
 				conn.Keys.SendNextSegmentSequence = 0
-				// conn.Handshake = nil
+				// optimization - usually there is several acks ready to be sent at this state
+				conn.sendAcks.AddFrom(conn.sendAcksStorage[:],
+					&conn.Handshake.sendAcks, conn.Handshake.sendAcksStorage[:])
+				conn.Handshake = nil
 				// TODO - why wolf closes connection if we send application data immediately?
 				//conn.Handler = &exampleHandler{toSend: "Hello from server\n"}
 				conn.Handler = &exampleHandler{}

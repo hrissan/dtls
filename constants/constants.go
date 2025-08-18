@@ -9,7 +9,8 @@ const MaxCertificateChainLength = 16
 
 const MaxOutgoingHRRDatagramLength = 512
 
-const MaxSendAcks = 16
+const MaxSendAcksConnection = 4
+const MaxSendAcksHandshake = 16
 
 const MaxSendMessagesQueue = 8
 

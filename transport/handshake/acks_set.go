@@ -13,7 +13,7 @@ import (
 
 type AcksSet struct {
 	// sorted before sending, elements are at the back
-	sendAcks     [constants.MaxSendAcks]format.RecordNumber
+	// sendAcks     [constants.MaxSendAcks]format.RecordNumber - storage is external, due to no generic by size
 	sendAcksSize int
 }
 
@@ -25,33 +25,41 @@ func (a *AcksSet) Size() int {
 	return a.sendAcksSize
 }
 
-func (a *AcksSet) Add(rn format.RecordNumber) {
-	sendAcksOffset := len(a.sendAcks) - a.sendAcksSize
+func (a *AcksSet) Add(storage []format.RecordNumber, rn format.RecordNumber) {
+	sendAcksOffset := len(storage) - a.sendAcksSize
 	if sendAcksOffset == 0 {
 		return
 	}
-	for _, ack := range a.sendAcks[sendAcksOffset:] {
+	for _, ack := range storage[sendAcksOffset:] { // linear search must be fast here
 		if ack == rn {
 			return
 		}
 	}
 	a.sendAcksSize++
-	a.sendAcks[sendAcksOffset-1] = rn
+	storage[sendAcksOffset-1] = rn
+	return
 }
 
-func (a *AcksSet) PopSorted(maxCount int) []format.RecordNumber {
-	sendAcksOffset := len(a.sendAcks) - a.sendAcksSize
+func (a *AcksSet) PopSorted(storage []format.RecordNumber, maxCount int) []format.RecordNumber {
+	sendAcksOffset := len(storage) - a.sendAcksSize
 	// sort all first, otherwise we get random set
-	slices.SortFunc(a.sendAcks[sendAcksOffset:], format.RecordNumberCmp)
+	slices.SortFunc(storage[sendAcksOffset:], format.RecordNumberCmp)
 	a.sendAcksSize -= maxCount
-	return a.sendAcks[sendAcksOffset : sendAcksOffset+maxCount]
+	return storage[sendAcksOffset : sendAcksOffset+maxCount]
+}
+
+func (a *AcksSet) AddFrom(storage []format.RecordNumber, other *AcksSet, otherStorage []format.RecordNumber) {
+	otherAcks := other.PopSorted(otherStorage, min(other.Size(), len(storage)))
+	for _, ack := range otherAcks {
+		a.Add(storage[:], ack)
+	}
 }
 
 func (a *AcksSet) HasDataToSend(conn *ConnectionImpl) bool {
 	return a.Size() != 0 && conn.Keys.Send.Symmetric.Epoch != 0 // We send only encrypted acks
 }
 
-func (a *AcksSet) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (int, error) {
+func (a *AcksSet) ConstructDatagram(storage []format.RecordNumber, conn *ConnectionImpl, datagram []byte) (int, error) {
 	if !a.HasDataToSend(conn) {
 		return 0, nil
 	}
@@ -63,7 +71,7 @@ func (a *AcksSet) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (int,
 	if acksSpace < constants.MinFragmentBodySize && acksCount != a.Size() {
 		return 0, nil // do not send tiny records at the end of datagram
 	}
-	sendAcks := a.PopSorted(acksCount)
+	sendAcks := a.PopSorted(storage, acksCount)
 
 	da, err := conn.constructCiphertextAck(datagram[:0], sendAcks)
 	if err != nil {

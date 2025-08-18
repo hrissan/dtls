@@ -28,7 +28,7 @@ No unsafe code of our own (except in standard crypto, we do not control).
 
 Must make zero allocations on the fast paths, almost zero allocations on slow paths (except in standard crypto, we do not control).
 
-Must be fixed memory for everything. Every object allocated on heap must be recycled indefinitely (except in standard crypto, we do not control). 
+Must be fixed memory for most objects. Most objects allocated on heap must be recycled indefinitely. 
 
 Must use as little memory per established connection as possible (1.5 kilobytes). We need this implementation for mesh with at least 100K connections per service, so literally every byte counts.
 

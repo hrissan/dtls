@@ -33,8 +33,10 @@ type HandshakeConnection struct {
 	receivedPartialMessage    OutgoingHandshakeMessage
 
 	// end of previous flight, all messages before are implicitly acked by any message from messages
+	// flights exist only during handshake, so we keep this variable here. TODO - move to connection?
 	sendAcksfromMessageSeq uint16
-	sendAcks               AcksSet
+	sendAcksStorage        [constants.MaxSendAcksHandshake]format.RecordNumber
+	sendAcks               AcksSet // should pass sendAcksStorage to sendAcks methods
 
 	SendQueue SendQueue
 
@@ -65,7 +67,7 @@ func (hctx *HandshakeConnection) AddAck(messageSeq uint16, rn format.RecordNumbe
 	if messageSeq < hctx.sendAcksfromMessageSeq {
 		return
 	}
-	hctx.sendAcks.Add(rn)
+	hctx.sendAcks.Add(hctx.sendAcksStorage[:], rn)
 }
 
 func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byte) (newFlight bool) {
@@ -77,19 +79,14 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	hctx.SendQueue.Clear()
 
 	hctx.sendAcksfromMessageSeq = conn.Keys.NextMessageSeqReceive
-	hctx.sendAcks.Clear()
+	conn.sendAcks.Clear()
 	return true
 }
 
 func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) error {
-	if handshakeHdr.MessageSeq < conn.Keys.NextMessageSeqReceive {
-		hctx.AddAck(handshakeHdr.MessageSeq, rn) // otherwise, peer will send those messages forever
-		return nil                               // totally ok to ignore
+	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
+		return nil // < was processed by ack state machine already
 	}
-	if handshakeHdr.MessageSeq > conn.Keys.NextMessageSeqReceive {
-		return nil // totally ok to ignore
-	}
-	// handshakeHdr.MessageSeq == conn.Keys.NextMessageSeqReceive due to checks above
 	if conn.Keys.NextMessageSeqReceive == math.MaxUint16 { // would overflow below
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}

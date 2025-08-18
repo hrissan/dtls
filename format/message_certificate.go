@@ -18,7 +18,7 @@ type MessageCertificate struct {
 }
 
 func (msg *MessageCertificate) MessageKind() string { return "handshake" }
-func (msg *MessageCertificate) MessageName() string { return "certificate" }
+func (msg *MessageCertificate) MessageName() string { return "Certificate" }
 
 func (msg *MessageCertificate) parseCertificates(body []byte) (err error) {
 	offset := 0

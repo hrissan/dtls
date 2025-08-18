@@ -47,30 +47,6 @@ func (a *AcksSet) PopSorted(maxCount int) []format.RecordNumber {
 	return a.sendAcks[sendAcksOffset : sendAcksOffset+maxCount]
 }
 
-// TODO - move out
-func (conn *ConnectionImpl) ReceiveAcks(opts *options.TransportOptions, insideBody []byte) {
-	for ; len(insideBody) >= format.MessageAckRecordNumberSize; insideBody = insideBody[format.MessageAckRecordNumberSize:] {
-		epoch := binary.BigEndian.Uint64(insideBody)
-		seq := binary.BigEndian.Uint64(insideBody[8:])
-		if epoch > math.MaxUint16 {
-			opts.Stats.Warning(conn.Addr, dtlserrors.WarnAckEpochOverflow)
-			continue // prevent overflow below
-		}
-		rn := format.RecordNumberWith(uint16(epoch), seq)
-		if conn.Handshake != nil {
-			conn.Handshake.SendQueue.Ack(conn, rn)
-		}
-		if conn.sendKeyUpdateRN != (format.RecordNumber{}) && conn.sendKeyUpdateRN == rn {
-			conn.sendKeyUpdateRN = format.RecordNumber{}
-			conn.sendKeyUpdate = false
-		}
-		if conn.sendNewSessionTicketRN != (format.RecordNumber{}) && conn.sendNewSessionTicketRN == rn {
-			conn.sendNewSessionTicketRN = format.RecordNumber{}
-			conn.sendNewSessionTicket = false
-		}
-	}
-}
-
 func (a *AcksSet) HasDataToSend(conn *ConnectionImpl) bool {
 	return a.Size() != 0 && conn.Keys.Send.Symmetric.Epoch != 0 // We send only encrypted acks
 }
@@ -96,4 +72,34 @@ func (a *AcksSet) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (data
 	}
 	datagramSize += len(da)
 	return
+}
+
+// TODO - move out
+func (conn *ConnectionImpl) ReceiveAcks(opts *options.TransportOptions, insideBody []byte) {
+	for ; len(insideBody) >= format.MessageAckRecordNumberSize; insideBody = insideBody[format.MessageAckRecordNumberSize:] {
+		epoch := binary.BigEndian.Uint64(insideBody)
+		seq := binary.BigEndian.Uint64(insideBody[8:])
+		if epoch > math.MaxUint16 {
+			opts.Stats.Warning(conn.Addr, dtlserrors.WarnAckEpochOverflow)
+			continue // prevent overflow below
+		}
+		rn := format.RecordNumberWith(uint16(epoch), seq)
+		if conn.Handshake != nil {
+			conn.Handshake.SendQueue.Ack(conn, rn)
+		}
+		if conn.sendKeyUpdateRN != (format.RecordNumber{}) && conn.sendKeyUpdateRN == rn {
+			conn.sendKeyUpdateRN = format.RecordNumber{}
+			conn.sendKeyUpdateMessageSeq = 0
+			conn.sendKeyUpdateUpdateRequested = false // must not be necessary
+			// now when we received ack for KeyUpdate, we must update our keys
+			conn.Keys.Send.ComputeNextApplicationTrafficSecret(conn.RoleServer) // next application traffic secret is calculated from the previous one
+			conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
+			conn.Keys.Send.Symmetric.Epoch++
+			conn.Keys.SendNextSegmentSequence = 0
+		}
+		if conn.sendNewSessionTicketRN != (format.RecordNumber{}) && conn.sendNewSessionTicketRN == rn {
+			conn.sendNewSessionTicketRN = format.RecordNumber{}
+			conn.sendNewSessionTicketMessageSeq = 0
+		}
+	}
 }

@@ -20,7 +20,7 @@ type ClientHello struct {
 }
 
 func (msg *ClientHello) MessageKind() string { return "handshake" }
-func (msg *ClientHello) MessageName() string { return "client_hello" }
+func (msg *ClientHello) MessageName() string { return "ClientHello" }
 
 func (msg *ClientHello) Parse(body []byte) (err error) {
 	offset := 0

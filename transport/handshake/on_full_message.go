@@ -89,9 +89,14 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
 				conn.Keys.Send.Symmetric.Epoch++
 				conn.Keys.SendNextSegmentSequence = 0
-				//conn.Handshake = nil // TODO - reuse into pool
-				conn.Handler = &exampleHandler{toSend: "Hello from server\n"}
+				// conn.Handshake = nil
+				// TODO - why wolf closes connection if we send application data immediately?
+				//conn.Handler = &exampleHandler{toSend: "Hello from server\n"}
+				conn.Handler = &exampleHandler{}
 				conn.HandlerHasMoreData = true
+				// we need conn.Handshake here to send acks for last client flight.
+				// we will set conn.Handshake to 0 when we switch to epoch 3
+				// TODO - move acks to Connection?
 			}
 			return nil
 		}

@@ -16,7 +16,7 @@ type MessageFinished struct {
 }
 
 func (msg *MessageFinished) MessageKind() string { return "handshake" }
-func (msg *MessageFinished) MessageName() string { return "finished" }
+func (msg *MessageFinished) MessageName() string { return "Finished" }
 
 func (msg *MessageFinished) Parse(body []byte) (err error) {
 	msg.VerifyDataLength = len(body)

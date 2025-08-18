@@ -54,12 +54,13 @@ type ConnectionImpl struct {
 	sendKeyUpdateRN        format.RecordNumber // if != 0, already sent, on resend overwrite rn
 	sendNewSessionTicketRN format.RecordNumber // if != 0, already sent, on resend overwrite rn
 
-	Handshake            *HandshakeConnection // content is also protected by mutex above
-	Handler              ConnectionHandler
-	HandlerHasMoreData   bool // set when user signals it has data, clears after OnWriteRecord returns false
-	RoleServer           bool // changes very rarely
-	sendKeyUpdate        bool
-	sendNewSessionTicket bool
+	Handshake                      *HandshakeConnection // content is also protected by mutex above
+	Handler                        ConnectionHandler
+	HandlerHasMoreData             bool // set when user signals it has data, clears after OnWriteRecord returns false
+	RoleServer                     bool // changes very rarely
+	sendKeyUpdateUpdateRequested   bool
+	sendKeyUpdateMessageSeq        uint16 // != 0 if set
+	sendNewSessionTicketMessageSeq uint16 // != 0 if set
 
 	InSenderQueue    bool  // intrusive, must not be changed except by sender, protected by sender mutex
 	TimerHeapIndex   int   // intrusive, must not be changed except by clock, protected by clock mutex
@@ -81,6 +82,8 @@ func (conn *ConnectionImpl) hasDataToSendLocked() bool {
 		return true
 	}
 	return conn.HandlerHasMoreData ||
+		(conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == format.RecordNumber{})) ||
+		(conn.sendNewSessionTicketMessageSeq != 0 && (conn.sendNewSessionTicketRN == format.RecordNumber{})) ||
 		conn.ackKeyUpdate != (format.RecordNumber{}) ||
 		conn.ackKeyNewSessionTicket != (format.RecordNumber{})
 }
@@ -95,6 +98,34 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 		// because message has a chance to ack the whole flight
 		datagramSize += hctx.SendQueue.ConstructDatagram(conn, datagram[datagramSize:])
 		datagramSize += hctx.sendAcks.ConstructDatagram(conn, datagram[datagramSize:])
+	}
+	if conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == format.RecordNumber{}) {
+		msgBody := make([]byte, 0, 1) // must be stack-allocated
+		msg := format.MessageKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
+		msgBody = msg.Write(msgBody)
+		lenBody := uint32(len(msgBody))
+		outgoing := OutgoingHandshakeMessage{
+			Header: MessageHeaderMinimal{
+				HandshakeType: format.HandshakeTypeKeyUpdate,
+				MessageSeq:    conn.sendKeyUpdateMessageSeq,
+			},
+			Body:       msgBody,
+			SendOffset: 0,
+			SendEnd:    lenBody,
+		}
+		recordSize, fragmentInfo, rn := conn.constructRecord(datagram[datagramSize:],
+			outgoing.Header, outgoing.Body,
+			0, lenBody, nil)
+		if recordSize != 0 {
+			if fragmentInfo.FragmentOffset != 0 || fragmentInfo.FragmentLength != lenBody {
+				panic("outgoing KeyUpdate must not be fragmented")
+			}
+			datagramSize += recordSize
+			conn.sendKeyUpdateRN = rn
+		}
+	}
+	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sendNewSessionTicketRN != format.RecordNumber{}) {
+		// TODO
 	}
 	sendAcks := make([]format.RecordNumber, 0, 2) // probably on stack
 	if conn.ackKeyUpdate != (format.RecordNumber{}) {
@@ -115,7 +146,7 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 		conn.ackKeyNewSessionTicket = format.RecordNumber{}
 	}
 	if conn.Handler != nil { // application data
-		// If we remove "if" below, we put ack for client_hello together with
+		// If we remove "if" below, we put ack for client finished together with
 		// application data into the same datagram. Then wolfSSL_connect will return
 		// err = -441, Application data is available for reading
 		// TODO: contact WolfSSL team
@@ -167,22 +198,32 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
 		return nil // totally ok to ignore
 	}
-	conn.Keys.NextMessageSeqReceive++
+	if conn.Keys.NextMessageSeqReceive == math.MaxUint16 {
+		return dtlserrors.ErrReceivedMessageSeqOverflow
+	}
+	conn.Keys.NextMessageSeqReceive++                   // never due to check above
 	log.Printf("received and ignored NewSessionTicket") // TODO
 	return nil
 }
 
 func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) error {
+	var msg format.MessageKeyUpdate
+	if err := msg.Parse(body); err != nil {
+		return dtlserrors.ErrKeyUpdateMessageParsing
+	}
+	log.Printf("KeyUpdate parsed: %+v", msg)
+
 	if handshakeHdr.IsFragmented() {
 		// alert - we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
 		opts.Stats.Warning(conn.Addr, dtlserrors.WarnKeyUpdateFragmented)
 		return nil
 	}
-	if conn.Handshake != nil {
-		opts.Stats.Warning(conn.Addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
-		return nil
-	}
+	// TODO - uncomment after moving acks into connection from handshake
+	//if conn.Handshake != nil {
+	//	opts.Stats.Warning(conn.Addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
+	//	return nil
+	//}
 	if handshakeHdr.MessageSeq > conn.Keys.NextMessageSeqReceive {
 		return nil // totally ok to ignore
 	}
@@ -192,8 +233,19 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, ha
 	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
 		return nil // totally ok to ignore
 	}
-	conn.Keys.NextMessageSeqReceive++
-	log.Printf("received and ignored KeyUpdate") // TODO
+	if conn.Keys.NextMessageSeqReceive == math.MaxUint16 {
+		return dtlserrors.ErrReceivedMessageSeqOverflow
+	}
+	conn.Keys.NextMessageSeqReceive++ // never due to check above
+	log.Printf("received KeyUpdate")
+	conn.Keys.ExpectEpochUpdate = true
+	if msg.UpdateRequested {
+		if conn.Keys.NextMessageSeqSend == math.MaxUint16 {
+			return dtlserrors.ErrSendMessageSeqOverflow
+		}
+		conn.sendKeyUpdateMessageSeq = conn.Keys.NextMessageSeqSend
+		conn.Keys.NextMessageSeqSend++ // never due to check above
+	}
 	return nil
 }
 
@@ -225,8 +277,9 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 		if !conn.Keys.NewReceiveKeysSet {
 			conn.Keys.NewReceiveKeysSet = true
 			conn.Keys.NewReceiveKeys.Epoch = receiver.Symmetric.Epoch + 1
-			conn.Keys.NewReceiveKeys.ComputeKeys(receiver.ApplicationTrafficSecret[:]) // next application traffic secret is calculated from the previous one
+			conn.Keys.NewReceiveKeys.ComputeKeys(receiver.ApplicationTrafficSecret[:])
 			conn.Keys.NewReceiveKeysFailedDeprotectionCounter = 0
+			receiver.ComputeNextApplicationTrafficSecret(!conn.RoleServer) // next application traffic secret is calculated from the previous one
 		}
 		decrypted, seq, contentType, err = conn.Keys.NewReceiveKeys.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, 0,
 			seqNumData, header, body)
@@ -257,7 +310,7 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 		// either garbage, attack or epoch wrapping
 		return nil
 	}
-	log.Printf("dtls: ciphertext %v deprotected with rn=%v cid(hex): %x from %v, body(hex): %x", hdr, rn, cid, conn.Addr, decrypted)
+	log.Printf("dtls: ciphertext %v deprotected with rn={%d,%d} cid(hex): %x from %v, body(hex): %x", hdr, rn.Epoch(), rn.SeqNum(), cid, conn.Addr, decrypted)
 	if !format.IsInnerPlaintextRecord(contentType) {
 		// warning instead of error here is debatable, probably some DTLSv1.2 message from mixed implementation
 		opts.Stats.Warning(conn.Addr, dtlserrors.WarnUnknownInnerPlaintextRecordType)
@@ -327,6 +380,12 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 			return nil // ack occupies full record
 		case format.PlaintextContentTypeApplicationData:
 			log.Printf("dtls: got application_data(encrypted) %v from %v, message: %q", hdr, conn.Addr, messageData)
+			if conn.RoleServer && conn.Handler != nil {
+				if ha, ok := conn.Handler.(*exampleHandler); ok {
+					ha.toSend = string(messageData)
+					conn.HandlerHasMoreData = true
+				}
+			}
 			return nil // application data occupies full record
 		default:
 			panic("content type checked in format.IsPlaintextRecord()")

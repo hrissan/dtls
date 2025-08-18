@@ -63,11 +63,15 @@ var ErrExtensionsMessageParsing = NewWarning(-507, "Extensions handshake message
 var ErrCertificateMessageParsing = NewWarning(-508, "Certificate handshake message failed to parse")
 var ErrCertificateVerifyMessageParsing = NewWarning(-509, "CertificateVerify handshake message failed to parse")
 var ErrFinishedMessageParsing = NewWarning(-510, "Finished handshake message failed to parse")
+var ErrKeyUpdateMessageParsing = NewWarning(-511, "KeyUpdate handshake message failed to parse")
 
-var ErrCertificateChainEmpty = NewWarning(-511, "certificate chain is empty")
-var ErrCertificateLoadError = NewWarning(-512, "certificate load error")
-var ErrCertificateAlgorithmUnsupported = NewWarning(-513, "certificate algorihtm unsupported")
-var ErrCertificateSignatureInvalid = NewWarning(-514, "certificate signature invalid")
-var ErrFinishedMessageVerificationFailed = NewWarning(-515, "finished message verification failed")
+var ErrCertificateChainEmpty = NewWarning(-512, "certificate chain is empty")
+var ErrCertificateLoadError = NewWarning(-513, "certificate load error")
+var ErrCertificateAlgorithmUnsupported = NewWarning(-514, "certificate algorihtm unsupported")
+var ErrCertificateSignatureInvalid = NewWarning(-515, "certificate signature invalid")
+var ErrFinishedMessageVerificationFailed = NewWarning(-516, "finished message verification failed")
 
 var ErrEncryptedAckMessageHeaderParsing = NewWarning(-516, "encrypted ack message header failed to parsed")
+
+var ErrReceivedMessageSeqOverflow = NewWarning(-517, "received handshake message sequence limit of 2^16-1 reached, closing connection")
+var ErrSendMessageSeqOverflow = NewWarning(-517, "sent handshake message sequence limit of 2^16-1 reached, closing connection")

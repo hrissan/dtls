@@ -177,8 +177,6 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 * Ciphersuite TLS_AES_256_GCM_SHA384, support hashes of various sizes
 
-* Support KeyUpdate for both sending and receiving keys
-
 * Support fragmented Server Hello message. Plus replay protection for plaintext records.
 
 * Support client certificates
@@ -199,7 +197,7 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 * Rearrange/refactor code
 
-* Send alerts
+* Send and receive alerts
 
 * Test with 2 or more sockets listening on different interfaces
 

@@ -32,33 +32,33 @@ const MessageHandshakeHeaderSize = 12
 func HandshakeTypeToName(t byte) string {
 	switch t {
 	case HandshakeTypeClientHello:
-		return "client_hello"
+		return "ClientHello"
 	case HandshakeTypeServerHello:
-		return "server_hello"
+		return "ServerHello"
 	case HandshakeTypeNewSessionTicket:
-		return "new_session_ticket"
+		return "NewSessionTicket"
 	case HandshakeTypeEndOfEarlyData:
-		return "end_of_early_data"
+		return "EndOfEarlyData"
 	case HandshakeTypeEncryptedExtensions:
-		return "encrypted_extensions"
+		return "EncryptedExtensions"
 	case HandshakeTypeRequestConnectionID:
-		return "request_connection_id"
+		return "RequestConnectionId"
 	case HandshakeTypeNewConnectionID:
-		return "new_connection_id"
+		return "NewConnectionId"
 	case HandshakeTypeCertificate:
-		return "certificate"
+		return "Certificate"
 	case HandshakeTypeCertificateRequest:
-		return "certificate_request"
+		return "CertificateRequest"
 	case HandshakeTypeCertificateVerify:
-		return "certificate_verify"
+		return "CertificateVerify"
 	case HandshakeTypeFinished:
-		return "finished"
+		return "Finished"
 	case HandshakeTypeKeyUpdate:
-		return "key_update"
+		return "KeyUpdate"
 	case HandshakeTypeMessageHash:
-		return "message_hash"
+		return "MessageHash"
 	default:
-		return "unknown"
+		return "<unknown>"
 	}
 }
 

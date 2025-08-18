@@ -10,7 +10,7 @@ type MessageCertificateVerify struct {
 }
 
 func (msg *MessageCertificateVerify) MessageKind() string { return "handshake" }
-func (msg *MessageCertificateVerify) MessageName() string { return "certificate_verify" }
+func (msg *MessageCertificateVerify) MessageName() string { return "CertificateVerify" }
 
 func (msg *MessageCertificateVerify) Parse(body []byte) (err error) {
 	offset := 0

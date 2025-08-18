@@ -67,6 +67,16 @@ func (keys *DirectionKeys) ComputeApplicationTrafficSecret(serverKeys bool, mast
 	//		"traffic upd", "", Hash.length)
 }
 
+func (keys *DirectionKeys) ComputeNextApplicationTrafficSecret(serverKeys bool) {
+	hasher := sha256.New()
+	copy(keys.ApplicationTrafficSecret[:], hkdf.ExpandLabel(hasher, keys.ApplicationTrafficSecret[:], "traffic upd", []byte{}, len(keys.ApplicationTrafficSecret)))
+	if serverKeys {
+		log.Printf("server next application traffic secret: %x\n", keys.ApplicationTrafficSecret)
+	} else {
+		log.Printf("client next application traffic secret: %x\n", keys.ApplicationTrafficSecret)
+	}
+}
+
 // contentType is the first non-zero byte from the end
 func findPaddingOffsetContentType(data []byte) (paddingOffset int, contentType byte) {
 	offset := len(data)

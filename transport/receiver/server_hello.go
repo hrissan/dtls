@@ -53,9 +53,14 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	if serverHello.IsHelloRetryRequest() {
 		// HRR is never acked, because there is no context on server for that
 		if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
-			return nil, nil // TODO - alert, hello retry request out of order
+			return nil, nil
 		}
-		conn.Keys.NextMessageSeqReceive++
+		if handshakeHdr.MessageSeq != 0 {
+			// TODO - fatal alert. Looks dangerous for state machine
+			log.Printf("ServerHelloRetryRequest has MessageSeq != 0, ignoring")
+			return nil, nil
+		}
+		conn.Keys.NextMessageSeqReceive++ // never overflows due to check above
 		if !serverHello.Extensions.CookieSet {
 			return nil, ErrServerHRRContainsNoCookie
 		}
@@ -77,6 +82,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 		hctx.PushMessage(conn, clientHelloMsg)
 		return conn, nil
 	}
+	// ServerHello can have messageSeq 0 or 1, depending on whether server used HRR
 	if handshakeHdr.MessageSeq < conn.Keys.NextMessageSeqReceive {
 		hctx.AddAck(handshakeHdr.MessageSeq, rn)
 		return nil, nil // repeat of server hello, because we did not ack it yet
@@ -84,7 +90,12 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	if handshakeHdr.MessageSeq > conn.Keys.NextMessageSeqReceive {
 		return nil, nil // not expecting message
 	}
-	conn.Keys.NextMessageSeqReceive++
+	if handshakeHdr.MessageSeq >= 2 {
+		// TODO - fatal alert. Looks dangerous for state machine
+		log.Printf("ServerHello has MessageSeq >= 2, ignoring")
+		return nil, nil
+	}
+	conn.Keys.NextMessageSeqReceive++ // never overflows due to check above
 
 	if !serverHello.Extensions.KeyShare.X25519PublicKeySet {
 		return nil, ErrSupportOnlyX25519

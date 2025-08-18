@@ -87,22 +87,24 @@ func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
 			}
 		}
 	} else {
-		if err != nil {
-			log.Printf("TODO - send stateless alert")
-		}
+		rc.opts.Stats.Warning(addr, err)
+		// TODO - alert is must here, otherwise client will not know we forgot their connection
 	}
 }
 
 func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
-	var conn *handshake.ConnectionImpl
-	connSet := false
+	// look up always for simplicity
+	rc.handMu.Lock()
+	conn := rc.connections[addr]
+	rc.handMu.Unlock()
 
 	recordOffset := 0                  // Multiple DTLS records MAY be placed in a single datagram [rfc9147:4.3]
 	for recordOffset < len(datagram) { // read records one by one
 		fb := datagram[recordOffset]
-		if format.IsCiphertextRecord(fb) {
+		switch {
+		case format.IsCiphertextRecord(fb):
 			var hdr format.CiphertextRecordHeader
-			n, cid, seqNum, header, body, err := hdr.Parse(datagram[recordOffset:], rc.opts.CIDLength) // TODO - CID
+			n, cid, seqNumData, header, body, err := hdr.Parse(datagram[recordOffset:], rc.opts.CIDLength)
 			if err != nil {
 				rc.opts.Stats.BadRecord("ciphertext", recordOffset, len(datagram), addr, err)
 				rc.opts.Stats.Warning(addr, dtlserrors.WarnCiphertextRecordParsing)
@@ -111,27 +113,26 @@ func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 				return conn, nil
 			}
 			recordOffset += n
-			if !connSet { // look up connection only once per datagram, not record
-				rc.handMu.Lock()
-				conn = rc.connections[addr]
-				rc.handMu.Unlock()
-				connSet = true
-			}
-			if conn != nil {
-				log.Printf("dtls: got ciphertext %v cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, body)
-				if err := conn.ProcessCiphertextRecord(rc.opts, hdr, cid, seqNum, header, body); err != nil {
-					return conn, err
-				}
-				// Problems inside record do not conflict with our ability to process next record
-			} else {
+			log.Printf("dtls: got ciphertext %v cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, body)
+			if conn == nil {
 				rc.opts.Stats.Warning(addr, dtlserrors.WarnCiphertextNoConnection)
-				// Alert is must here, otherwise client will not know we forgot their connection
+				// TODO - stateless alert
+				// Continue - may be there is ClientHello in the next record?
+				continue
 			}
+			err = conn.ProcessCiphertextRecord(rc.opts, hdr, cid, seqNumData, header, body)
+			if err != nil {
+				return conn, err
+			}
+			// Minor problems inside record do not conflict with our ability to process next record
 			continue
-		}
-		if format.IsPlaintextRecord(fb) {
+		case fb == format.PlaintextContentTypeAlert ||
+			fb == format.PlaintextContentTypeHandshake ||
+			fb == format.PlaintextContentTypeAck:
+			// [rfc9147:4.1], but it seems acks must always be encrypted in DTLS1.3?
+			// TODO - contact DTLS team to clarify standard
 			var hdr format.PlaintextRecordHeader
-			n, body, err := hdr.Parse(datagram[recordOffset:])
+			n, recordBody, err := hdr.Parse(datagram[recordOffset:])
 			if err != nil {
 				rc.opts.Stats.BadRecord("plaintext", recordOffset, len(datagram), addr, err)
 				rc.opts.Stats.Warning(addr, dtlserrors.WarnPlaintextRecordParsing)
@@ -140,18 +141,34 @@ func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 				return conn, nil
 			}
 			recordOffset += n
-			if err := rc.processPlaintextRecord(hdr, body, addr); err != nil {
-				rc.opts.Stats.Warning(addr, err)
+			switch hdr.ContentType {
+			case format.PlaintextContentTypeAlert:
+				if conn != nil { // Will not respond with alert, otherwise endless cycle
+					if err := conn.ProcessAlert(false, recordBody); err != nil {
+						// Anyone can send garbage, do not change state
+						rc.opts.Stats.Warning(addr, err)
+					}
+				}
+			case format.PlaintextContentTypeAck:
+				log.Printf("dtls: got ack record (plaintext) %d bytes from %v, message(hex): %x", len(recordBody), addr, recordBody)
+				// unencrypted acks can only acknowledge unencrypted messaged, so very niche, we simply ignore them
+			case format.PlaintextContentTypeHandshake:
+				conn, err = rc.processPlaintextHandshake(conn, hdr, recordBody, addr)
+				if err != nil {
+					rc.opts.Stats.Warning(addr, err)
+				}
 			}
+			// send (stateless) alert
 			// Anyone can send garbage, ignore.
 			// Errors inside do not conflict with our ability to process next record
 			continue
+		default:
+			rc.opts.Stats.BadRecord("unknown", recordOffset, len(datagram), addr, format.ErrRecordTypeFailedToParse)
+			rc.opts.Stats.Warning(addr, dtlserrors.WarnUnknownRecordType)
+			// Anyone can send garbage, ignore.
+			// We cannot continue to the next record.
+			return conn, nil
 		}
-		rc.opts.Stats.BadRecord("unknown", recordOffset, len(datagram), addr, format.ErrRecordTypeFailedToParse)
-		rc.opts.Stats.Warning(addr, dtlserrors.WarnUnknownRecordType)
-		// Anyone can send garbage, ignore.
-		// We cannot continue to the next record.
-		return conn, nil
 	}
 	return conn, nil
 }

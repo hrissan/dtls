@@ -81,9 +81,18 @@ var ErrReceiveRecordSeqOverflowNextEpoch = NewWarning(-521, "receiving ciphertex
 
 // records format
 var ErrAckRecordMustBeEncrypted = NewWarning(-600, "ack record must always be encrypted")
-var ErrApplicationDataRecordMustBeEncrypted = NewWarning(-601, "application data record must always be encrypted")
 var ErrUnknownInnerPlaintextRecordType = NewWarning(-602, "unknown inner plaintext record type")
 var ErrHandshakeReecordEmpty = NewWarning(-603, "handshake record must not be empty")
 
 // handshake protocol
 var WarnHandshakeMessageMustBeEncrypted = NewWarning(-700, "plaintext handshake messages other than ClientHello, ServerHello must be encrypted")
+var ErrEncryptedExtensionsReceivedByServer = NewWarning(-701, "EncryptedExtensions handshake message rsceived by server")
+var ErrClientHelloReceivedByClient = NewWarning(-702, "ClientHello handshake message rsceived by client")
+var ErrServerHelloReceivedByServer = NewWarning(-703, "ServerHello handshake message rsceived by server")
+var ErrClientHelloUnsupportedParams = NewWarning(-704, "ClientHello params (version, ciphersuite, groups, etc) not supported by server") // TODO - more granular error
+var ErrClientHelloCookieInvalid = NewWarning(-705, "ClientHello cookie failed validation")
+var ErrClientHelloCookieAge = NewWarning(-706, "ClientHello cookie expired")
+var ErrServerHelloRetryRequestQueueFull = NewWarning(-707, "Server's HelloRetryRequest queue is full, dropping ClientHello")
+
+// crypto related
+var ErrCertificateVerifyMessageSignature = NewWarning(-800, "failed to sign CertificateVerify handshake message")

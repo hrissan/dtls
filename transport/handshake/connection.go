@@ -408,21 +408,21 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 		return nil
 	}
 	log.Printf("dtls: ciphertext %v deprotected with rn={%d,%d} cid(hex): %x from %v, body(hex): %x", hdr, rn.Epoch(), rn.SeqNum(), cid, conn.Addr, decrypted)
-	// [rfc9147:4.1], but it seems acks must always be encrypted in DTLS1.3, so we do not classify them as valid here
+	// [rfc9147:4.1]
 	switch contentType {
 	case format.PlaintextContentTypeAlert:
-		return conn.ProcessAlert(true, opts, decrypted)
+		return conn.ProcessAlert(true, decrypted)
 	case format.PlaintextContentTypeAck:
 		return conn.ProcessEncryptedAck(opts, decrypted)
 	case format.PlaintextContentTypeApplicationData:
-		return conn.ProcessApplicationData(opts, decrypted)
+		return conn.ProcessApplicationData(decrypted)
 	case format.PlaintextContentTypeHandshake:
 		return conn.ProcessEncryptedHandshake(opts, decrypted, rn)
 	}
 	return dtlserrors.ErrUnknownInnerPlaintextRecordType
 }
 
-func (conn *ConnectionImpl) ProcessAlert(encrypted bool, opts *options.TransportOptions, messageData []byte) error {
+func (conn *ConnectionImpl) ProcessAlert(encrypted bool, messageData []byte) error {
 	// TODO - beware of unencrypted alert!
 	log.Printf("dtls: got alert record (encrypted=%v) %d bytes from %v, message(hex): %x", encrypted, len(messageData), conn.Addr, messageData)
 	// messageData must be 2 bytes, TODO - parse and process alert
@@ -449,7 +449,7 @@ func (conn *ConnectionImpl) ProcessEncryptedAck(opts *options.TransportOptions, 
 	return nil // ack occupies full record
 }
 
-func (conn *ConnectionImpl) ProcessApplicationData(opts *options.TransportOptions, messageData []byte) error {
+func (conn *ConnectionImpl) ProcessApplicationData(messageData []byte) error {
 	log.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q", len(messageData), conn.Addr, messageData)
 	if conn.RoleServer && conn.Handler != nil {
 		// TODO - controller to play with state. Remove!

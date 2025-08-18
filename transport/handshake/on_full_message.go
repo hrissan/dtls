@@ -14,6 +14,9 @@ import (
 func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte) error {
 	switch handshakeHdr.HandshakeType {
 	case format.HandshakeTypeEncryptedExtensions:
+		if conn.RoleServer {
+			return dtlserrors.ErrEncryptedExtensionsReceivedByServer
+		}
 		var msg format.ExtensionsSet
 		if err := msg.ParseOutside(body, false, true, false); err != nil {
 			return dtlserrors.ErrExtensionsMessageParsing
@@ -28,7 +31,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 			return dtlserrors.ErrCertificateMessageParsing
 		}
 		// We do not want checks here, because receiving goroutine should not be blocked for long
-		// We have to first receive everything up to finished, probably send ack,
+		// We have to first receive everything up to finished, send acks,
 		// then offload ECC to separate core and trigger state machine depending on result
 		log.Printf("certificate parsed: %+v", msg)
 		hctx.certificateChain = msg

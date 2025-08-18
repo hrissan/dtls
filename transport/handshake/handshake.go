@@ -199,12 +199,12 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, header MessageHeade
 }
 
 func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg format.MessageHandshake) ([]byte, format.RecordNumber) {
-	rn := format.RecordNumberWith(0, conn.Keys.SendNextEpoch0Sequence)
+	rn := format.RecordNumberWith(0, conn.Keys.SendNextSegmentSequenceEpoch0)
 	recordHdr := format.PlaintextRecordHeader{
 		ContentType:    format.PlaintextContentTypeHandshake,
-		SequenceNumber: conn.Keys.SendNextEpoch0Sequence,
+		SequenceNumber: conn.Keys.SendNextSegmentSequenceEpoch0,
 	}
-	conn.Keys.SendNextEpoch0Sequence++
+	conn.Keys.SendNextSegmentSequenceEpoch0++
 	data = recordHdr.Write(data, format.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
 	data = msg.Header.Write(data)
 	data = append(data, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)

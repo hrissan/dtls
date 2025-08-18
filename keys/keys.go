@@ -18,10 +18,10 @@ type Keys struct {
 	Receive DirectionKeys
 
 	// for ServerHello retransmit and replay protection
-	SendNextEpoch0Sequence  uint64 // cannot reduce this, due to 48-bit value on the wire, this is for unencrypted client_hello/server_hello only, but peer can select very large value
-	SendNextSegmentSequence uint64
+	SendNextSegmentSequenceEpoch0 uint64 // TODO - reduce to 16 bit?
+	SendNextSegmentSequence       uint64
 
-	ReceiveNextEpoch0Sequence  uint64 // cannot reduce this, due to 48-bit value on the wire, this is for unencrypted client_hello/server_hello only, but peer can select very large value
+	// No replay protection for Epoch 0
 	ReceiveNextSegmentSequence uint64
 
 	NewReceiveKeys SymmetricKeys // always correspond to Receive.Symmetric.Epoch + 1

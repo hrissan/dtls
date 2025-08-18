@@ -29,6 +29,10 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 		// TODO - generate alert
 		return
 	}
+	// ClientHello is stateless, so we cannot check record sequence number.
+	// If client follows protocol and sends the same client hello,
+	// we will reply with the same server hello.
+	// so, setting record sequence number to 0 equals to retransmission of the same message
 	if !msg.Extensions.CookieSet {
 		if handshakeHdr.MessageSeq != 0 {
 			rc.opts.Stats.ErrorClientHelloUnsupportedParams(handshakeHdr, msg, addr, ErrClientHelloWithoutCookieMsgSeqNum)
@@ -95,8 +99,7 @@ func (rc *Receiver) OnClientHello(messageBody []byte, handshakeHdr format.Messag
 	hctx := handshake.NewHandshakeConnection(sha256.New())
 	conn.Handshake = hctx
 
-	conn.Keys.ReceiveNextEpoch0Sequence = 1 // TODO - get from plaintext record we received
-	conn.Keys.SendNextEpoch0Sequence = 1    // sequence 0 was HRR
+	conn.Keys.SendNextSegmentSequenceEpoch0 = 1 // sequence 0 was HRR
 
 	conn.Keys.NextMessageSeqSend = 1    // message 0 was HRR
 	conn.Keys.NextMessageSeqReceive = 2 // message 0, 1 were initial client_hello, client_hello

@@ -49,6 +49,7 @@ func (rc *Receiver) onServerHello(messageBody []byte, handshakeHdr format.Messag
 	if serverHello.CipherSuite != format.CypherSuite_TLS_AES_128_GCM_SHA256 {
 		return nil, ErrSupportOnlyTLS_AES_128_GCM_SHA256
 	}
+	// TODO - should we check received record sequence number?
 	if serverHello.IsHelloRetryRequest() {
 		// HRR is never acked, because there is no context on server for that
 		if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {

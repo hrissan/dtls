@@ -175,6 +175,10 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 * Support retransmissions, actually start/stop retransmission timers based on connection state
 
+* PSK handshake
+
+* NewSessionTicket and resuming sessions support for both server and client
+
 * Harmonize errors. Before error is returned, print context (message/record data, etc.)
 
 * Process fatal errors to terminate connections.

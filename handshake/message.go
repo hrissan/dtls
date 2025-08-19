@@ -11,13 +11,14 @@ type Message struct {
 	Body    []byte // TODO - reuse in rope
 }
 
-// only first 2 fields are part of transcript hash
-func (msg *Message) AddToHash(transcriptHasher hash.Hash) {
+// MsgSeq is not part of original TLSv3.0, so not included in transcript
+func (msg *Message) AddToHash2(transcriptHasher hash.Hash) {
 	if len(msg.Body) > 0xFFFFFF {
 		panic("message body too large")
 	}
 	var result [4]byte
 	binary.BigEndian.PutUint32(result[:], (uint32(msg.MsgType)<<24)+uint32(len(msg.Body)))
 	_, _ = transcriptHasher.Write(result[:])
+	_, _ = transcriptHasher.Write(msg.Body[:])
 	return
 }

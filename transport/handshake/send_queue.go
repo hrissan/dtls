@@ -15,7 +15,8 @@ type SendQueue struct {
 	// all messages here belong to the same flight during handshake.
 	// if message in the middle is fully acked, it will stay in the buffer until it becomes
 	// head or tail of buffer, only then it is removed
-	messages circular.Buffer[OutgoingHandshakeMessage]
+	messages        circular.BufferExt[OutgoingHandshakeMessage]
+	messagesStorage [constants.MaxSendMessagesQueue]OutgoingHandshakeMessage
 	// offset in messages of the message we are sending, len(messages) if all sent
 	messageOffset int
 	// offset inside messages[messageOffset] or 0 if messageOffset == len(messages)
@@ -23,12 +24,14 @@ type SendQueue struct {
 
 	// Not in order because we have epoch 0 and need to resend ServerHello,
 	// so linear search, but it is fast, see benchmarks
-	sentRecordsStorage [constants.MaxSendRecordsQueue]recordFragmentRelation
 	sentRecords        circular.BufferExt[recordFragmentRelation]
+	sentRecordsStorage [constants.MaxSendRecordsQueue]recordFragmentRelation
 }
 
 func (sq *SendQueue) Reserve() {
-	sq.messages.Reserve(constants.MaxSendMessagesQueue)
+	//uncomment if using Buffer instead of BufferExt
+	//sq.sentRecords.Reserve(constants.MaxSendRecordsQueue)
+	//sq.messages.Reserve(constants.MaxSendMessagesQueue)
 }
 
 func (sq *SendQueue) Len() int {
@@ -36,7 +39,7 @@ func (sq *SendQueue) Len() int {
 }
 
 func (sq *SendQueue) Clear() {
-	sq.messages.Clear()
+	sq.messages.Clear(sq.messagesStorage[:])
 	sq.messageOffset = 0
 	sq.fragmentOffset = 0
 	sq.sentRecords.Clear(sq.sentRecordsStorage[:])
@@ -47,7 +50,7 @@ func (sq *SendQueue) PushMessage(msg format.MessageHandshake) {
 		// must be never, because no flight contains so many messages
 		panic("too many messages are generated at once")
 	}
-	sq.messages.PushBack(OutgoingHandshakeMessage{
+	sq.messages.PushBack(sq.messagesStorage[:], OutgoingHandshakeMessage{
 		Header: MessageHeaderMinimal{
 			HandshakeType: msg.Header.HandshakeType,
 			MessageSeq:    msg.Header.MessageSeq,
@@ -76,7 +79,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 		if sq.sentRecords.Len() >= constants.MaxSendRecordsQueue {
 			break
 		}
-		outgoing := sq.messages.IndexRef(sq.messageOffset)
+		outgoing := sq.messages.IndexRef(sq.messagesStorage[:], sq.messageOffset)
 		if sq.fragmentOffset < outgoing.SendOffset { // some were acked
 			sq.fragmentOffset = outgoing.SendOffset
 		}
@@ -158,14 +161,14 @@ func (sq *SendQueue) Ack(conn *ConnectionImpl, rn format.RecordNumber) {
 	if index < 0 || index >= sq.messages.Len() {
 		return
 	}
-	msg := sq.messages.IndexRef(index)
+	msg := sq.messages.IndexRef(sq.messagesStorage[:], index)
 	msg.Ack(rec.FragmentOffset, rec.FragmentLength)
-	for sq.messages.Len() != 0 && sq.messages.FrontRef().FullyAcked() {
+	for sq.messages.Len() != 0 && sq.messages.FrontRef(sq.messagesStorage[:]).FullyAcked() {
 		if sq.messageOffset == 0 {
 			sq.fragmentOffset = 0
 		} else {
 			sq.messageOffset--
 		}
-		sq.messages.PopFront()
+		sq.messages.PopFront(sq.messagesStorage[:])
 	}
 }

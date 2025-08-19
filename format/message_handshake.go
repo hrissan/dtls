@@ -64,42 +64,42 @@ func HandshakeTypeToName(t byte) string {
 }
 
 type FragmentInfo struct {
-	MessageSeq     uint16
+	MsgSeq         uint16
 	FragmentOffset uint32 // stored as 24-bit
 	FragmentLength uint32 // stored as 24-bit
 }
 
-type MessageFragmentHeader struct {
+type HandshakeMsgFragmentHeader struct {
 	HandshakeType byte
 	Length        uint32 // stored as 24-bit
 	FragmentInfo
 }
 
-func (hdr *MessageFragmentHeader) IsFragmented() bool {
+func (hdr *HandshakeMsgFragmentHeader) IsFragmented() bool {
 	return hdr.FragmentOffset != 0 || hdr.FragmentLength != hdr.Length
 }
 
 // only first 2 fields are part of transcript hash
-func (hdr *MessageFragmentHeader) AddToHash(transcriptHasher hash.Hash) {
+func (hdr *HandshakeMsgFragmentHeader) AddToHash(transcriptHasher hash.Hash) {
 	var result [4]byte
 	binary.BigEndian.PutUint32(result[:], (uint32(hdr.HandshakeType)<<24)+hdr.Length)
 	_, _ = transcriptHasher.Write(result[:])
 	return
 }
 
-func (hdr *MessageFragmentHeader) Parse(record []byte) error {
+func (hdr *HandshakeMsgFragmentHeader) Parse(record []byte) error {
 	if len(record) < MessageHandshakeHeaderSize {
 		return ErrHandshakeMsgTooShort
 	}
 	hdr.HandshakeType = record[0]
 	hdr.Length = binary.BigEndian.Uint32(record[0:4]) & 0xFFFFFF
-	hdr.MessageSeq = binary.BigEndian.Uint16(record[4:6])
+	hdr.MsgSeq = binary.BigEndian.Uint16(record[4:6])
 	hdr.FragmentOffset = binary.BigEndian.Uint32(record[5:9]) & 0xFFFFFF
 	hdr.FragmentLength = binary.BigEndian.Uint32(record[8:12]) & 0xFFFFFF
 	return nil
 }
 
-func (hdr *MessageFragmentHeader) ParseWithBody(record []byte) (n int, body []byte, err error) {
+func (hdr *HandshakeMsgFragmentHeader) ParseWithBody(record []byte) (n int, body []byte, err error) {
 	if err := hdr.Parse(record); err != nil {
 		return 0, nil, err
 	}
@@ -110,10 +110,10 @@ func (hdr *MessageFragmentHeader) ParseWithBody(record []byte) (n int, body []by
 	return endOffset, record[MessageHandshakeHeaderSize:endOffset], nil
 }
 
-func (hdr *MessageFragmentHeader) Write(datagram []byte) []byte {
+func (hdr *HandshakeMsgFragmentHeader) Write(datagram []byte) []byte {
 	datagram = append(datagram, hdr.HandshakeType)
 	datagram = AppendUint24(datagram, hdr.Length)
-	datagram = binary.BigEndian.AppendUint16(datagram, hdr.MessageSeq)
+	datagram = binary.BigEndian.AppendUint16(datagram, hdr.MsgSeq)
 	datagram = AppendUint24(datagram, hdr.FragmentOffset)
 	datagram = AppendUint24(datagram, hdr.FragmentLength)
 	return datagram

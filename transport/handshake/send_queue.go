@@ -53,7 +53,7 @@ func (sq *SendQueue) PushMessage(msg format.MessageHandshakeFragment) {
 	sq.messages.PushBack(sq.messagesStorage[:], PartialHandshakeMsg{
 		Msg: HandshakeMsg{
 			HandshakeType: msg.Header.HandshakeType,
-			MessageSeq:    msg.Header.MessageSeq,
+			MessageSeq:    msg.Header.MsgSeq,
 			Body:          msg.Body,
 		},
 		SendOffset: 0,
@@ -157,7 +157,7 @@ func (sq *SendQueue) Ack(conn *ConnectionImpl, rn format.RecordNumber) {
 		panic("invariant violation")
 	}
 	// sq.messages end() is aligned with conn.NextMessageSeqSend
-	index := int(rec.MessageSeq) + sq.messages.Len() - int(conn.NextMessageSeqSend)
+	index := int(rec.MsgSeq) + sq.messages.Len() - int(conn.NextMessageSeqSend)
 	if index < 0 || index >= sq.messages.Len() {
 		return
 	}

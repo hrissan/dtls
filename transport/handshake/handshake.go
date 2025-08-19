@@ -76,7 +76,7 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	return true
 }
 
-func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr format.MessageFragmentHeader, body []byte, rn format.RecordNumber) error {
+func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr format.HandshakeMsgFragmentHeader, body []byte, rn format.RecordNumber) error {
 	if handshakeHdr.HandshakeType == 0 { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}
@@ -85,7 +85,7 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 	flight := HandshakeTypeToFlight(handshakeHdr.HandshakeType, conn.RoleServer) // zero if unknown
 	conn.Handshake.ReceivedFlight(conn, flight)
 
-	messageOffset := int(handshakeHdr.MessageSeq) + hctx.receivedMessages.Len() - int(conn.NextMessageSeqReceive)
+	messageOffset := int(handshakeHdr.MsgSeq) + hctx.receivedMessages.Len() - int(conn.NextMessageSeqReceive)
 	if messageOffset < 0 {
 		panic("checked before calling HandshakeConnection.ReceivedMessage")
 	}
@@ -95,7 +95,7 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 	for messageOffset >= hctx.receivedMessages.Len() {
 		hctx.receivedMessages.PushBack(hctx.receivedMessagesStorage[:], PartialHandshakeMsg{})
 		if conn.NextMessageSeqReceive == math.MaxUint16 {
-			// can happen only when handshakeHdr.MessageSeq == math.MaxUint16
+			// can happen only when handshakeHdr.MsgSeq == math.MaxUint16
 			return dtlserrors.ErrReceivedMessageSeqOverflow
 		}
 		conn.NextMessageSeqReceive++
@@ -105,14 +105,14 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 		*message = PartialHandshakeMsg{
 			Msg: HandshakeMsg{
 				HandshakeType: handshakeHdr.HandshakeType,
-				MessageSeq:    handshakeHdr.MessageSeq,
+				MessageSeq:    handshakeHdr.MsgSeq,
 			},
 			SendOffset: 0,
 			SendEnd:    handshakeHdr.Length,
 		}
 		message.Msg.Body = make([]byte, handshakeHdr.Length) // TODO - rope from pull
 	} else {
-		if handshakeHdr.MessageSeq != handshakeHdr.MessageSeq {
+		if handshakeHdr.MsgSeq != handshakeHdr.MsgSeq {
 			panic("message sequence is queue offset and must always match")
 		}
 		if handshakeHdr.Length != uint32(len(message.Msg.Body)) {
@@ -143,11 +143,11 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 			return nil
 		}
 		body := first.Msg.Body
-		handshakeHdr := format.MessageFragmentHeader{
+		handshakeHdr := format.HandshakeMsgFragmentHeader{
 			HandshakeType: first.Msg.HandshakeType,
 			Length:        uint32(len(body)),
 			FragmentInfo: format.FragmentInfo{
-				MessageSeq:     first.Msg.MessageSeq,
+				MsgSeq:         first.Msg.MessageSeq,
 				FragmentOffset: 0,
 				FragmentLength: uint32(len(body)),
 			},
@@ -169,7 +169,7 @@ func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg format.Me
 		// close connection here
 		return // for now
 	}
-	msg.Header.MessageSeq = conn.NextMessageSeqSend
+	msg.Header.MsgSeq = conn.NextMessageSeqSend
 	conn.NextMessageSeqSend++
 
 	hctx.SendQueue.PushMessage(msg)

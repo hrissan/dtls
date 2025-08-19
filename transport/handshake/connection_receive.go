@@ -75,7 +75,7 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshake(opts *options.TransportOpt
 	}
 	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
 	for messageOffset < len(recordData) {
-		var handshakeHdr format.MessageFragmentHeader
+		var handshakeHdr format.HandshakeMsgFragmentHeader
 		n, messageBody, err := handshakeHdr.ParseWithBody(recordData[messageOffset:])
 		if err != nil {
 			opts.Stats.BadMessageHeader("handshake(encrypted)", messageOffset, len(recordData), conn.Addr, err)
@@ -83,7 +83,7 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshake(opts *options.TransportOpt
 		}
 		messageOffset += n
 
-		if handshakeHdr.MessageSeq < conn.FirstMessageSeqInReceiveQueue() {
+		if handshakeHdr.MsgSeq < conn.FirstMessageSeqInReceiveQueue() {
 			// all messages before were processed by us in the state we already do not remember,
 			// so we must acknowledge unconditionally and do nothing.
 			conn.Keys.AddAck(rn)
@@ -122,7 +122,7 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshake(opts *options.TransportOpt
 	return nil
 }
 
-func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOptions, handshakeHdr format.MessageFragmentHeader, body []byte, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOptions, handshakeHdr format.HandshakeMsgFragmentHeader, body []byte, rn format.RecordNumber) error {
 	if handshakeHdr.IsFragmented() {
 		// we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
@@ -133,7 +133,7 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 		opts.Stats.Warning(conn.Addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
 		return nil
 	}
-	if handshakeHdr.MessageSeq > conn.NextMessageSeqReceive {
+	if handshakeHdr.MsgSeq > conn.NextMessageSeqReceive {
 		return nil
 	}
 	if conn.NextMessageSeqReceive == math.MaxUint16 {
@@ -145,7 +145,7 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 	return nil
 }
 
-func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, handshakeHdr format.MessageFragmentHeader, body []byte, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, handshakeHdr format.HandshakeMsgFragmentHeader, body []byte, rn format.RecordNumber) error {
 	var msg format.MsgKeyUpdate
 	if err := msg.Parse(body); err != nil {
 		return dtlserrors.ErrKeyUpdateMessageParsing
@@ -162,7 +162,7 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, ha
 		opts.Stats.Warning(conn.Addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
 		return nil
 	}
-	if handshakeHdr.MessageSeq > conn.NextMessageSeqReceive {
+	if handshakeHdr.MsgSeq > conn.NextMessageSeqReceive {
 		return nil
 	}
 	if conn.NextMessageSeqReceive == math.MaxUint16 {

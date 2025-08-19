@@ -1,6 +1,6 @@
 package format
 
 type MessageHandshakeFragment struct {
-	Header MessageFragmentHeader
+	Header HandshakeMsgFragmentHeader
 	Body   []byte // TODO - reuse in rope
 }

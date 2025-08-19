@@ -10,13 +10,13 @@ import (
 	"github.com/hrissan/tinydtls/format"
 )
 
-func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr format.MessageFragmentHeader, messageBody []byte, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr format.HandshakeMsgFragmentHeader, messageBody []byte, rn format.RecordNumber) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if conn.Handshake == nil {
 		return nil // retransmission, while connection already established
 	}
-	if handshakeHdr.MessageSeq < conn.FirstMessageSeqInReceiveQueue() {
+	if handshakeHdr.MsgSeq < conn.FirstMessageSeqInReceiveQueue() {
 		// all messages before were processed by us in the state we already do not remember,
 		// so we must acknowledge unconditionally and do nothing.
 		conn.Keys.AddAck(rn)
@@ -25,7 +25,7 @@ func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr format.MessageFragme
 	return conn.Handshake.ReceivedMessage(conn, handshakeHdr, messageBody, rn)
 }
 
-func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr format.MessageFragmentHeader, messageBody []byte, serverHello format.MsgServerHello) error {
+func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr format.HandshakeMsgFragmentHeader, messageBody []byte, serverHello format.MsgServerHello) error {
 	if serverHello.Extensions.SupportedVersions.SelectedVersion != format.DTLS_VERSION_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
@@ -55,9 +55,9 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHd
 		return nil
 	}
 	// ServerHello can have messageSeq 0 or 1, depending on whether server used HRR
-	if handshakeHdr.MessageSeq >= 2 {
+	if handshakeHdr.MsgSeq >= 2 {
 		// TODO - fatal alert. Looks dangerous for state machine
-		log.Printf("ServerHello has MessageSeq >= 2, ignoring")
+		log.Printf("ServerHello has MsgSeq >= 2, ignoring")
 		return dtlserrors.ErrClientHelloUnsupportedParams
 	}
 
@@ -137,7 +137,7 @@ func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.C
 
 	messageBody := clientHello.Write(nil) // TODO - reuse message bodies in a rope
 	return format.MessageHandshakeFragment{
-		Header: format.MessageFragmentHeader{
+		Header: format.HandshakeMsgFragmentHeader{
 			HandshakeType: format.HandshakeTypeClientHello,
 			Length:        uint32(len(messageBody)),
 		},

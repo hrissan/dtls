@@ -13,7 +13,7 @@ import (
 	"github.com/hrissan/tinydtls/transport/handshake"
 )
 
-func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []byte, handshakeHdr format.MessageFragmentHeader, msg format.MsgClientHello, addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
+func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []byte, handshakeHdr format.HandshakeMsgFragmentHeader, msg format.MsgClientHello, addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
 	if !rc.opts.RoleServer {
 		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
 		return conn, dtlserrors.ErrClientHelloReceivedByClient
@@ -28,7 +28,7 @@ func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []
 	// we will reply with the same server hello.
 	// so, setting record sequence number to 0 equals to retransmission of the same message
 	if !msg.Extensions.CookieSet {
-		if handshakeHdr.MessageSeq != 0 {
+		if handshakeHdr.MsgSeq != 0 {
 			rc.opts.Stats.ErrorClientHelloUnsupportedParams(handshakeHdr, msg, addr, ErrClientHelloWithoutCookieMsgSeqNum)
 			return conn, dtlserrors.ErrClientHelloUnsupportedParams
 		}
@@ -56,7 +56,7 @@ func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []
 		rc.snd.SendHelloRetryDatagram(hrrStorage, len(hrrDatagram), addr)
 		return conn, nil
 	}
-	if handshakeHdr.MessageSeq != 1 {
+	if handshakeHdr.MsgSeq != 1 {
 		rc.opts.Stats.ErrorClientHelloUnsupportedParams(handshakeHdr, msg, addr, ErrClientHelloWithCookieMsgSeqNum)
 		return conn, dtlserrors.ErrClientHelloUnsupportedParams
 	}

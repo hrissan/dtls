@@ -20,7 +20,7 @@ func (hctx *HandshakeConnection) GenerateFinished(conn *ConnectionImpl) format.M
 	copy(msg.VerifyData[:], mustBeFinished)
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
 	return format.MessageHandshakeFragment{
-		Header: format.MessageFragmentHeader{
+		Header: format.HandshakeMsgFragmentHeader{
 			HandshakeType: format.HandshakeTypeFinished,
 			Length:        uint32(len(messageBody)),
 		},

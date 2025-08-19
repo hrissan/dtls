@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
+	"github.com/hrissan/tinydtls/record"
 )
 
 type ConnectionHandler interface {
@@ -47,8 +47,8 @@ type ConnectionImpl struct {
 	// because we do not want to allocate memory for reassembly,
 	// Also we do not want to support sending them fragmented, because we do not want to track
 	// rn -> fragment relations. We simply track 1 rn per message type instead.
-	sendKeyUpdateRN        format.RecordNumber // if != 0, already sent, on resend overwrite rn
-	sendNewSessionTicketRN format.RecordNumber // if != 0, already sent, on resend overwrite rn
+	sendKeyUpdateRN        record.Number // if != 0, already sent, on resend overwrite rn
+	sendNewSessionTicketRN record.Number // if != 0, already sent, on resend overwrite rn
 
 	Handshake *HandshakeConnection // content is also protected by mutex above
 	Handler   ConnectionHandler
@@ -87,7 +87,7 @@ func (conn *ConnectionImpl) startKeyUpdate(updateRequested bool) error {
 		return dtlserrors.ErrSendMessageSeqOverflow
 	}
 	conn.sendKeyUpdateMessageSeq = conn.NextMessageSeqSend
-	conn.sendKeyUpdateRN = format.RecordNumber{}
+	conn.sendKeyUpdateRN = record.Number{}
 	conn.sendKeyUpdateUpdateRequested = updateRequested
 	conn.NextMessageSeqSend++ // never due to check above
 	log.Printf("KeyUpdate started (updateRequested=%v), messageSeq: %d", updateRequested, conn.sendKeyUpdateMessageSeq)
@@ -105,8 +105,8 @@ func (h *exampleHandler) OnDisconnect(err error) {
 
 }
 
-func (h *exampleHandler) OnWriteApplicationRecord(record []byte) (recordSize int, send bool, addToSendQueue bool) {
-	toSend := copy(record, h.toSend)
+func (h *exampleHandler) OnWriteApplicationRecord(recordData []byte) (recordSize int, send bool, addToSendQueue bool) {
+	toSend := copy(recordData, h.toSend)
 	h.toSend = h.toSend[toSend:]
 	return toSend, toSend != 0, len(h.toSend) > 0
 }

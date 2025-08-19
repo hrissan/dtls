@@ -6,12 +6,12 @@ import (
 	"math"
 
 	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/record"
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
 func (conn *ConnectionImpl) ProcessEncryptedAck(opts *options.TransportOptions, messageData []byte) error {
-	insideBody, err := format.ParseRecordAcks(messageData)
+	insideBody, err := record.ParseRecordAcks(messageData)
 	if err != nil {
 		return dtlserrors.ErrEncryptedAckMessageHeaderParsing
 	}
@@ -30,14 +30,14 @@ func (conn *ConnectionImpl) ProcessEncryptedAck(opts *options.TransportOptions, 
 }
 
 func (conn *ConnectionImpl) processAckBody(opts *options.TransportOptions, insideBody []byte) {
-	for ; len(insideBody) >= format.AckRecordNumberSize; insideBody = insideBody[format.AckRecordNumberSize:] {
+	for ; len(insideBody) >= record.AckRecordNumberSize; insideBody = insideBody[record.AckRecordNumberSize:] {
 		epoch := binary.BigEndian.Uint64(insideBody)
 		seq := binary.BigEndian.Uint64(insideBody[8:])
 		if epoch > math.MaxUint16 {
 			opts.Stats.Warning(conn.Addr, dtlserrors.WarnAckEpochOverflow)
 			continue // prevent overflow below
 		}
-		rn := format.RecordNumberWith(uint16(epoch), seq)
+		rn := record.NumberWith(uint16(epoch), seq)
 		if conn.Handshake != nil {
 			conn.Handshake.SendQueue.Ack(conn, rn)
 		}
@@ -46,22 +46,22 @@ func (conn *ConnectionImpl) processAckBody(opts *options.TransportOptions, insid
 	}
 }
 
-func (conn *ConnectionImpl) processNewSessionTicketAck(rn format.RecordNumber) {
-	if conn.sendNewSessionTicketMessageSeq != 0 && conn.sendNewSessionTicketRN == (format.RecordNumber{}) || conn.sendNewSessionTicketRN != rn {
+func (conn *ConnectionImpl) processNewSessionTicketAck(rn record.Number) {
+	if conn.sendNewSessionTicketMessageSeq != 0 && conn.sendNewSessionTicketRN == (record.Number{}) || conn.sendNewSessionTicketRN != rn {
 		return
 	}
 	log.Printf("NewSessionTicket ack received")
 	conn.sendNewSessionTicketMessageSeq = 0
-	conn.sendNewSessionTicketRN = format.RecordNumber{}
+	conn.sendNewSessionTicketRN = record.Number{}
 }
 
-func (conn *ConnectionImpl) processKeyUpdateAck(rn format.RecordNumber) {
-	if conn.sendKeyUpdateMessageSeq != 0 && conn.sendKeyUpdateRN == (format.RecordNumber{}) || conn.sendKeyUpdateRN != rn {
+func (conn *ConnectionImpl) processKeyUpdateAck(rn record.Number) {
+	if conn.sendKeyUpdateMessageSeq != 0 && conn.sendKeyUpdateRN == (record.Number{}) || conn.sendKeyUpdateRN != rn {
 		return
 	}
 	log.Printf("KeyUpdate ack received")
 	conn.sendKeyUpdateMessageSeq = 0
-	conn.sendKeyUpdateRN = format.RecordNumber{}
+	conn.sendKeyUpdateRN = record.Number{}
 	conn.sendKeyUpdateUpdateRequested = false // must not be necessary
 	// now when we received ack for KeyUpdate, we must update our keys
 	conn.Keys.Send.ComputeNextApplicationTrafficSecret(conn.RoleServer) // next application traffic secret is calculated from the previous one

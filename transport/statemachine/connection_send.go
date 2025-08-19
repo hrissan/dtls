@@ -4,7 +4,6 @@ import (
 	"log"
 
 	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/handshake"
 	"github.com/hrissan/tinydtls/record"
 	"github.com/hrissan/tinydtls/replay"
@@ -25,8 +24,8 @@ func (conn *ConnectionImpl) hasDataToSendLocked() bool {
 		return true
 	}
 	return conn.HandlerHasMoreData ||
-		(conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == format.RecordNumber{})) ||
-		(conn.sendNewSessionTicketMessageSeq != 0 && (conn.sendNewSessionTicketRN == format.RecordNumber{}))
+		(conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == record.Number{})) ||
+		(conn.sendNewSessionTicketMessageSeq != 0 && (conn.sendNewSessionTicketRN == record.Number{}))
 }
 
 // must not write over len(datagram), returns part of datagram filled
@@ -66,7 +65,7 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 	//if datagramSize != 0 {
 	//	return datagramSize, true, nil
 	//}
-	if conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == format.RecordNumber{}) {
+	if conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == record.Number{}) {
 		msgBody := make([]byte, 0, 1) // must be stack-allocated
 		msgKeyUpdate := handshake.MsgKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
 		msgBody = msgKeyUpdate.Write(msgBody)
@@ -93,7 +92,7 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 		//	return datagramSize, true, nil
 		//}
 	}
-	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sendNewSessionTicketRN != format.RecordNumber{}) {
+	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sendNewSessionTicketRN != record.Number{}) {
 		// TODO
 	}
 	if conn.Handler != nil { // application data
@@ -135,15 +134,15 @@ func (conn *ConnectionImpl) constructDatagramAcks(datagram []byte) (int, error) 
 	if acksSize == 0 {
 		return 0, nil
 	}
-	acksSpace := len(datagram) - format.AckRecordHeaderSize - record.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
-	if acksSpace < format.AckRecordNumberSize { // not a single one fits
+	acksSpace := len(datagram) - record.AckRecordHeaderSize - record.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+	if acksSpace < record.AckRecordNumberSize { // not a single one fits
 		return 0, nil
 	}
-	acksCount := min(acksSize, acksSpace/format.AckRecordNumberSize)
+	acksCount := min(acksSize, acksSpace/record.AckRecordNumberSize)
 	if acksSpace < constants.MinFragmentBodySize && acksCount != acks.GetBitCount() {
 		return 0, nil // do not send tiny records at the end of datagram
 	}
-	sendAcks := make([]format.RecordNumber, 0, replay.Width) // must be constant to allocate on stack
+	sendAcks := make([]record.Number, 0, replay.Width) // must be constant to allocate on stack
 	nextReceiveSeq := acks.GetNextReceivedSeq()
 	for i := uint64(0); i < replay.Width; i++ {
 		if nextReceiveSeq+i < replay.Width { // anomaly around 0
@@ -151,7 +150,7 @@ func (conn *ConnectionImpl) constructDatagramAcks(datagram []byte) (int, error) 
 		}
 		seq := nextReceiveSeq + i - replay.Width
 		if acks.IsSetBit(seq) {
-			sendAcks = append(sendAcks, format.RecordNumberWith(conn.Keys.SendAcksEpoch, seq))
+			sendAcks = append(sendAcks, record.NumberWith(conn.Keys.SendAcksEpoch, seq))
 			//log.Printf("preparing to send ack={%d,%d}", conn.Keys.SendAcksEpoch, seq)
 			acks.ClearBit(seq)
 		}

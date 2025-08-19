@@ -3,12 +3,12 @@ package statemachine
 import (
 	"github.com/hrissan/tinydtls/circular"
 	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/handshake"
+	"github.com/hrissan/tinydtls/record"
 )
 
 type recordFragmentRelation struct {
-	rn       format.RecordNumber
+	rn       record.Number
 	fragment handshake.FragmentInfo
 }
 
@@ -120,7 +120,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 	return datagramSize, nil
 }
 
-func findSentRecordIndex(sentRecords *circular.Buffer[recordFragmentRelation], rn format.RecordNumber) *handshake.FragmentInfo {
+func findSentRecordIndex(sentRecords *circular.Buffer[recordFragmentRelation], rn record.Number) *handshake.FragmentInfo {
 	for i := 0; i != sentRecords.Len(); i++ {
 		element := sentRecords.IndexRef(i)
 		if element.rn == rn {
@@ -130,7 +130,7 @@ func findSentRecordIndex(sentRecords *circular.Buffer[recordFragmentRelation], r
 	return nil
 }
 
-func findSentRecordIndexExt(elements []recordFragmentRelation, sentRecords *circular.BufferExt[recordFragmentRelation], rn format.RecordNumber) *handshake.FragmentInfo {
+func findSentRecordIndexExt(elements []recordFragmentRelation, sentRecords *circular.BufferExt[recordFragmentRelation], rn record.Number) *handshake.FragmentInfo {
 	for i := 0; i != sentRecords.Len(); i++ {
 		element := sentRecords.IndexRef(elements, i)
 		if element.rn == rn {
@@ -140,7 +140,7 @@ func findSentRecordIndexExt(elements []recordFragmentRelation, sentRecords *circ
 	return nil
 }
 
-func (sq *SendQueue) Ack(conn *ConnectionImpl, rn format.RecordNumber) {
+func (sq *SendQueue) Ack(conn *ConnectionImpl, rn record.Number) {
 	fragmentPtr := findSentRecordIndexExt(sq.sentRecordsStorage[:], &sq.sentRecords, rn)
 	if fragmentPtr == nil {
 		return

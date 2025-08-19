@@ -4,7 +4,6 @@ import (
 	"net/netip"
 
 	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/handshake"
 	"github.com/hrissan/tinydtls/record"
 	"github.com/hrissan/tinydtls/transport/statemachine"
@@ -54,7 +53,7 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 			if conn == nil {
 				return conn, dtlserrors.ErrServerHelloNoActiveConnection
 			}
-			if err = conn.ReceivedServerHelloFragment(fragment, format.RecordNumberWith(0, hdr.SequenceNumber)); err != nil {
+			if err = conn.ReceivedServerHelloFragment(fragment, record.NumberWith(0, hdr.SequenceNumber)); err != nil {
 				return conn, err
 			}
 		default:

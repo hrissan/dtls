@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/handshake"
 	"github.com/hrissan/tinydtls/record"
 	"github.com/hrissan/tinydtls/transport/options"
@@ -69,7 +68,7 @@ func (conn *ConnectionImpl) ProcessApplicationData(messageData []byte) error {
 	return nil
 }
 
-func (conn *ConnectionImpl) ProcessEncryptedHandshakeRecord(opts *options.TransportOptions, recordData []byte, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) ProcessEncryptedHandshakeRecord(opts *options.TransportOptions, recordData []byte, rn record.Number) error {
 	log.Printf("dtls: got handshake record (encrypted) %d bytes from %v, message(hex): %x", len(recordData), conn.Addr, recordData)
 	if len(recordData) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding
@@ -124,7 +123,7 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshakeRecord(opts *options.Transp
 	return nil
 }
 
-func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOptions, fragment handshake.Fragment, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
 	if fragment.Header.IsFragmented() {
 		// we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
@@ -147,7 +146,7 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 	return nil
 }
 
-func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, fragment handshake.Fragment, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
 	if fragment.Header.IsFragmented() {
 		// alert - we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full

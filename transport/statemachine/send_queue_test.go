@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/hrissan/tinydtls/circular"
-	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/handshake"
+	"github.com/hrissan/tinydtls/record"
 )
 
 // linear search is faster for small arrays
@@ -23,11 +23,11 @@ import (
 
 var benchmarkSideEffect = 0
 
-func relationPred(relation recordFragmentRelation, rn format.RecordNumber) int {
-	return format.RecordNumberCmp(relation.rn, rn)
+func relationPred(relation recordFragmentRelation, rn record.Number) int {
+	return record.RecordNumberCmp(relation.rn, rn)
 }
 
-func findSentRecordIndex2(sentRecords *circular.Buffer[recordFragmentRelation], rn format.RecordNumber) *handshake.FragmentInfo {
+func findSentRecordIndex2(sentRecords *circular.Buffer[recordFragmentRelation], rn record.Number) *handshake.FragmentInfo {
 	s1, s2 := sentRecords.Slices()
 
 	if ind, ok := slices.BinarySearchFunc(s1, rn, relationPred); ok {
@@ -49,7 +49,7 @@ func prepareBufferForTests(elements int) *circular.Buffer[recordFragmentRelation
 		sentRecords.PopFront()
 	}
 	for i := 0; i < elements; i++ {
-		rn := format.RecordNumberWith(1, uint64(i))
+		rn := record.NumberWith(1, uint64(i))
 		if i%2 == 0 {
 			sentRecords.PushBack(recordFragmentRelation{rn: rn})
 		}
@@ -60,7 +60,7 @@ func prepareBufferForTests(elements int) *circular.Buffer[recordFragmentRelation
 func TestSendQueue_Ack(t *testing.T) {
 	sentRecords := prepareBufferForTests(32)
 	for i := 0; i < 30; i++ {
-		rn := format.RecordNumberWith(1, uint64(i))
+		rn := record.NumberWith(1, uint64(i))
 		fragmentPtr1 := findSentRecordIndex(sentRecords, rn)
 		fragmentPtr2 := findSentRecordIndex2(sentRecords, rn)
 		if fragmentPtr1 != fragmentPtr2 {
@@ -78,7 +78,7 @@ func TestSendQueue_Ack(t *testing.T) {
 func BenchmarkSendQueue_AckLinear16(b *testing.B) {
 	sentRecords := prepareBufferForTests(16)
 	for n := 0; n < b.N; n++ {
-		fragmentPtr := findSentRecordIndex(sentRecords, format.RecordNumberWith(1, uint64(n)))
+		fragmentPtr := findSentRecordIndex(sentRecords, record.NumberWith(1, uint64(n)))
 		if fragmentPtr != nil {
 			benchmarkSideEffect++ // side effect
 		}
@@ -88,7 +88,7 @@ func BenchmarkSendQueue_AckLinear16(b *testing.B) {
 func BenchmarkSendQueue_AckLog16(b *testing.B) {
 	sentRecords := prepareBufferForTests(16)
 	for n := 0; n < b.N; n++ {
-		fragmentPtr := findSentRecordIndex2(sentRecords, format.RecordNumberWith(1, uint64(n)))
+		fragmentPtr := findSentRecordIndex2(sentRecords, record.NumberWith(1, uint64(n)))
 		if fragmentPtr != nil {
 			benchmarkSideEffect++ // side effect
 		}
@@ -98,7 +98,7 @@ func BenchmarkSendQueue_AckLog16(b *testing.B) {
 func BenchmarkSendQueue_AckLinear64(b *testing.B) {
 	sentRecords := prepareBufferForTests(64)
 	for n := 0; n < b.N; n++ {
-		fragmentPtr := findSentRecordIndex(sentRecords, format.RecordNumberWith(1, uint64(n)))
+		fragmentPtr := findSentRecordIndex(sentRecords, record.NumberWith(1, uint64(n)))
 		if fragmentPtr != nil {
 			benchmarkSideEffect++ // side effect
 		}
@@ -108,7 +108,7 @@ func BenchmarkSendQueue_AckLinear64(b *testing.B) {
 func BenchmarkSendQueue_AckLog64(b *testing.B) {
 	sentRecords := prepareBufferForTests(64)
 	for n := 0; n < b.N; n++ {
-		fragmentPtr := findSentRecordIndex2(sentRecords, format.RecordNumberWith(1, uint64(n)))
+		fragmentPtr := findSentRecordIndex2(sentRecords, record.NumberWith(1, uint64(n)))
 		if fragmentPtr != nil {
 			benchmarkSideEffect++ // side effect
 		}
@@ -118,7 +118,7 @@ func BenchmarkSendQueue_AckLog64(b *testing.B) {
 func BenchmarkSendQueue_AckLinear256(b *testing.B) {
 	sentRecords := prepareBufferForTests(256)
 	for n := 0; n < b.N; n++ {
-		fragmentPtr := findSentRecordIndex(sentRecords, format.RecordNumberWith(1, uint64(n)))
+		fragmentPtr := findSentRecordIndex(sentRecords, record.NumberWith(1, uint64(n)))
 		if fragmentPtr != nil {
 			benchmarkSideEffect++ // side effect
 		}
@@ -128,7 +128,7 @@ func BenchmarkSendQueue_AckLinear256(b *testing.B) {
 func BenchmarkSendQueue_AckLog256(b *testing.B) {
 	sentRecords := prepareBufferForTests(256)
 	for n := 0; n < b.N; n++ {
-		fragmentPtr := findSentRecordIndex2(sentRecords, format.RecordNumberWith(1, uint64(n)))
+		fragmentPtr := findSentRecordIndex2(sentRecords, record.NumberWith(1, uint64(n)))
 		if fragmentPtr != nil {
 			benchmarkSideEffect++ // side effect
 		}

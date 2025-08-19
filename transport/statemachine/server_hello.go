@@ -7,11 +7,11 @@ import (
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/handshake"
+	"github.com/hrissan/tinydtls/record"
 )
 
-func (conn *ConnectionImpl) ReceivedServerHelloFragment(fragment handshake.Fragment, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) ReceivedServerHelloFragment(fragment handshake.Fragment, rn record.Number) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if conn.Handshake == nil {

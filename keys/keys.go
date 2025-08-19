@@ -7,8 +7,8 @@ import (
 	"errors"
 	"hash"
 
-	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/hkdf"
+	"github.com/hrissan/tinydtls/record"
 	"github.com/hrissan/tinydtls/replay"
 )
 
@@ -46,7 +46,7 @@ type Keys struct {
 	SequenceNumberLimitExp byte
 }
 
-func (keys *Keys) AddAck(rn format.RecordNumber) {
+func (keys *Keys) AddAck(rn record.Number) {
 	if rn.Epoch() != keys.SendAcksEpoch {
 		keys.SendAcksEpoch = rn.Epoch()
 		keys.SendAcks.Reset()
@@ -65,7 +65,7 @@ func (keys *Keys) SequenceNumberLimit() uint64 {
 	if limitExp > 48 {
 		// Our implementation pack 16-bit epoch with 48-bit sequence number for efficient storage.
 		// So we must prevent sequence number from ever reaching this limit.
-		// See for example format.RecordNumber
+		// See for example record.Number
 		// Also, we must prevent overflow below.
 		limitExp = 48
 	}

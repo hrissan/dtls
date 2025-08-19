@@ -9,8 +9,8 @@ import (
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/dtlsrand"
-	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/handshake"
+	"github.com/hrissan/tinydtls/record"
 )
 
 type HandshakeConnection struct {
@@ -77,7 +77,7 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	return true
 }
 
-func (hctx *HandshakeConnection) ReceivedFragment(conn *ConnectionImpl, fragment handshake.Fragment, rn format.RecordNumber) error {
+func (hctx *HandshakeConnection) ReceivedFragment(conn *ConnectionImpl, fragment handshake.Fragment, rn record.Number) error {
 	if fragment.Header.MsgType == handshake.MsgTypeZero { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}

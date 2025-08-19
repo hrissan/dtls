@@ -13,7 +13,7 @@ import (
 	"github.com/hrissan/tinydtls/record"
 )
 
-func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn format.RecordNumber, err error) {
+func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
 	if fragmentOffset >= uint32(len(handshakeMsg.Body)) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
 		panic("invariant of send queue fragment offset violated")
@@ -47,7 +47,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg handsh
 			panic("plaintext handshake record construction length invariant failed")
 		}
 		if err != nil {
-			return 0, handshake.FragmentInfo{}, format.RecordNumber{}, err
+			return 0, handshake.FragmentInfo{}, record.Number{}, err
 		}
 		return len(da), msg.Header.FragmentInfo, rn, nil
 	}
@@ -61,7 +61,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg handsh
 	}
 	da, rn, err := conn.constructCiphertextRecord(datagram[:0], msg)
 	if err != nil {
-		return 0, handshake.FragmentInfo{}, format.RecordNumber{}, err
+		return 0, handshake.FragmentInfo{}, record.Number{}, err
 	}
 	if len(da) > len(datagram) {
 		panic("ciphertext handshake record construction length invariant failed")
@@ -69,13 +69,13 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg handsh
 	return len(da), msg.Header.FragmentInfo, rn, nil
 }
 
-func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg handshake.Fragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, format.RecordNumber, error) {
+func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg handshake.Fragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, record.Number, error) {
 	if *sendNextSegmentSequenceEpoch0 >= math.MaxUint16 {
 		// We arbitrarily decided that we do not need more outgoing sequence numbers for epoch 0
 		// We needed code to prevent overflow below anyway
-		return nil, format.RecordNumber{}, dtlserrors.ErrSendEpoch0RecordSeqOverflow
+		return nil, record.Number{}, dtlserrors.ErrSendEpoch0RecordSeqOverflow
 	}
-	rn := format.RecordNumberWith(0, uint64(*sendNextSegmentSequenceEpoch0))
+	rn := record.NumberWith(0, uint64(*sendNextSegmentSequenceEpoch0))
 	recordHdr := record.PlaintextRecordHeader{
 		ContentType:    record.PlaintextContentTypeHandshake,
 		SequenceNumber: uint64(*sendNextSegmentSequenceEpoch0),
@@ -98,13 +98,13 @@ func (conn *ConnectionImpl) checkSendLimit() error {
 	return conn.startKeyUpdate(false)
 }
 
-func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg handshake.Fragment) ([]byte, format.RecordNumber, error) {
+func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg handshake.Fragment) ([]byte, record.Number, error) {
 	if err := conn.checkSendLimit(); err != nil {
-		return nil, format.RecordNumber{}, err
+		return nil, record.Number{}, err
 	}
 	send := &conn.Keys.Send
 	epoch := send.Symmetric.Epoch
-	rn := format.RecordNumberWith(epoch, conn.Keys.SendNextSegmentSequence)
+	rn := record.NumberWith(epoch, conn.Keys.SendNextSegmentSequence)
 	seq := conn.Keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
 	conn.Keys.SendNextSegmentSequence++      // does not overflow due to checkSendLimit() above
 	log.Printf("constructing ciphertext handshake with rn={%d,%d}", rn.Epoch(), rn.SeqNum())
@@ -149,14 +149,14 @@ func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg hands
 	return datagram, rn, nil
 }
 
-func (conn *ConnectionImpl) constructCiphertextAck(datagram []byte, acks []format.RecordNumber) ([]byte, error) {
+func (conn *ConnectionImpl) constructCiphertextAck(datagram []byte, acks []record.Number) ([]byte, error) {
 	// TODO - harmonize with code above
 	if err := conn.checkSendLimit(); err != nil {
 		return nil, err
 	}
 	send := &conn.Keys.Send
 	epoch := send.Symmetric.Epoch
-	rn := format.RecordNumberWith(epoch, conn.Keys.SendNextSegmentSequence)
+	rn := record.NumberWith(epoch, conn.Keys.SendNextSegmentSequence)
 	seq := conn.Keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
 	conn.Keys.SendNextSegmentSequence++      // does not overflow due to checkSendLimit() above
 	log.Printf("constructing ciphertext ack with rn={%d,%d}", rn.Epoch(), rn.SeqNum())
@@ -212,7 +212,7 @@ func (conn *ConnectionImpl) constructCiphertextApplication(recordBody []byte) ([
 	}
 	send := &conn.Keys.Send
 	epoch := send.Symmetric.Epoch
-	rn := format.RecordNumberWith(epoch, conn.Keys.SendNextSegmentSequence)
+	rn := record.NumberWith(epoch, conn.Keys.SendNextSegmentSequence)
 	seq := conn.Keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
 	conn.Keys.SendNextSegmentSequence++      // does not overflow due to checkSendLimit() above
 	log.Printf("constructing ciphertext application with rn={%d,%d}", rn.Epoch(), rn.SeqNum())

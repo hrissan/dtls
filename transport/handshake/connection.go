@@ -11,6 +11,7 @@ import (
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
+	"github.com/hrissan/tinydtls/replay"
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
@@ -46,9 +47,6 @@ type ConnectionImpl struct {
 	Addr netip.AddrPort // changes very rarely
 	Keys keys.Keys
 
-	sendAcksStorage [constants.MaxSendAcksConnection]format.RecordNumber
-	sendAcks        AcksSet // should pass sendAcksStorage to sendAcks methods
-
 	// we do not support those messages to be fragmented, because we do not want
 	// to allocate memory for reassembly
 	sendKeyUpdateRN        format.RecordNumber // if != 0, already sent, on resend overwrite rn
@@ -78,10 +76,7 @@ func (conn *ConnectionImpl) hasDataToSendLocked() bool {
 	if hctx != nil && hctx.SendQueue.HasDataToSend() {
 		return true
 	}
-	if hctx != nil && hctx.sendAcks.HasDataToSend(conn) {
-		return true
-	}
-	if conn.sendAcks.HasDataToSend(conn) {
+	if conn.Keys.SendAcks.GetBitCount() != 0 {
 		return true
 	}
 	return conn.HandlerHasMoreData ||
@@ -116,13 +111,8 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 		//if datagramSize != 0 {
 		//	return datagramSize, true, nil
 		//}
-		if recordSize, err := hctx.sendAcks.ConstructDatagram(hctx.sendAcksStorage[:], conn, datagram[datagramSize:]); err != nil {
-			return 0, false, err
-		} else {
-			datagramSize += recordSize
-		}
 	}
-	if recordSize, err := conn.sendAcks.ConstructDatagram(conn.sendAcksStorage[:], conn, datagram[datagramSize:]); err != nil {
+	if recordSize, err := conn.constructDatagramAcks(datagram[datagramSize:]); err != nil {
 		return 0, false, err
 	} else {
 		datagramSize += recordSize
@@ -199,6 +189,46 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 	return datagramSize, conn.hasDataToSendLocked(), nil
 }
 
+func (conn *ConnectionImpl) constructDatagramAcks(datagram []byte) (int, error) {
+	acks := &conn.Keys.SendAcks
+	acksSize := acks.GetBitCount()
+	if acksSize == 0 {
+		return 0, nil
+	}
+	acksSpace := len(datagram) - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+	if acksSpace < format.MessageAckRecordNumberSize { // not a single one fits
+		return 0, nil
+	}
+	acksCount := min(acksSize, acksSpace/format.MessageAckRecordNumberSize)
+	if acksSpace < constants.MinFragmentBodySize && acksCount != acks.GetBitCount() {
+		return 0, nil // do not send tiny records at the end of datagram
+	}
+	sendAcks := make([]format.RecordNumber, 0, replay.Width) // must be constant to allocate on stack
+	nextReceiveSeq := acks.GetNextReceivedSeq()
+	for i := uint64(0); i < replay.Width; i++ {
+		if nextReceiveSeq+i < replay.Width { // anomaly around 0
+			continue
+		}
+		seq := nextReceiveSeq + i - replay.Width
+		if acks.IsSetBit(seq) {
+			sendAcks = append(sendAcks, format.RecordNumberWith(conn.Keys.SendAcksEpoch, seq))
+			//log.Printf("preparing to send ack={%d,%d}", conn.Keys.SendAcksEpoch, seq)
+			acks.ClearBit(seq)
+		}
+	}
+	if len(sendAcks) > acksSize {
+		panic("too many sendAcks")
+	}
+	da, err := conn.constructCiphertextAck(datagram[:0], sendAcks)
+	if err != nil {
+		return 0, err
+	}
+	if len(da) > len(datagram) {
+		panic("ciphertext ack record construction length invariant failed")
+	}
+	return len(da), nil
+}
+
 func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOptions, handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) error {
 	if handshakeHdr.IsFragmented() {
 		// we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
@@ -213,12 +243,11 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
 		return nil // < was processed by ack state machine already
 	}
-	conn.sendAcks.Add(conn.sendAcksStorage[:], rn)
 	if conn.Keys.NextMessageSeqReceive == math.MaxUint16 {
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}
-	conn.Keys.NextMessageSeqReceive++ // never due to check above
-	conn.sendAcks.Add(conn.sendAcksStorage[:], rn)
+	conn.Keys.AddAck(handshakeHdr.MessageSeq, rn)
+	conn.Keys.NextMessageSeqReceive++                   // never due to check above
 	log.Printf("received and ignored NewSessionTicket") // TODO
 	return nil
 }
@@ -247,9 +276,9 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, ha
 	if conn.Keys.NextMessageSeqReceive == math.MaxUint16 {
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}
+	conn.Keys.AddAck(handshakeHdr.MessageSeq, rn)
 	conn.Keys.NextMessageSeqReceive++ // never due to check above
-	conn.sendAcks.Add(conn.sendAcksStorage[:], rn)
-	log.Printf("received KeyUpdate")
+	log.Printf("received KeyUpdate (%+v), expecting to receive record with the next epoch", msg)
 	conn.Keys.ExpectReceiveEpochUpdate = true // if this leads to epoch overflow, we'll generate error later in the function which actually increments epoch
 	if msg.UpdateRequested {
 		if err := conn.startKeyUpdate(false); err != nil { // do not request update, when responding to request
@@ -365,6 +394,10 @@ func (conn *ConnectionImpl) checkReceiveLimits() error {
 	if conn.Keys.Receive.Symmetric.Epoch < 3 || receivedCurrentEpoch < receiveLimit*3/4 { // simple heuristics
 		return nil
 	}
+	if conn.sendKeyUpdateMessageSeq != 0 {
+		// wait for previous key update to finish, it could be one with updateRequested = false
+		return nil
+	}
 	if conn.Keys.RequestedReceiveEpochUpdate {
 		return nil
 	}
@@ -472,12 +505,7 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshake(opts *options.TransportOpt
 		if handshakeHdr.MessageSeq < conn.Keys.NextMessageSeqReceive {
 			// we cannot send ack for ==, because we do not support holes, and must not ack some fragments
 			// ack state machine is independent of everything else
-			// we do not want to use both large and small storage to avoid sorting them together
-			if conn.Handshake != nil {
-				conn.Handshake.AddAck(handshakeHdr.MessageSeq, rn)
-			} else {
-				conn.sendAcks.Add(conn.sendAcksStorage[:], rn)
-			}
+			conn.Keys.AddAck(handshakeHdr.MessageSeq, rn)
 			return nil // totally ok to ignore
 		}
 		switch handshakeHdr.HandshakeType {

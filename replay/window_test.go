@@ -6,11 +6,11 @@ import (
 )
 
 func TestConstant(t *testing.T) {
-	if bits.OnesCount64(replayWidth) != 1 {
-		t.Fatalf("replayWidth must be power of 2")
+	if bits.OnesCount64(Width) != 1 {
+		t.Fatalf("Width must be power of 2")
 	}
-	if replayWidth < 1 || replayWidth > 64 {
-		t.Fatalf("replayWidth must fit into uint64")
+	if Width < 1 || Width > 64 {
+		t.Fatalf("Width must fit into uint64")
 	}
 }
 
@@ -37,20 +37,20 @@ func (r *windowMirror) SetNextReceived(nextSeq uint64) {
 	if nextSeq > r.nextReceivedSeq {
 		r.nextReceivedSeq = nextSeq
 	}
-	for s := 0; s < int(r.nextReceivedSeq)-replayWidth; s++ {
+	for s := 0; s < int(r.nextReceivedSeq)-Width; s++ {
 		*r.ensure(uint64(s)) = 1
 	}
 }
 
 func (r *windowMirror) SetBit(seq uint64) {
-	if seq >= r.nextReceivedSeq || seq+replayWidth < r.nextReceivedSeq {
+	if seq >= r.nextReceivedSeq || seq+Width < r.nextReceivedSeq {
 		return
 	}
 	*r.ensure(seq) = 1
 }
 
 func (r *windowMirror) ClearBit(seq uint64) {
-	if seq >= r.nextReceivedSeq || seq+replayWidth < r.nextReceivedSeq {
+	if seq >= r.nextReceivedSeq || seq+Width < r.nextReceivedSeq {
 		return
 	}
 	*r.ensure(seq) = 0
@@ -76,7 +76,7 @@ func FuzzReplay(f *testing.F) {
 			if cb.GetNextReceivedSeq() != cb2.GetNextReceivedSeq() {
 				t.FailNow()
 			}
-			for j := uint64(0); j < nextReceived+(replayWidth+1)*2; j++ { // arbitrary look ahead
+			for j := uint64(0); j < nextReceived+(Width+1)*2; j++ { // arbitrary look ahead
 				if a, b := cb.IsSetBit(j), cb2.IsSetBit(j); a != b {
 					t.FailNow()
 				}

@@ -9,9 +9,6 @@ const MaxCertificateChainLength = 16
 
 const MaxOutgoingHRRDatagramLength = 512
 
-const MaxSendAcksConnection = 4 // do not make too small or large
-const MaxSendAcksHandshake = 16 // do not make too large, we use linear search for set of acks
-
 const MaxSendMessagesQueue = 8
 
 // we will not send more records until some are acknowledged

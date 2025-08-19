@@ -11,6 +11,8 @@ import (
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
+// TODO - not used anymore, remove later
+
 type AcksSet struct {
 	// sorted before sending, elements are at the back
 	// sendAcks     [constants.MaxSendAcks]format.RecordNumber - storage is external, due to no generic by size

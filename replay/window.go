@@ -1,6 +1,8 @@
 package replay
 
-const replayWidth = 64 // set to 1..4 for fuzzing/testing
+import "math/bits"
+
+const Width = 64 // set to 1..4 for fuzzing/testing
 
 // for receiving replay protection we could save 65-th bit implicitly
 // by invariant that nextReceivedSeq-1 is received.
@@ -18,37 +20,39 @@ func (r *Window) Reset() {
 
 func (r *Window) GetNextReceivedSeq() uint64 { return r.nextReceivedSeq }
 
+func (r *Window) GetBitCount() int { return bits.OnesCount64(r.received) }
+
 func (r *Window) SetNextReceived(nextSeq uint64) {
-	if nextSeq > r.nextReceivedSeq+replayWidth { // efficient big jump
+	if nextSeq > r.nextReceivedSeq+Width { // efficient big jump
 		r.nextReceivedSeq = nextSeq
 		r.received = 0
 		return
 	}
 	for ; nextSeq > r.nextReceivedSeq; r.nextReceivedSeq++ {
-		r.received &= ^(1 << (r.nextReceivedSeq & (replayWidth - 1)))
+		r.received &= ^(1 << (r.nextReceivedSeq & (Width - 1)))
 	}
 }
 
 func (r *Window) SetBit(seq uint64) {
-	if seq >= r.nextReceivedSeq || seq+replayWidth < r.nextReceivedSeq {
+	if seq >= r.nextReceivedSeq || seq+Width < r.nextReceivedSeq {
 		return
 	}
-	r.received |= (1 << (seq & (replayWidth - 1)))
+	r.received |= (1 << (seq & (Width - 1)))
 }
 
 func (r *Window) ClearBit(seq uint64) {
-	if seq >= r.nextReceivedSeq || seq+replayWidth < r.nextReceivedSeq {
+	if seq >= r.nextReceivedSeq || seq+Width < r.nextReceivedSeq {
 		return
 	}
-	r.received &= ^(1 << (seq & (replayWidth - 1)))
+	r.received &= ^(1 << (seq & (Width - 1)))
 }
 
 func (r *Window) IsSetBit(seq uint64) bool {
 	if seq >= r.nextReceivedSeq {
 		return false // arbitrary selected to simplify receiver
 	}
-	if seq+replayWidth < r.nextReceivedSeq {
+	if seq+Width < r.nextReceivedSeq {
 		return true // arbitrary selected to simplify receiver
 	}
-	return r.received&(1<<(seq&(replayWidth-1))) != 0
+	return r.received&(1<<(seq&(Width-1))) != 0
 }

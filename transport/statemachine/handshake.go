@@ -77,8 +77,8 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	return true
 }
 
-func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr handshake.HandshakeMsgFragmentHeader, body []byte, rn format.RecordNumber) error {
-	if handshakeHdr.HandshakeType == 0 { // we use it as a flag of not yet received message below, so check here
+func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr handshake.MsgFragmentHeader, body []byte, rn format.RecordNumber) error {
+	if handshakeHdr.HandshakeType == handshake.HandshakeTypeZero { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}
 	// Receiving any fragment of any message from the next flight will remove all acks for previous flights.
@@ -144,7 +144,7 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 			return nil
 		}
 		body := first.Msg.Body
-		handshakeHdr := handshake.HandshakeMsgFragmentHeader{
+		handshakeHdr := handshake.MsgFragmentHeader{
 			HandshakeType: first.Msg.HandshakeType,
 			Length:        uint32(len(body)),
 			FragmentInfo: handshake.FragmentInfo{

@@ -11,7 +11,7 @@ import (
 	"github.com/hrissan/tinydtls/handshake"
 )
 
-func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr handshake.HandshakeMsgFragmentHeader, messageBody []byte, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr handshake.MsgFragmentHeader, messageBody []byte, rn format.RecordNumber) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if conn.Handshake == nil {
@@ -26,7 +26,7 @@ func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr handshake.HandshakeM
 	return conn.Handshake.ReceivedMessage(conn, handshakeHdr, messageBody, rn)
 }
 
-func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr handshake.HandshakeMsgFragmentHeader, messageBody []byte, serverHello handshake.MsgServerHello) error {
+func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr handshake.MsgFragmentHeader, messageBody []byte, serverHello handshake.MsgServerHello) error {
 	if serverHello.Extensions.SupportedVersions.SelectedVersion != handshake.DTLS_VERSION_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
@@ -44,7 +44,7 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHd
 		var initialHelloTranscriptHashStorage [constants.MaxHashLength]byte
 		initialHelloTranscriptHash := hctx.TranscriptHasher.Sum(initialHelloTranscriptHashStorage[:0])
 		hctx.TranscriptHasher.Reset()
-		syntheticHashData := []byte{handshake.HandshakeTypeMessageHash, 0, 0, byte(len(initialHelloTranscriptHash))}
+		syntheticHashData := []byte{byte(handshake.HandshakeTypeMessageHash), 0, 0, byte(len(initialHelloTranscriptHash))}
 		_, _ = hctx.TranscriptHasher.Write(syntheticHashData)
 		_, _ = hctx.TranscriptHasher.Write(initialHelloTranscriptHash)
 
@@ -138,7 +138,7 @@ func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.C
 
 	messageBody := clientHello.Write(nil) // TODO - reuse message bodies in a rope
 	return handshake.MessageHandshakeFragment{
-		Header: handshake.HandshakeMsgFragmentHeader{
+		Header: handshake.MsgFragmentHeader{
 			HandshakeType: handshake.HandshakeTypeClientHello,
 			Length:        uint32(len(messageBody)),
 		},

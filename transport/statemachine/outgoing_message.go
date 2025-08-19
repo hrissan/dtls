@@ -1,7 +1,9 @@
 package statemachine
 
+import "github.com/hrissan/tinydtls/handshake"
+
 type HandshakeMsg struct {
-	HandshakeType byte
+	HandshakeType handshake.MsgType
 	MessageSeq    uint16
 	Body          []byte // TODO - reuse in rope
 }

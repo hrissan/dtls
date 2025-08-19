@@ -18,7 +18,7 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
 	for messageOffset < len(recordData) {
 		// log.Printf("dtls: got handshake message %v from %v, message(hex): %x", hdr, addr, messageData)
-		var handshakeHdr handshake.HandshakeMsgFragmentHeader
+		var handshakeHdr handshake.MsgFragmentHeader
 		n, body, err := handshakeHdr.ParseWithBody(recordData[messageOffset:])
 		if err != nil {
 			rc.opts.Stats.BadMessageHeader("handshake", messageOffset, len(recordData), addr, err)

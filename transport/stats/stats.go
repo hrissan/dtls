@@ -28,17 +28,17 @@ type Stats interface {
 	// kind: handshake, ack, alert, etc.
 	// message: client_hello, server_hello, etc.
 	BadMessage(kind string, message string, addr netip.AddrPort, err error)
-	MustNotBeFragmented(kind string, message string, addr netip.AddrPort, header handshake.HandshakeMsgFragmentHeader)
-	MustBeEncrypted(kind string, message string, addr netip.AddrPort, header handshake.HandshakeMsgFragmentHeader)
-	MustNotBeEncrypted(kind string, message string, addr netip.AddrPort, header handshake.HandshakeMsgFragmentHeader)
+	MustNotBeFragmented(kind string, message string, addr netip.AddrPort, header handshake.MsgFragmentHeader)
+	MustBeEncrypted(kind string, message string, addr netip.AddrPort, header handshake.MsgFragmentHeader)
+	MustNotBeEncrypted(kind string, message string, addr netip.AddrPort, header handshake.MsgFragmentHeader)
 
 	// logic layer
 	ErrorServerReceivedServerHello(addr netip.AddrPort)
 	ErrorClientReceivedClientHello(addr netip.AddrPort)
-	ErrorClientHelloUnsupportedParams(handshakeHdr handshake.HandshakeMsgFragmentHeader, msg handshake.MsgClientHello, addr netip.AddrPort, err error)
-	ErrorServerHelloUnsupportedParams(handshakeHdr handshake.HandshakeMsgFragmentHeader, msg handshake.MsgServerHello, addr netip.AddrPort, err error)
-	ClientHelloMessage(handshakeHdr handshake.HandshakeMsgFragmentHeader, msg handshake.MsgClientHello, addr netip.AddrPort)
-	ServerHelloMessage(handshakeHdr handshake.HandshakeMsgFragmentHeader, msg handshake.MsgServerHello, addr netip.AddrPort)
+	ErrorClientHelloUnsupportedParams(handshakeHdr handshake.MsgFragmentHeader, msg handshake.MsgClientHello, addr netip.AddrPort, err error)
+	ErrorServerHelloUnsupportedParams(handshakeHdr handshake.MsgFragmentHeader, msg handshake.MsgServerHello, addr netip.AddrPort, err error)
+	ClientHelloMessage(handshakeHdr handshake.MsgFragmentHeader, msg handshake.MsgClientHello, addr netip.AddrPort)
+	ServerHelloMessage(handshakeHdr handshake.MsgFragmentHeader, msg handshake.MsgServerHello, addr netip.AddrPort)
 	ServerHelloRetryRequestQueueOverloaded(addr netip.AddrPort)
 	CookieCreated(addr netip.AddrPort)
 	CookieChecked(valid bool, age time.Duration, addr netip.AddrPort)
@@ -114,21 +114,21 @@ func (s *StatsLog) BadMessage(kind string, message string, addr netip.AddrPort, 
 	log.Printf("tinydtls: bad %s %s message addr=%v: %v", kind, message, addr, err)
 }
 
-func (s *StatsLog) MustNotBeFragmented(kind string, message string, addr netip.AddrPort, header handshake.HandshakeMsgFragmentHeader) {
+func (s *StatsLog) MustNotBeFragmented(kind string, message string, addr netip.AddrPort, header handshake.MsgFragmentHeader) {
 	if s.level.Load() < 0 {
 		return
 	}
 	log.Printf("tinydtls: message %s %s must not be fragmented %v addr=%v", kind, message, header, addr)
 }
 
-func (s *StatsLog) MustBeEncrypted(kind string, message string, addr netip.AddrPort, header handshake.HandshakeMsgFragmentHeader) {
+func (s *StatsLog) MustBeEncrypted(kind string, message string, addr netip.AddrPort, header handshake.MsgFragmentHeader) {
 	if s.level.Load() < 0 {
 		return
 	}
 	log.Printf("tinydtls: message %s %s must be encrypted %v addr=%v", kind, message, header, addr)
 }
 
-func (s *StatsLog) MustNotBeEncrypted(kind string, message string, addr netip.AddrPort, header handshake.HandshakeMsgFragmentHeader) {
+func (s *StatsLog) MustNotBeEncrypted(kind string, message string, addr netip.AddrPort, header handshake.MsgFragmentHeader) {
 	if s.level.Load() < 0 {
 		return
 	}
@@ -149,28 +149,28 @@ func (s *StatsLog) ErrorClientReceivedClientHello(addr netip.AddrPort) {
 	log.Printf("tinydtls: client received client hello addr=%v", addr)
 }
 
-func (s *StatsLog) ErrorClientHelloUnsupportedParams(handshakeHdr handshake.HandshakeMsgFragmentHeader, msg handshake.MsgClientHello, addr netip.AddrPort, err error) {
+func (s *StatsLog) ErrorClientHelloUnsupportedParams(handshakeHdr handshake.MsgFragmentHeader, msg handshake.MsgClientHello, addr netip.AddrPort, err error) {
 	if !s.printMessages.Load() {
 		return
 	}
 	log.Printf("tinydtls: message %s header=%+v has unsupported params addr=%v: %+v: %v", msg.MessageName(), handshakeHdr, addr, msg, err)
 }
 
-func (s *StatsLog) ErrorServerHelloUnsupportedParams(handshakeHdr handshake.HandshakeMsgFragmentHeader, msg handshake.MsgServerHello, addr netip.AddrPort, err error) {
+func (s *StatsLog) ErrorServerHelloUnsupportedParams(handshakeHdr handshake.MsgFragmentHeader, msg handshake.MsgServerHello, addr netip.AddrPort, err error) {
 	if !s.printMessages.Load() {
 		return
 	}
 	log.Printf("tinydtls: message %s header=%+v has unsupported params addr=%v: %+v: %v", msg.MessageName(), handshakeHdr, addr, msg, err)
 }
 
-func (s *StatsLog) ClientHelloMessage(handshakeHdr handshake.HandshakeMsgFragmentHeader, msg handshake.MsgClientHello, addr netip.AddrPort) {
+func (s *StatsLog) ClientHelloMessage(handshakeHdr handshake.MsgFragmentHeader, msg handshake.MsgClientHello, addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}
 	log.Printf("tinydtls: message %s header=%+v addr=%v: %+v", msg.MessageName(), handshakeHdr, addr, msg)
 }
 
-func (s *StatsLog) ServerHelloMessage(handshakeHdr handshake.HandshakeMsgFragmentHeader, msg handshake.MsgServerHello, addr netip.AddrPort) {
+func (s *StatsLog) ServerHelloMessage(handshakeHdr handshake.MsgFragmentHeader, msg handshake.MsgServerHello, addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}

@@ -18,7 +18,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg Handsh
 		panic("invariant of send queue fragment offset violated")
 	}
 	msg := handshake.MessageHandshakeFragment{
-		Header: handshake.HandshakeMsgFragmentHeader{
+		Header: handshake.MsgFragmentHeader{
 			HandshakeType: handshakeMsg.HandshakeType,
 			Length:        uint32(len(handshakeMsg.Body)),
 			FragmentInfo: handshake.FragmentInfo{

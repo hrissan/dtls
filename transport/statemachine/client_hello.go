@@ -17,7 +17,7 @@ import (
 )
 
 func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions, messageBody []byte,
-	handshakeHdr handshake.HandshakeMsgFragmentHeader, msg handshake.MsgClientHello,
+	handshakeHdr handshake.MsgFragmentHeader, msg handshake.MsgClientHello,
 	initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error {
 
 	conn.mu.Lock()
@@ -45,7 +45,7 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 		log.Printf("serverHRRHash2: %x\n", hrrHash[:])
 
 		// [rfc8446:4.4.1] replace initial client hello message with its hash if HRR was used
-		syntheticHashData := []byte{handshake.HandshakeTypeMessageHash, 0, 0, sha256.Size}
+		syntheticHashData := []byte{byte(handshake.HandshakeTypeMessageHash), 0, 0, sha256.Size}
 		_, _ = hctx.TranscriptHasher.Write(syntheticHashData)
 		_, _ = hctx.TranscriptHasher.Write(initialHelloTranscriptHash[:sha256.Size])
 		debugPrintSum(hctx.TranscriptHasher)
@@ -73,7 +73,7 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 	// TODO - get body from the rope
 	serverHelloBody := serverHello.Write(nil)
 	serverHelloMessage := handshake.MessageHandshakeFragment{
-		Header: handshake.HandshakeMsgFragmentHeader{
+		Header: handshake.MsgFragmentHeader{
 			HandshakeType: handshake.HandshakeTypeServerHello,
 			Length:        uint32(len(serverHelloBody)),
 		},
@@ -146,7 +146,7 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 		ContentType:    format.PlaintextContentTypeHandshake,
 		SequenceNumber: 0,
 	}
-	msgHeader := handshake.HandshakeMsgFragmentHeader{
+	msgHeader := handshake.MsgFragmentHeader{
 		HandshakeType: handshake.HandshakeTypeServerHello,
 		Length:        0,
 		FragmentInfo: handshake.FragmentInfo{
@@ -181,7 +181,7 @@ func generateEncryptedExtensions() handshake.MessageHandshakeFragment {
 
 	messageBody := ee.Write(nil, false, false, false) // TODO - reuse message bodies in a rope
 	return handshake.MessageHandshakeFragment{
-		Header: handshake.HandshakeMsgFragmentHeader{
+		Header: handshake.MsgFragmentHeader{
 			HandshakeType: handshake.HandshakeTypeEncryptedExtensions,
 			Length:        uint32(len(messageBody)),
 		},
@@ -198,7 +198,7 @@ func generateServerCertificate(opts *options.TransportOptions) handshake.Message
 	}
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
 	return handshake.MessageHandshakeFragment{
-		Header: handshake.HandshakeMsgFragmentHeader{
+		Header: handshake.MsgFragmentHeader{
 			HandshakeType: handshake.HandshakeTypeCertificate,
 			Length:        uint32(len(messageBody)),
 		},
@@ -228,7 +228,7 @@ func generateServerCertificateVerify(opts *options.TransportOptions, hctx *Hands
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
 
 	return handshake.MessageHandshakeFragment{
-		Header: handshake.HandshakeMsgFragmentHeader{
+		Header: handshake.MsgFragmentHeader{
 			HandshakeType: handshake.HandshakeTypeCertificateVerify,
 			Length:        uint32(len(messageBody)),
 		},

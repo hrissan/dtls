@@ -23,11 +23,11 @@ type SendQueue struct {
 
 	// Not in order because we have epoch 0 and need to resend ServerHello,
 	// so linear search, but it is fast, see benchmarks
-	sentRecords circular.Buffer[recordFragmentRelation]
+	sentRecordsStorage [constants.MaxSendRecordsQueue]recordFragmentRelation
+	sentRecords        circular.BufferExt[recordFragmentRelation]
 }
 
 func (sq *SendQueue) Reserve() {
-	sq.sentRecords.Reserve(constants.MaxSendRecordsQueue)
 	sq.messages.Reserve(constants.MaxSendMessagesQueue)
 }
 
@@ -39,7 +39,7 @@ func (sq *SendQueue) Clear() {
 	sq.messages.Clear()
 	sq.messageOffset = 0
 	sq.fragmentOffset = 0
-	sq.sentRecords.Clear()
+	sq.sentRecords.Clear(sq.sentRecordsStorage[:])
 }
 
 func (sq *SendQueue) PushMessage(msg format.MessageHandshake) {
@@ -105,7 +105,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 			}
 			// Unfortunately, not in order because we have epoch 0 and need to resend ServerHello, so linear search
 			// limited to constants.MaxSendRecordsQueue due to check above
-			sq.sentRecords.PushBack(recordFragmentRelation{rn: rn, fragment: fragmentInfo})
+			sq.sentRecords.PushBack(sq.sentRecordsStorage[:], recordFragmentRelation{rn: rn, fragment: fragmentInfo})
 			datagramSize += recordSize
 			sq.fragmentOffset += fragmentInfo.FragmentLength
 		}
@@ -130,15 +130,25 @@ func findSentRecordIndex(sentRecords *circular.Buffer[recordFragmentRelation], r
 	return nil
 }
 
+func findSentRecordIndexExt(elements []recordFragmentRelation, sentRecords *circular.BufferExt[recordFragmentRelation], rn format.RecordNumber) *format.FragmentInfo {
+	for i := 0; i != sentRecords.Len(); i++ {
+		element := sentRecords.IndexRef(elements, i)
+		if element.rn == rn {
+			return &element.fragment
+		}
+	}
+	return nil
+}
+
 func (sq *SendQueue) Ack(conn *ConnectionImpl, rn format.RecordNumber) {
-	fragmentPtr := findSentRecordIndex(&sq.sentRecords, rn)
+	fragmentPtr := findSentRecordIndexExt(sq.sentRecordsStorage[:], &sq.sentRecords, rn)
 	if fragmentPtr == nil {
 		return
 	}
 	rec := *fragmentPtr
 	*fragmentPtr = format.FragmentInfo{} // delete in the middle
-	for sq.sentRecords.Len() != 0 && sq.sentRecords.Front().fragment == (format.FragmentInfo{}) {
-		sq.sentRecords.PopFront() // delete everything from the front
+	for sq.sentRecords.Len() != 0 && sq.sentRecords.Front(sq.sentRecordsStorage[:]).fragment == (format.FragmentInfo{}) {
+		sq.sentRecords.PopFront(sq.sentRecordsStorage[:]) // delete everything from the front
 	}
 	if sq.messages.Len() > int(conn.Keys.NextMessageSeqSend) {
 		panic("invariant violation")

@@ -31,8 +31,8 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 
 	conn.Handshake.SendNextSegmentSequenceEpoch0 = 1 // sequence 0 was HRR
 
-	conn.Keys.NextMessageSeqSend = 1    // message 0 was HRR
-	conn.Keys.NextMessageSeqReceive = 2 // message 0, 1 were initial client_hello, client_hello
+	conn.NextMessageSeqSend = 1    // message 0 was HRR
+	conn.NextMessageSeqReceive = 2 // message 0, 1 were initial client_hello, client_hello
 	// TODO - check if the same handshake by storing (age, initialHelloTranscriptHash, keyShareSet)
 	{
 		var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte

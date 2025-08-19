@@ -9,10 +9,11 @@ const MaxCertificateChainLength = 16
 
 const MaxOutgoingHRRDatagramLength = 512
 
-const MaxSendMessagesQueue = 8
-
 // we will not send more records until some are acknowledged
 const MaxSendRecordsQueue = 16
+
+const MaxSendMessagesQueue = 8
+const MaxReceiveMessagesQueue = 8
 
 // We do not want to send 25 bytes of headers at the end of datagram to send 1 byte of body.
 // If there is not enough space to send headers plus MinFragmentBodySize bytes,

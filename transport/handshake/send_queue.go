@@ -14,9 +14,9 @@ type recordFragmentRelation struct {
 type SendQueue struct {
 	// all messages here belong to the same flight during handshake.
 	// if message in the middle is fully acked, it will stay in the buffer until it becomes
-	// head or tail of buffer, only then it is removed
-	messages        circular.BufferExt[OutgoingHandshakeMessage]
-	messagesStorage [constants.MaxSendMessagesQueue]OutgoingHandshakeMessage
+	// head or tail of buffer, only then it is removed.
+	messages        circular.BufferExt[PartialHandshakeMessage]
+	messagesStorage [constants.MaxSendMessagesQueue]PartialHandshakeMessage
 	// offset in messages of the message we are sending, len(messages) if all sent
 	messageOffset int
 	// offset inside messages[messageOffset] or 0 if messageOffset == len(messages)
@@ -50,7 +50,7 @@ func (sq *SendQueue) PushMessage(msg format.MessageHandshake) {
 		// must be never, because no flight contains so many messages
 		panic("too many messages are generated at once")
 	}
-	sq.messages.PushBack(sq.messagesStorage[:], OutgoingHandshakeMessage{
+	sq.messages.PushBack(sq.messagesStorage[:], PartialHandshakeMessage{
 		Header: MessageHeaderMinimal{
 			HandshakeType: msg.Header.HandshakeType,
 			MessageSeq:    msg.Header.MessageSeq,
@@ -153,11 +153,11 @@ func (sq *SendQueue) Ack(conn *ConnectionImpl, rn format.RecordNumber) {
 	for sq.sentRecords.Len() != 0 && sq.sentRecords.Front(sq.sentRecordsStorage[:]).fragment == (format.FragmentInfo{}) {
 		sq.sentRecords.PopFront(sq.sentRecordsStorage[:]) // delete everything from the front
 	}
-	if sq.messages.Len() > int(conn.Keys.NextMessageSeqSend) {
+	if sq.messages.Len() > int(conn.NextMessageSeqSend) {
 		panic("invariant violation")
 	}
-	// sq.messages end() is aligned with conn.Keys.NextMessageSeqSend
-	index := int(rec.MessageSeq) + sq.messages.Len() - int(conn.Keys.NextMessageSeqSend)
+	// sq.messages end() is aligned with conn.NextMessageSeqSend
+	index := int(rec.MessageSeq) + sq.messages.Len() - int(conn.NextMessageSeqSend)
 	if index < 0 || index >= sq.messages.Len() {
 		return
 	}

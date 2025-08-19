@@ -55,13 +55,19 @@ type ConnectionImpl struct {
 	sendKeyUpdateRN        format.RecordNumber // if != 0, already sent, on resend overwrite rn
 	sendNewSessionTicketRN format.RecordNumber // if != 0, already sent, on resend overwrite rn
 
-	Handshake                      *HandshakeConnection // content is also protected by mutex above
-	Handler                        ConnectionHandler
-	HandlerHasMoreData             bool // set when user signals it has data, clears after OnWriteRecord returns false
-	RoleServer                     bool // changes very rarely
-	sendKeyUpdateUpdateRequested   bool
-	sendKeyUpdateMessageSeq        uint16 // != 0 if set
+	Handshake *HandshakeConnection // content is also protected by mutex above
+	Handler   ConnectionHandler
+
+	// this counter does not reset with a new epoch
+	NextMessageSeqSend    uint16
+	NextMessageSeqReceive uint16
+
 	sendNewSessionTicketMessageSeq uint16 // != 0 if set
+	sendKeyUpdateMessageSeq        uint16 // != 0 if set
+	sendKeyUpdateUpdateRequested   bool   // fully defines content of KeyUpdate we are sending
+
+	RoleServer         bool // changes very rarely
+	HandlerHasMoreData bool // set when user signals it has data, clears after OnWriteRecord returns false
 
 	InSenderQueue    bool  // intrusive, must not be changed except by sender, protected by sender mutex
 	TimerHeapIndex   int   // intrusive, must not be changed except by clock, protected by clock mutex
@@ -129,7 +135,7 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 		msg := format.MessageKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
 		msgBody = msg.Write(msgBody)
 		lenBody := uint32(len(msgBody))
-		outgoing := OutgoingHandshakeMessage{
+		outgoing := PartialHandshakeMessage{
 			Header: MessageHeaderMinimal{
 				HandshakeType: format.HandshakeTypeKeyUpdate,
 				MessageSeq:    conn.sendKeyUpdateMessageSeq,
@@ -243,14 +249,14 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 		opts.Stats.Warning(conn.Addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
 		return nil
 	}
-	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
+	if handshakeHdr.MessageSeq != conn.NextMessageSeqReceive {
 		return nil // < was processed by ack state machine already
 	}
-	if conn.Keys.NextMessageSeqReceive == math.MaxUint16 {
+	if conn.NextMessageSeqReceive == math.MaxUint16 {
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}
 	conn.Keys.AddAck(handshakeHdr.MessageSeq, rn)
-	conn.Keys.NextMessageSeqReceive++                   // never due to check above
+	conn.NextMessageSeqReceive++                        // never due to check above
 	log.Printf("received and ignored NewSessionTicket") // TODO
 	return nil
 }
@@ -273,14 +279,14 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, ha
 	//	opts.Stats.Warning(conn.Addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
 	//	return nil
 	//}
-	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
+	if handshakeHdr.MessageSeq != conn.NextMessageSeqReceive {
 		return nil // < was processed by ack state machine already
 	}
-	if conn.Keys.NextMessageSeqReceive == math.MaxUint16 {
+	if conn.NextMessageSeqReceive == math.MaxUint16 {
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}
 	conn.Keys.AddAck(handshakeHdr.MessageSeq, rn)
-	conn.Keys.NextMessageSeqReceive++ // never due to check above
+	conn.NextMessageSeqReceive++ // never due to check above
 	log.Printf("received KeyUpdate (%+v), expecting to receive record with the next epoch", msg)
 	conn.Keys.ExpectReceiveEpochUpdate = true // if this leads to epoch overflow, we'll generate error later in the function which actually increments epoch
 	if msg.UpdateRequested {
@@ -295,13 +301,13 @@ func (conn *ConnectionImpl) startKeyUpdate(updateRequested bool) error {
 	if conn.sendKeyUpdateMessageSeq != 0 {
 		return nil // KeyUpdate in progress
 	}
-	if conn.Keys.NextMessageSeqSend == math.MaxUint16 {
+	if conn.NextMessageSeqSend == math.MaxUint16 {
 		return dtlserrors.ErrSendMessageSeqOverflow
 	}
-	conn.sendKeyUpdateMessageSeq = conn.Keys.NextMessageSeqSend
+	conn.sendKeyUpdateMessageSeq = conn.NextMessageSeqSend
 	conn.sendKeyUpdateRN = format.RecordNumber{}
 	conn.sendKeyUpdateUpdateRequested = updateRequested
-	conn.Keys.NextMessageSeqSend++ // never due to check above
+	conn.NextMessageSeqSend++ // never due to check above
 	log.Printf("KeyUpdate started (updateRequested=%v), messageSeq: %d", updateRequested, conn.sendKeyUpdateMessageSeq)
 	return nil
 }
@@ -531,7 +537,7 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshake(opts *options.TransportOpt
 			// receiving any chunk from the next flight will remove all acks for previous flights
 			// before this and subsequent chunks are added to hctx.acks
 		}
-		if handshakeHdr.MessageSeq < conn.Keys.NextMessageSeqReceive {
+		if handshakeHdr.MessageSeq < conn.NextMessageSeqReceive {
 			// we cannot send ack for ==, because we do not support holes, and must not ack some fragments
 			// ack state machine is independent of everything else
 			conn.Keys.AddAck(handshakeHdr.MessageSeq, rn)

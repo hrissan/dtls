@@ -35,10 +35,6 @@ type Keys struct {
 	FailedDeprotectionCounter               uint64
 	FailedDeprotectionCounterNewReceiveKeys uint64 // separate counter for NewReceiveKeys
 
-	// this counter does not reset with a new epoch
-	NextMessageSeqSend    uint16
-	NextMessageSeqReceive uint16
-
 	// enabled extensions and saves us 50% memory on crypto contexts
 	DoNotEncryptSequenceNumbers bool
 	// waiting for the next epoch during handshake or key update

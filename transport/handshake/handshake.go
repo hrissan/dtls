@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 
+	"github.com/hrissan/tinydtls/circular"
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/dtlsrand"
@@ -29,8 +30,15 @@ type HandshakeConnection struct {
 
 	currentFlight byte // both send and receive
 
-	receivedPartialMessageSet bool // if set, Header.MessageSeq == Keys.NextMessageSeqReceive
-	receivedPartialMessage    OutgoingHandshakeMessage
+	receivedPartialMessageSet bool // if set, Header.MessageSeq == conn.NextMessageSeqReceive
+	receivedPartialMessage    PartialHandshakeMessage
+
+	// We need more than 1 message, otherwise we will lose them, while
+	// handshake is in a state of waiting finish of offloaded calculations.
+	// if full message is received, and it is the first in the queue (or queue is empty),
+	// then
+	receivedMessages        circular.BufferExt[recordFragmentRelation]
+	receivedMessagesStorage [constants.MaxReceiveMessagesQueue]PartialHandshakeMessage
 
 	SendQueue SendQueue
 
@@ -65,27 +73,27 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	// implicit ack of all previous flights
 	hctx.SendQueue.Clear()
 
-	conn.Keys.SendAcksfromMessageSeq = conn.Keys.NextMessageSeqReceive
+	conn.Keys.SendAcksfromMessageSeq = conn.NextMessageSeqReceive
 	conn.Keys.SendAcks.Reset()
 	return true
 }
 
 func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) error {
-	if handshakeHdr.MessageSeq != conn.Keys.NextMessageSeqReceive {
+	if handshakeHdr.MessageSeq != conn.NextMessageSeqReceive {
 		return nil // < was processed by ack state machine already
 	}
-	if conn.Keys.NextMessageSeqReceive == math.MaxUint16 { // would overflow below
+	if conn.NextMessageSeqReceive == math.MaxUint16 { // would overflow below
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}
 	// we do not check that message is full here, because if partial message set, we want to clear that by common code
 	if !hctx.receivedPartialMessageSet {
 		conn.Keys.AddAck(handshakeHdr.MessageSeq, rn)
 		if !handshakeHdr.IsFragmented() {
-			conn.Keys.NextMessageSeqReceive++ // never due to check above
+			conn.NextMessageSeqReceive++ // never due to check above
 			return hctx.receivedFullMessage(conn, handshakeHdr, body)
 		}
 		// TODO - take body from pool
-		hctx.receivedPartialMessage = OutgoingHandshakeMessage{
+		hctx.receivedPartialMessage = PartialHandshakeMessage{
 			Header: MessageHeaderMinimal{
 				HandshakeType: handshakeHdr.HandshakeType,
 				MessageSeq:    handshakeHdr.MessageSeq,
@@ -118,9 +126,9 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 		return nil // ok, waiting for more fragments
 	}
 	body = hctx.receivedPartialMessage.Body
-	hctx.receivedPartialMessage = OutgoingHandshakeMessage{}
+	hctx.receivedPartialMessage = PartialHandshakeMessage{}
 	hctx.receivedPartialMessageSet = false
-	conn.Keys.NextMessageSeqReceive++ // never due to check above
+	conn.NextMessageSeqReceive++ // never due to check above
 	handshakeHdr.FragmentOffset = 0
 	handshakeHdr.FragmentLength = handshakeHdr.Length
 	err := hctx.receivedFullMessage(conn, handshakeHdr, body)
@@ -130,13 +138,13 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 
 // also acks (removes) all previous flights
 func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg format.MessageHandshake) {
-	if conn.Keys.NextMessageSeqSend >= math.MaxUint16 {
+	if conn.NextMessageSeqSend >= math.MaxUint16 {
 		// TODO - prevent wrapping next message seq
 		// close connection here
 		return // for now
 	}
-	msg.Header.MessageSeq = conn.Keys.NextMessageSeqSend
-	conn.Keys.NextMessageSeqSend++
+	msg.Header.MessageSeq = conn.NextMessageSeqSend
+	conn.NextMessageSeqSend++
 
 	hctx.SendQueue.PushMessage(msg)
 

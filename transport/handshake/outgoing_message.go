@@ -5,7 +5,7 @@ type MessageHeaderMinimal struct {
 	MessageSeq    uint16
 }
 
-type OutgoingHandshakeMessage struct {
+type PartialHandshakeMessage struct {
 	Header MessageHeaderMinimal
 	Body   []byte // TODO - reuse in rope
 	// We support acks from both sides, but no holes for simplicity.
@@ -15,12 +15,12 @@ type OutgoingHandshakeMessage struct {
 }
 
 // used for both acks, and reconstructing incoming messages, in that case it means FullyReceived
-func (msg *OutgoingHandshakeMessage) FullyAcked() bool {
+func (msg *PartialHandshakeMessage) FullyAcked() bool {
 	return msg.SendEnd == msg.SendOffset
 }
 
 // used for both acks, and reconstructing incoming messages
-func (msg *OutgoingHandshakeMessage) Ack(fragmentOffset uint32, fragmentLength uint32) (shouldAck bool, changed bool) {
+func (msg *PartialHandshakeMessage) Ack(fragmentOffset uint32, fragmentLength uint32) (shouldAck bool, changed bool) {
 	fragmentEnd := fragmentOffset + fragmentLength
 	if fragmentOffset > msg.SendOffset && fragmentEnd < msg.SendEnd {
 		// when receiving, we should not acknowledge this packet, we need to receive it again

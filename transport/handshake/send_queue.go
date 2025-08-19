@@ -54,8 +54,8 @@ func (sq *SendQueue) PushMessage(msg format.MessageHandshakeFragment) {
 		Msg: HandshakeMsg{
 			HandshakeType: msg.Header.HandshakeType,
 			MessageSeq:    msg.Header.MessageSeq,
+			Body:          msg.Body,
 		},
-		Body:       msg.Body,
 		SendOffset: 0,
 		SendEnd:    msg.Header.Length,
 	})
@@ -98,7 +98,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 				panic("invariant violation")
 			}
 			recordSize, fragmentInfo, rn, err := conn.constructRecord(datagram[datagramSize:],
-				outgoing.Msg, outgoing.Body,
+				outgoing.Msg,
 				sq.fragmentOffset, outgoing.SendEnd-sq.fragmentOffset, sendNextSegmentSequenceEpoch0)
 			if err != nil {
 				return 0, err

@@ -66,21 +66,16 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 	//}
 	if conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == format.RecordNumber{}) {
 		msgBody := make([]byte, 0, 1) // must be stack-allocated
-		msg := format.MsgKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
-		msgBody = msg.Write(msgBody)
+		msgKeyUpdate := format.MsgKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
+		msgBody = msgKeyUpdate.Write(msgBody)
 		lenBody := uint32(len(msgBody))
-		outgoing := PartialHandshakeMsg{
-			Msg: HandshakeMsg{
-				HandshakeType: format.HandshakeTypeKeyUpdate,
-				MessageSeq:    conn.sendKeyUpdateMessageSeq,
-			},
-			Body:       msgBody,
-			SendOffset: 0,
-			SendEnd:    lenBody,
+		msg := HandshakeMsg{
+			HandshakeType: format.HandshakeTypeKeyUpdate,
+			MessageSeq:    conn.sendKeyUpdateMessageSeq,
+			Body:          msgBody,
 		}
 		recordSize, fragmentInfo, rn, err := conn.constructRecord(datagram[datagramSize:],
-			outgoing.Msg, outgoing.Body,
-			0, lenBody, nil)
+			msg, 0, lenBody, nil)
 		if err != nil {
 			return 0, false, err
 		}

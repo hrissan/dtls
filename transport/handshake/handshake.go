@@ -110,12 +110,12 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 			SendOffset: 0,
 			SendEnd:    handshakeHdr.Length,
 		}
-		message.Body = make([]byte, handshakeHdr.Length) // TODO - rope from pull
+		message.Msg.Body = make([]byte, handshakeHdr.Length) // TODO - rope from pull
 	} else {
 		if handshakeHdr.MessageSeq != handshakeHdr.MessageSeq {
 			panic("message sequence is queue offset and must always match")
 		}
-		if handshakeHdr.Length != uint32(len(message.Body)) {
+		if handshakeHdr.Length != uint32(len(message.Msg.Body)) {
 			return dtlserrors.ErrHandshakeMessageFragmentLengthMismatch
 		}
 		if handshakeHdr.HandshakeType != message.Msg.HandshakeType {
@@ -130,7 +130,7 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 	if !changed {        // nothing new, save copy
 		return nil
 	}
-	copy(message.Body[handshakeHdr.FragmentOffset:], body) // copy all bytes for simplicity
+	copy(message.Msg.Body[handshakeHdr.FragmentOffset:], body) // copy all bytes for simplicity
 	// now we could ack the first message, so delivery all full messages
 	return hctx.DeliveryReceivedMessages(conn)
 }
@@ -142,7 +142,7 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 		if !first.FullyAcked() {
 			return nil
 		}
-		body := first.Body
+		body := first.Msg.Body
 		handshakeHdr := format.MessageFragmentHeader{
 			HandshakeType: first.Msg.HandshakeType,
 			Length:        uint32(len(body)),

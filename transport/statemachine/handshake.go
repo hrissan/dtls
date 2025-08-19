@@ -143,18 +143,9 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 		if !first.FullyAcked() {
 			return nil
 		}
-		body := first.Msg.Body
-		handshakeHdr := handshake.FragmentHeader{
-			MsgType: first.Msg.MsgType,
-			Length:  uint32(len(body)),
-			FragmentInfo: handshake.FragmentInfo{
-				MsgSeq:         first.Msg.MsgSeq,
-				FragmentOffset: 0,
-				FragmentLength: uint32(len(body)),
-			},
-		}
+		msg := first.Msg
 		hctx.receivedMessages.PopFront(hctx.receivedMessagesStorage[:])
-		err := hctx.receivedFullMessage(conn, handshakeHdr, body)
+		err := hctx.receivedFullMessage(conn, msg)
 		// TODO - return message body to pool here
 		if err != nil {
 			return err

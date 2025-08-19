@@ -26,7 +26,7 @@ func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr handshake.FragmentHe
 	return conn.Handshake.ReceivedMessage(conn, handshakeHdr, messageBody, rn)
 }
 
-func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr handshake.FragmentHeader, messageBody []byte, serverHello handshake.MsgServerHello) error {
+func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, msg handshake.Message, serverHello handshake.MsgServerHello) error {
 	if serverHello.Extensions.SupportedVersions.SelectedVersion != handshake.DTLS_VERSION_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
@@ -48,15 +48,15 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHd
 		_, _ = hctx.TranscriptHasher.Write(syntheticHashData)
 		_, _ = hctx.TranscriptHasher.Write(initialHelloTranscriptHash)
 
-		handshakeHdr.AddToHash(hctx.TranscriptHasher)
-		_, _ = hctx.TranscriptHasher.Write(messageBody)
+		msg.AddToHash(hctx.TranscriptHasher)
+		_, _ = hctx.TranscriptHasher.Write(msg.Body)
 
 		clientHelloMsg := hctx.GenerateClientHello(true, serverHello.Extensions.Cookie)
 		hctx.PushMessage(conn, clientHelloMsg)
 		return nil
 	}
 	// ServerHello can have messageSeq 0 or 1, depending on whether server used HRR
-	if handshakeHdr.MsgSeq >= 2 {
+	if msg.MsgSeq >= 2 {
 		// TODO - fatal alert. Looks dangerous for state machine
 		log.Printf("ServerHello has MsgSeq >= 2, ignoring")
 		return dtlserrors.ErrClientHelloUnsupportedParams
@@ -68,8 +68,8 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHd
 	if !hctx.ReceivedFlight(conn, MessagesFlightServerHello_Finished) {
 		return nil
 	}
-	handshakeHdr.AddToHash(hctx.TranscriptHasher)
-	_, _ = hctx.TranscriptHasher.Write(messageBody)
+	msg.AddToHash(hctx.TranscriptHasher)
+	_, _ = hctx.TranscriptHasher.Write(msg.Body)
 
 	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])

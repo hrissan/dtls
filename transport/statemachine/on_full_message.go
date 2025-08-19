@@ -12,45 +12,45 @@ import (
 )
 
 // change into PartialHandshakeMsg
-func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, handshakeHdr handshake.FragmentHeader, body []byte) error {
-	switch handshakeHdr.MsgType {
+func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg handshake.Message) error {
+	switch msg.MsgType {
 	case handshake.HandshakeTypeServerHello:
 		if conn.RoleServer {
 			return dtlserrors.ErrServerHelloReceivedByServer
 		}
-		var msg handshake.MsgServerHello
-		if err := msg.Parse(body); err != nil {
+		var msgServerHello handshake.MsgServerHello
+		if err := msgServerHello.Parse(msg.Body); err != nil {
 			return dtlserrors.WarnPlaintextServerHelloParsing
 		}
-		return hctx.onServerHello(conn, handshakeHdr, body, msg)
+		return hctx.onServerHello(conn, msg, msgServerHello)
 	case handshake.HandshakeTypeEncryptedExtensions:
 		if conn.RoleServer {
 			return dtlserrors.ErrEncryptedExtensionsReceivedByServer
 		}
-		var msg handshake.ExtensionsSet
-		if err := msg.ParseOutside(body, false, true, false); err != nil {
+		var msgExtensions handshake.ExtensionsSet
+		if err := msgExtensions.ParseOutside(msg.Body, false, true, false); err != nil {
 			return dtlserrors.ErrExtensionsMessageParsing
 		}
-		log.Printf("encrypted extensions parsed: %+v", msg)
-		handshakeHdr.AddToHash(hctx.TranscriptHasher)
-		_, _ = hctx.TranscriptHasher.Write(body)
+		log.Printf("encrypted extensions parsed: %+v", msgExtensions)
+		msg.AddToHash(hctx.TranscriptHasher)
+		_, _ = hctx.TranscriptHasher.Write(msg.Body)
 		return nil
 	case handshake.HandshakeTypeCertificate:
-		var msg handshake.MsgCertificate
-		if err := msg.Parse(body); err != nil {
+		var msgCertificate handshake.MsgCertificate
+		if err := msgCertificate.Parse(msg.Body); err != nil {
 			return dtlserrors.ErrCertificateMessageParsing
 		}
 		// We do not want checks here, because receiving goroutine should not be blocked for long
 		// We have to first receive everything up to finished, send acks,
 		// then offload ECC to separate core and trigger state machine depending on result
-		log.Printf("certificate parsed: %+v", msg)
-		hctx.certificateChain = msg
-		handshakeHdr.AddToHash(hctx.TranscriptHasher)
-		_, _ = hctx.TranscriptHasher.Write(body)
+		log.Printf("certificate parsed: %+v", msgCertificate)
+		hctx.certificateChain = msgCertificate
+		msg.AddToHash(hctx.TranscriptHasher)
+		_, _ = hctx.TranscriptHasher.Write(msg.Body)
 		return nil
 	case handshake.HandshakeTypeCertificateVerify:
-		var msg handshake.MsgCertificateVerify
-		if err := msg.Parse(body); err != nil {
+		var msgCertificateVerify handshake.MsgCertificateVerify
+		if err := msgCertificateVerify.Parse(msg.Body); err != nil {
 			return dtlserrors.ErrCertificateVerifyMessageParsing
 		}
 		// TODO - We do not want checks here, because receiving goroutine should not be blocked for long
@@ -60,7 +60,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 		if hctx.certificateChain.CertificatesLength == 0 {
 			return dtlserrors.ErrCertificateChainEmpty
 		}
-		if msg.SignatureScheme != handshake.SignatureAlgorithm_RSA_PSS_RSAE_SHA256 {
+		if msgCertificateVerify.SignatureScheme != handshake.SignatureAlgorithm_RSA_PSS_RSAE_SHA256 {
 			// TODO - more algorithms
 			return dtlserrors.ErrCertificateAlgorithmUnsupported
 		}
@@ -76,16 +76,16 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 		if err != nil {
 			return dtlserrors.ErrCertificateLoadError
 		}
-		if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash, msg.Signature); err != nil {
+		if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash, msgCertificateVerify.Signature); err != nil {
 			return dtlserrors.ErrCertificateSignatureInvalid
 		}
-		log.Printf("certificate verify ok: %+v", msg)
-		handshakeHdr.AddToHash(hctx.TranscriptHasher)
-		_, _ = hctx.TranscriptHasher.Write(body)
+		log.Printf("certificate verify ok: %+v", msgCertificateVerify)
+		msg.AddToHash(hctx.TranscriptHasher)
+		_, _ = hctx.TranscriptHasher.Write(msg.Body)
 		return nil
 	case handshake.HandshakeTypeFinished:
-		var msg handshake.MsgFinished
-		if err := msg.Parse(body); err != nil {
+		var msgFinished handshake.MsgFinished
+		if err := msgFinished.Parse(msg.Body); err != nil {
 			return dtlserrors.ErrFinishedMessageParsing
 		}
 		// [rfc8446:4.4.4] - finished
@@ -93,10 +93,10 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 		finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
 		mustBeFinished := conn.Keys.Receive.ComputeFinished(sha256.New(), hctx.HandshakeTrafficSecretReceive[:], finishedTranscriptHash)
-		if string(msg.VerifyData[:msg.VerifyDataLength]) != string(mustBeFinished) {
+		if string(msgFinished.VerifyData[:msgFinished.VerifyDataLength]) != string(mustBeFinished) {
 			return dtlserrors.ErrFinishedMessageVerificationFailed
 		}
-		log.Printf("finished message verify ok: %+v", msg)
+		log.Printf("finished message verify ok: %+v", msgFinished)
 		if conn.RoleServer {
 			if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Symmetric.Epoch == 2 {
 				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
@@ -114,8 +114,8 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 			return nil
 		}
 		// server finished is not part of traffic secret transcript
-		handshakeHdr.AddToHash(hctx.TranscriptHasher)
-		_, _ = hctx.TranscriptHasher.Write(body)
+		msg.AddToHash(hctx.TranscriptHasher)
+		_, _ = hctx.TranscriptHasher.Write(msg.Body)
 
 		var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 		handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
@@ -131,7 +131,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 		panic("handled in ConnectionImpl.ProcessHandshake")
 	default:
 		// TODO - process all messages in standard, generate error for the rest
-		log.Printf("TODO - encrypted message type %d not supported", handshakeHdr.MsgType)
+		log.Printf("TODO - encrypted message type %d not supported", msg.MsgType)
 	}
 	return nil
 }

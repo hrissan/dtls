@@ -52,10 +52,10 @@ func (sq *SendQueue) PushMessage(msg handshake.Fragment) {
 		panic("too many messages are generated at once")
 	}
 	sq.messages.PushBack(sq.messagesStorage[:], PartialHandshakeMsg{
-		Msg: HandshakeMsg{
-			HandshakeType: msg.Header.MsgType,
-			MessageSeq:    msg.Header.MsgSeq,
-			Body:          msg.Body,
+		Msg: handshake.Message{
+			MsgType: msg.Header.MsgType,
+			MsgSeq:  msg.Header.MsgSeq,
+			Body:    msg.Body,
 		},
 		SendOffset: 0,
 		SendEnd:    msg.Header.Length,
@@ -85,7 +85,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 			sq.fragmentOffset = outgoing.SendOffset
 		}
 		var sendNextSegmentSequenceEpoch0 *uint16
-		if outgoing.Msg.HandshakeType == handshake.HandshakeTypeClientHello || outgoing.Msg.HandshakeType == handshake.HandshakeTypeServerHello {
+		if outgoing.Msg.MsgType == handshake.HandshakeTypeClientHello || outgoing.Msg.MsgType == handshake.HandshakeTypeServerHello {
 			if conn.Handshake != nil {
 				sendNextSegmentSequenceEpoch0 = &conn.Handshake.SendNextSegmentSequenceEpoch0
 			} else {

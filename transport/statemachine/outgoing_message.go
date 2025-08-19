@@ -2,14 +2,8 @@ package statemachine
 
 import "github.com/hrissan/tinydtls/handshake"
 
-type HandshakeMsg struct {
-	HandshakeType handshake.MsgType
-	MessageSeq    uint16
-	Body          []byte // TODO - reuse in rope
-}
-
 type PartialHandshakeMsg struct {
-	Msg HandshakeMsg
+	Msg handshake.Message
 	// We support acks from both sides for now, so only single hole. TODO - support more holes
 	// Once SendOffset == SendEnd, message is fully sent
 	SendOffset uint32

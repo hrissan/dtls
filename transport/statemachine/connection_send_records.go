@@ -12,24 +12,24 @@ import (
 	"github.com/hrissan/tinydtls/keys"
 )
 
-func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg HandshakeMsg, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn format.RecordNumber, err error) {
+func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn format.RecordNumber, err error) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
 	if fragmentOffset >= uint32(len(handshakeMsg.Body)) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
 		panic("invariant of send queue fragment offset violated")
 	}
 	msg := handshake.Fragment{
 		Header: handshake.FragmentHeader{
-			MsgType: handshakeMsg.HandshakeType,
+			MsgType: handshakeMsg.MsgType,
 			Length:  uint32(len(handshakeMsg.Body)),
 			FragmentInfo: handshake.FragmentInfo{
-				MsgSeq:         handshakeMsg.MessageSeq,
+				MsgSeq:         handshakeMsg.MsgSeq,
 				FragmentOffset: fragmentOffset,
 				FragmentLength: 0,
 			},
 		},
 		Body: handshakeMsg.Body,
 	}
-	if handshakeMsg.HandshakeType == handshake.HandshakeTypeClientHello || handshakeMsg.HandshakeType == handshake.HandshakeTypeServerHello {
+	if handshakeMsg.MsgType == handshake.HandshakeTypeClientHello || handshakeMsg.MsgType == handshake.HandshakeTypeServerHello {
 		if sendNextSegmentSequenceEpoch0 == nil {
 			panic("the same check for plaintext record should be above")
 		}

@@ -21,6 +21,11 @@ type FragmentHeader struct {
 	FragmentInfo
 }
 
+type Fragment struct {
+	Header FragmentHeader
+	Body   []byte // TODO - reuse in rope
+}
+
 func (hdr *FragmentHeader) IsFragmented() bool {
 	return hdr.FragmentOffset != 0 || hdr.FragmentLength != hdr.Length
 }

@@ -102,11 +102,11 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 		conn.NextMessageSeqReceive++
 	}
 	message := hctx.receivedMessages.IndexRef(hctx.receivedMessagesStorage[:], messageOffset)
-	if message.Msg.HandshakeType == 0 { // this fragment, set header, allocate body
+	if message.Msg.MsgType == 0 { // this fragment, set header, allocate body
 		*message = PartialHandshakeMsg{
-			Msg: HandshakeMsg{
-				HandshakeType: handshakeHdr.MsgType,
-				MessageSeq:    handshakeHdr.MsgSeq,
+			Msg: handshake.Message{
+				MsgType: handshakeHdr.MsgType,
+				MsgSeq:  handshakeHdr.MsgSeq,
 			},
 			SendOffset: 0,
 			SendEnd:    handshakeHdr.Length,
@@ -119,7 +119,7 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 		if handshakeHdr.Length != uint32(len(message.Msg.Body)) {
 			return dtlserrors.ErrHandshakeMessageFragmentLengthMismatch
 		}
-		if handshakeHdr.MsgType != message.Msg.HandshakeType {
+		if handshakeHdr.MsgType != message.Msg.MsgType {
 			return dtlserrors.ErrHandshakeMessageFragmentTypeMismatch
 		}
 	}
@@ -145,10 +145,10 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 		}
 		body := first.Msg.Body
 		handshakeHdr := handshake.FragmentHeader{
-			MsgType: first.Msg.HandshakeType,
+			MsgType: first.Msg.MsgType,
 			Length:  uint32(len(body)),
 			FragmentInfo: handshake.FragmentInfo{
-				MsgSeq:         first.Msg.MessageSeq,
+				MsgSeq:         first.Msg.MsgSeq,
 				FragmentOffset: 0,
 				FragmentLength: uint32(len(body)),
 			},

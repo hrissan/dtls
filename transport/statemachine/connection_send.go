@@ -70,10 +70,10 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 		msgKeyUpdate := handshake.MsgKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
 		msgBody = msgKeyUpdate.Write(msgBody)
 		lenBody := uint32(len(msgBody))
-		msg := HandshakeMsg{
-			HandshakeType: handshake.HandshakeTypeKeyUpdate,
-			MessageSeq:    conn.sendKeyUpdateMessageSeq,
-			Body:          msgBody,
+		msg := handshake.Message{
+			MsgType: handshake.HandshakeTypeKeyUpdate,
+			MsgSeq:  conn.sendKeyUpdateMessageSeq,
+			Body:    msgBody,
 		}
 		recordSize, fragmentInfo, rn, err := conn.constructRecord(datagram[datagramSize:],
 			msg, 0, lenBody, nil)

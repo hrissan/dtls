@@ -11,6 +11,7 @@ import (
 	"github.com/hrissan/tinydtls/signature"
 )
 
+// change into PartialHandshakeMessage
 func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte) error {
 	switch handshakeHdr.HandshakeType {
 	case format.HandshakeTypeServerHello:

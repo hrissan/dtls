@@ -46,7 +46,7 @@ func (sq *SendQueue) Clear() {
 }
 
 func (sq *SendQueue) PushMessage(msg format.MessageHandshake) {
-	if sq.messages.Len() == constants.MaxSendMessagesQueue {
+	if sq.messages.Len() == sq.messages.Cap(sq.messagesStorage[:]) {
 		// must be never, because no flight contains so many messages
 		panic("too many messages are generated at once")
 	}
@@ -62,7 +62,7 @@ func (sq *SendQueue) PushMessage(msg format.MessageHandshake) {
 }
 
 func (sq *SendQueue) HasDataToSend() bool {
-	return sq.messageOffset < sq.messages.Len() && sq.sentRecords.Len() < constants.MaxSendRecordsQueue
+	return sq.messageOffset < sq.messages.Len() && sq.sentRecords.Len() < sq.sentRecords.Cap(sq.sentRecordsStorage[:])
 }
 
 func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (int, error) {
@@ -76,7 +76,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 		if sq.messageOffset == sq.messages.Len() {
 			break
 		}
-		if sq.sentRecords.Len() >= constants.MaxSendRecordsQueue {
+		if sq.sentRecords.Len() >= sq.sentRecords.Cap(sq.sentRecordsStorage[:]) {
 			break
 		}
 		outgoing := sq.messages.IndexRef(sq.messagesStorage[:], sq.messageOffset)

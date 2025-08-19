@@ -16,6 +16,12 @@ func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr format.MessageHandsh
 	if conn.Handshake == nil {
 		return nil // retransmission, while connection already established
 	}
+	if handshakeHdr.MessageSeq < conn.FirstMessageSeqInReceiveQueue() {
+		// all messages before were processed by us in the state we already do not remember,
+		// so we must acknowledge unconditionally and do nothing.
+		conn.Keys.AddAck(rn)
+		return nil
+	}
 	return conn.Handshake.ReceivedMessage(conn, handshakeHdr, messageBody, rn)
 }
 

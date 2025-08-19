@@ -52,7 +52,6 @@ var WarnPlaintextServerHelloParsing = NewWarning(-411, "plaintext ServerHello me
 var WarnUnknownRecordType = NewWarning(-413, "record header does not match plaintext or ciphertext format")
 
 var ErrUpdatingKeysWouldOverflowEpoch = NewFatal(-500, "updating keys would overflow epoch")
-var ErrPostHandshakeMessageDuringHandshake = NewWarning(-501, "post-handshake message during handshake")
 var ErrEncryptedHandshakeMessageHeaderParsing = NewWarning(-502, "encrypted handshake message header failed to parse")
 var ErrServerHelloMustNotBeEncrypted = NewWarning(-503, "ServerHello must not be encrypted")
 var ErrClientHelloMustNotBeEncrypted = NewWarning(-504, "ClientHello must not be encrypted")
@@ -87,6 +86,11 @@ var ErrHandshakeReecordEmpty = NewWarning(-603, "handshake record must not be em
 
 // handshake protocol
 var WarnHandshakeMessageMustBeEncrypted = NewWarning(-700, "plaintext handshake messages other than ClientHello, ServerHello must be encrypted")
+
+var ErrPostHandshakeMessageDuringHandshake = NewWarning(-701, "post-handshake message during handshake")
+var ErrHandshakeMessagePostHandshake = NewWarning(-702, "handshake message received post handshake")
+var ErrHandshakeMessageTypeUnknown = NewWarning(-703, "handshake message type unknown")
+
 var ErrEncryptedExtensionsReceivedByServer = NewWarning(-701, "EncryptedExtensions handshake message rsceived by server")
 var ErrClientHelloReceivedByClient = NewWarning(-702, "ClientHello handshake message rsceived by client")
 var ErrServerHelloReceivedByServer = NewWarning(-703, "ServerHello handshake message rsceived by server")

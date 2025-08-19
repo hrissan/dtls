@@ -1,4 +1,4 @@
-package handshake
+package statemachine
 
 import (
 	"crypto/sha256"

@@ -38,8 +38,8 @@ Keys:             %d (part of Connection, contain pair of Directional Keys + Sym
 Directional Keys: %d (Contain Symmetric Keys + Secrets for key update) 
 Symmetric Keys:   %d (For TLS_AES_128_GCM_SHA256)
 `,
-		unsafe.Sizeof(handshake.HandshakeConnection{}),
-		unsafe.Sizeof(handshake.ConnectionImpl{}),
+		unsafe.Sizeof(statemachine.HandshakeConnection{}),
+		unsafe.Sizeof(statemachine.ConnectionImpl{}),
 		unsafe.Sizeof(keys.Keys{}),
 		unsafe.Sizeof(keys.DirectionKeys{}),
 		unsafe.Sizeof(keys.SymmetricKeys{}))

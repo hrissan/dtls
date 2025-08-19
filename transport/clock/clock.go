@@ -14,10 +14,10 @@ type Clock struct {
 	cond     chan struct{}
 	shutdown bool
 
-	timers *intrusive.IntrusiveHeap[handshake.ConnectionImpl]
+	timers *intrusive.IntrusiveHeap[statemachine.ConnectionImpl]
 }
 
-func heapPred(a, b *handshake.ConnectionImpl) bool {
+func heapPred(a, b *statemachine.ConnectionImpl) bool {
 	return a.FireTimeUnixNano < b.FireTimeUnixNano
 }
 
@@ -56,7 +56,7 @@ func (cl *Clock) GoRun() {
 	for {
 		cl.mu.Lock()
 		var fireDur time.Duration
-		var conn *handshake.ConnectionImpl
+		var conn *statemachine.ConnectionImpl
 		if cl.timers.Len() != 0 {
 			conn = cl.timers.Front()
 			fireDur = time.Duration(conn.FireTimeUnixNano - time.Now().UnixNano())
@@ -91,14 +91,14 @@ func (cl *Clock) GoRun() {
 	}
 }
 
-func (cl *Clock) StopTimer(conn *handshake.ConnectionImpl) {
+func (cl *Clock) StopTimer(conn *statemachine.ConnectionImpl) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	cl.timers.Erase(conn, &conn.TimerHeapIndex)
 	conn.FireTimeUnixNano = 0
 }
 
-func (cl *Clock) SetTimer(conn *handshake.ConnectionImpl, deadline time.Time) {
+func (cl *Clock) SetTimer(conn *statemachine.ConnectionImpl, deadline time.Time) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	cl.timers.Erase(conn, &conn.TimerHeapIndex)

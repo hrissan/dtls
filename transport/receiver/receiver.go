@@ -32,10 +32,10 @@ type Receiver struct {
 
 	handMu sync.Mutex
 	// only ClientHello with correct cookie and larger timestamp replaces previous handshake here [rfc9147:5.11]
-	connections map[netip.AddrPort]*handshake.ConnectionImpl
+	connections map[netip.AddrPort]*statemachine.ConnectionImpl
 
 	// TODO - limit on max number of parallel handshakes, clear items by LRU
-	// handshakesPool circular.Buffer[*handshake.HandshakeConnection] - TODO
+	// handshakesPool circular.Buffer[*statemachine.HandshakeConnection] - TODO
 
 	// we move handshake here, once it is finished
 	//connections map[netip.AddrPort]*Connection
@@ -46,7 +46,7 @@ func NewReceiver(opts *options.TransportOptions, snd *sender.Sender) *Receiver {
 	rc := &Receiver{
 		opts:        opts,
 		snd:         snd,
-		connections: map[netip.AddrPort]*handshake.ConnectionImpl{},
+		connections: map[netip.AddrPort]*statemachine.ConnectionImpl{},
 	}
 	rc.cookieState.SetRand(opts.Rnd)
 	return rc
@@ -92,7 +92,7 @@ func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
 	}
 }
 
-func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
+func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
 	// look up always for simplicity
 	rc.handMu.Lock()
 	conn := rc.connections[addr]
@@ -188,7 +188,7 @@ func (rc *Receiver) StartConnection(peerAddr netip.AddrPort) error {
 
 var ErrConnectionInProgress = errors.New("connection is in progress")
 
-func (rc *Receiver) startConnection(addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
+func (rc *Receiver) startConnection(addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
 	rc.handMu.Lock()
 	defer rc.handMu.Unlock()
 	conn := rc.connections[addr]
@@ -197,8 +197,8 @@ func (rc *Receiver) startConnection(addr netip.AddrPort) (*handshake.ConnectionI
 	} // TODO - if this is long going handshake, clear and start again?
 
 	// TODO - get from pool
-	hctx := handshake.NewHandshakeConnection(sha256.New())
-	conn = &handshake.ConnectionImpl{
+	hctx := statemachine.NewHandshakeConnection(sha256.New())
+	conn = &statemachine.ConnectionImpl{
 		Addr:       addr,
 		RoleServer: false,
 		Handshake:  hctx,

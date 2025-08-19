@@ -1,4 +1,4 @@
-package handshake
+package statemachine
 
 import "github.com/hrissan/tinydtls/format"
 

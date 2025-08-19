@@ -35,7 +35,7 @@ type Sender struct {
 	helloRetryQueue circular.Buffer[OutgoingHRR]
 	helloRetryPool  []*[constants.MaxOutgoingHRRDatagramLength]byte // stack, not circular buffer
 
-	wantToWriteQueue circular.Buffer[*handshake.ConnectionImpl]
+	wantToWriteQueue circular.Buffer[*statemachine.ConnectionImpl]
 }
 
 func NewSender(opts *options.TransportOptions) *Sender {
@@ -151,7 +151,7 @@ func (snd *Sender) SendHelloRetryDatagram(data *[constants.MaxOutgoingHRRDatagra
 	snd.cond.Signal()
 }
 
-func (snd *Sender) RegisterConnectionForSend(hctx *handshake.ConnectionImpl) {
+func (snd *Sender) RegisterConnectionForSend(hctx *statemachine.ConnectionImpl) {
 	snd.mu.Lock()
 	defer snd.mu.Unlock()
 	if hctx.InSenderQueue {

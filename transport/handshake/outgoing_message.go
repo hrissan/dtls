@@ -1,4 +1,4 @@
-package handshake
+package statemachine
 
 type HandshakeMsg struct {
 	HandshakeType byte

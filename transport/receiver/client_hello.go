@@ -13,7 +13,7 @@ import (
 	"github.com/hrissan/tinydtls/transport/handshake"
 )
 
-func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []byte, handshakeHdr format.HandshakeMsgFragmentHeader, msg format.MsgClientHello, addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
+func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, messageBody []byte, handshakeHdr format.HandshakeMsgFragmentHeader, msg format.MsgClientHello, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
 	if !rc.opts.RoleServer {
 		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
 		return conn, dtlserrors.ErrClientHelloReceivedByClient
@@ -47,7 +47,7 @@ func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []
 		if hrrStorage == nil {
 			return conn, dtlserrors.ErrServerHelloRetryRequestQueueFull
 		}
-		hrrDatagram := handshake.GenerateStatelessHRR((*hrrStorage)[:0], ck, keyShareSet)
+		hrrDatagram := statemachine.GenerateStatelessHRR((*hrrStorage)[:0], ck, keyShareSet)
 		if len(hrrDatagram) > len(*hrrStorage) {
 			panic("Large HRR datagram must not be generated")
 		}
@@ -75,7 +75,7 @@ func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []
 	}
 
 	if conn == nil {
-		conn = &handshake.ConnectionImpl{
+		conn = &statemachine.ConnectionImpl{
 			Addr:       addr,
 			RoleServer: true,
 			Handshake:  nil, // will be set below

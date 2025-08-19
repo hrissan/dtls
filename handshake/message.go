@@ -12,7 +12,7 @@ type Message struct {
 }
 
 // MsgSeq is not part of original TLSv3.0, so not included in transcript
-func (msg *Message) AddToHash2(transcriptHasher hash.Hash) {
+func (msg *Message) AddToHash(transcriptHasher hash.Hash) {
 	if len(msg.Body) > 0xFFFFFF {
 		panic("message body too large")
 	}

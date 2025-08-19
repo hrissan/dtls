@@ -2,7 +2,6 @@ package handshake
 
 import (
 	"encoding/binary"
-	"hash"
 
 	"github.com/hrissan/tinydtls/format"
 )
@@ -28,14 +27,6 @@ type Fragment struct {
 
 func (hdr *FragmentHeader) IsFragmented() bool {
 	return hdr.FragmentOffset != 0 || hdr.FragmentLength != hdr.Length
-}
-
-// only first 2 fields are part of transcript hash
-func (hdr *FragmentHeader) AddToHash(transcriptHasher hash.Hash) {
-	var result [4]byte
-	binary.BigEndian.PutUint32(result[:], (uint32(hdr.MsgType)<<24)+hdr.Length)
-	_, _ = transcriptHasher.Write(result[:])
-	return
 }
 
 func (hdr *FragmentHeader) Parse(record []byte) error {

@@ -32,7 +32,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg h
 			return dtlserrors.ErrExtensionsMessageParsing
 		}
 		log.Printf("encrypted extensions parsed: %+v", msgExtensions)
-		msg.AddToHash2(hctx.TranscriptHasher)
+		msg.AddToHash(hctx.TranscriptHasher)
 		return nil
 	case handshake.MsgTypeCertificate:
 		var msgCertificate handshake.MsgCertificate
@@ -44,7 +44,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg h
 		// then offload ECC to separate core and trigger state machine depending on result
 		log.Printf("certificate parsed: %+v", msgCertificate)
 		hctx.certificateChain = msgCertificate
-		msg.AddToHash2(hctx.TranscriptHasher)
+		msg.AddToHash(hctx.TranscriptHasher)
 		return nil
 	case handshake.MsgTypeCertificateVerify:
 		var msgCertificateVerify handshake.MsgCertificateVerify
@@ -78,7 +78,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg h
 			return dtlserrors.ErrCertificateSignatureInvalid
 		}
 		log.Printf("certificate verify ok: %+v", msgCertificateVerify)
-		msg.AddToHash2(hctx.TranscriptHasher)
+		msg.AddToHash(hctx.TranscriptHasher)
 		return nil
 	case handshake.MsgTypeFinished:
 		var msgFinished handshake.MsgFinished
@@ -111,7 +111,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg h
 			return nil
 		}
 		// server finished is not part of traffic secret transcript
-		msg.AddToHash2(hctx.TranscriptHasher)
+		msg.AddToHash(hctx.TranscriptHasher)
 
 		var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 		handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])

@@ -48,7 +48,7 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, msg handsha
 		_, _ = hctx.TranscriptHasher.Write(syntheticHashData)
 		_, _ = hctx.TranscriptHasher.Write(initialHelloTranscriptHash)
 
-		msg.AddToHash2(hctx.TranscriptHasher)
+		msg.AddToHash(hctx.TranscriptHasher)
 
 		clientHelloMsg := hctx.GenerateClientHello(true, serverHello.Extensions.Cookie)
 		hctx.PushMessage(conn, clientHelloMsg)
@@ -67,7 +67,7 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, msg handsha
 	if !hctx.ReceivedFlight(conn, MessagesFlightServerHello_Finished) {
 		return nil
 	}
-	msg.AddToHash2(hctx.TranscriptHasher)
+	msg.AddToHash(hctx.TranscriptHasher)
 
 	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
 	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])

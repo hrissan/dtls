@@ -167,5 +167,5 @@ func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg handshake
 
 	hctx.SendQueue.PushMessage(msg)
 
-	msg.AddToHash2(hctx.TranscriptHasher)
+	msg.AddToHash(hctx.TranscriptHasher)
 }

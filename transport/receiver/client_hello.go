@@ -33,8 +33,12 @@ func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, fragment ha
 			return conn, dtlserrors.ErrClientHelloUnsupportedParams
 		}
 		transcriptHasher := sha256.New()
-		fragment.Header.AddToHash(transcriptHasher)
-		_, _ = transcriptHasher.Write(fragment.Body)
+		msg := handshake.Message{
+			MsgType: fragment.Header.MsgType,
+			MsgSeq:  fragment.Header.MsgSeq,
+			Body:    fragment.Body,
+		}
+		msg.AddToHash(transcriptHasher)
 
 		var initialHelloTranscriptHash [constants.MaxHashLength]byte
 		transcriptHasher.Sum(initialHelloTranscriptHash[:0])

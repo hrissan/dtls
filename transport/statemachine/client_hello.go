@@ -53,8 +53,12 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 		addMessageDataTranscript(hctx.TranscriptHasher, hrrDatagram[13:]) // skip record header
 		debugPrintSum(hctx.TranscriptHasher)
 		// then add second client hello
-		fragment.Header.AddToHash(hctx.TranscriptHasher)
-		_, _ = hctx.TranscriptHasher.Write(fragment.Body)
+		msg := handshake.Message{
+			MsgType: fragment.Header.MsgType,
+			MsgSeq:  fragment.Header.MsgSeq,
+			Body:    fragment.Body,
+		}
+		msg.AddToHash(hctx.TranscriptHasher)
 		debugPrintSum(hctx.TranscriptHasher)
 	}
 	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", keyShareSet, initialHelloTranscriptHash)

@@ -76,7 +76,7 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	return true
 }
 
-func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, body []byte, rn format.RecordNumber) error {
+func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr format.MessageFragmentHeader, body []byte, rn format.RecordNumber) error {
 	if handshakeHdr.HandshakeType == 0 { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}
@@ -103,7 +103,7 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 	message := hctx.receivedMessages.IndexRef(hctx.receivedMessagesStorage[:], messageOffset)
 	if message.Header.HandshakeType == 0 { // this fragment, set header, allocate body
 		*message = PartialHandshakeMessage{
-			Header: MessageHeaderMinimal{
+			Header: MessageHandshake{
 				HandshakeType: handshakeHdr.HandshakeType,
 				MessageSeq:    handshakeHdr.MessageSeq,
 			},
@@ -143,7 +143,7 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 			return nil
 		}
 		body := first.Body
-		handshakeHdr := format.MessageHandshakeHeader{
+		handshakeHdr := format.MessageFragmentHeader{
 			HandshakeType: first.Header.HandshakeType,
 			Length:        uint32(len(body)),
 			FragmentInfo: format.FragmentInfo{
@@ -163,7 +163,7 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 }
 
 // also acks (removes) all previous flights
-func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg format.MessageHandshake) {
+func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg format.MessageHandshakeFragment) {
 	if conn.NextMessageSeqSend >= math.MaxUint16 {
 		// TODO - prevent wrapping next message seq
 		// close connection here

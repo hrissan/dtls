@@ -10,7 +10,7 @@ import (
 	"github.com/hrissan/tinydtls/format"
 )
 
-func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr format.MessageHandshakeHeader, messageBody []byte, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr format.MessageFragmentHeader, messageBody []byte, rn format.RecordNumber) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if conn.Handshake == nil {
@@ -25,7 +25,7 @@ func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr format.MessageHandsh
 	return conn.Handshake.ReceivedMessage(conn, handshakeHdr, messageBody, rn)
 }
 
-func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr format.MessageHandshakeHeader, messageBody []byte, serverHello format.ServerHello) error {
+func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr format.MessageFragmentHeader, messageBody []byte, serverHello format.ServerHello) error {
 	if serverHello.Extensions.SupportedVersions.SelectedVersion != format.DTLS_VERSION_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
@@ -89,7 +89,7 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHd
 	return nil
 }
 
-func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.Cookie) format.MessageHandshake {
+func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.Cookie) format.MessageHandshakeFragment {
 	// [rfc8446:4.1.2] the client MUST send the same ClientHello without modification, except as follows
 	clientHello := format.ClientHello{
 		Random: hctx.LocalRandom,
@@ -136,8 +136,8 @@ func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.C
 	}
 
 	messageBody := clientHello.Write(nil) // TODO - reuse message bodies in a rope
-	return format.MessageHandshake{
-		Header: format.MessageHandshakeHeader{
+	return format.MessageHandshakeFragment{
+		Header: format.MessageFragmentHeader{
 			HandshakeType: format.HandshakeTypeClientHello,
 			Length:        uint32(len(messageBody)),
 		},

@@ -45,13 +45,13 @@ func (sq *SendQueue) Clear() {
 	sq.sentRecords.Clear(sq.sentRecordsStorage[:])
 }
 
-func (sq *SendQueue) PushMessage(msg format.MessageHandshake) {
+func (sq *SendQueue) PushMessage(msg format.MessageHandshakeFragment) {
 	if sq.messages.Len() == sq.messages.Cap(sq.messagesStorage[:]) {
 		// must be never, because no flight contains so many messages
 		panic("too many messages are generated at once")
 	}
 	sq.messages.PushBack(sq.messagesStorage[:], PartialHandshakeMessage{
-		Header: MessageHeaderMinimal{
+		Header: MessageHandshake{
 			HandshakeType: msg.Header.HandshakeType,
 			MessageSeq:    msg.Header.MessageSeq,
 		},

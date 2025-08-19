@@ -69,25 +69,25 @@ type FragmentInfo struct {
 	FragmentLength uint32 // stored as 24-bit
 }
 
-type MessageHandshakeHeader struct {
+type MessageFragmentHeader struct {
 	HandshakeType byte
 	Length        uint32 // stored as 24-bit
 	FragmentInfo
 }
 
-func (hdr *MessageHandshakeHeader) IsFragmented() bool {
+func (hdr *MessageFragmentHeader) IsFragmented() bool {
 	return hdr.FragmentOffset != 0 || hdr.FragmentLength != hdr.Length
 }
 
 // only first 2 fields are part of transcript hash
-func (hdr *MessageHandshakeHeader) AddToHash(transcriptHasher hash.Hash) {
+func (hdr *MessageFragmentHeader) AddToHash(transcriptHasher hash.Hash) {
 	var result [4]byte
 	binary.BigEndian.PutUint32(result[:], (uint32(hdr.HandshakeType)<<24)+hdr.Length)
 	_, _ = transcriptHasher.Write(result[:])
 	return
 }
 
-func (hdr *MessageHandshakeHeader) Parse(record []byte) error {
+func (hdr *MessageFragmentHeader) Parse(record []byte) error {
 	if len(record) < MessageHandshakeHeaderSize {
 		return ErrMessageHandshakeTooShort
 	}
@@ -99,7 +99,7 @@ func (hdr *MessageHandshakeHeader) Parse(record []byte) error {
 	return nil
 }
 
-func (hdr *MessageHandshakeHeader) ParseWithBody(record []byte) (n int, body []byte, err error) {
+func (hdr *MessageFragmentHeader) ParseWithBody(record []byte) (n int, body []byte, err error) {
 	if err := hdr.Parse(record); err != nil {
 		return 0, nil, err
 	}
@@ -110,7 +110,7 @@ func (hdr *MessageHandshakeHeader) ParseWithBody(record []byte) (n int, body []b
 	return endOffset, record[MessageHandshakeHeaderSize:endOffset], nil
 }
 
-func (hdr *MessageHandshakeHeader) Write(datagram []byte) []byte {
+func (hdr *MessageFragmentHeader) Write(datagram []byte) []byte {
 	datagram = append(datagram, hdr.HandshakeType)
 	datagram = AppendUint24(datagram, hdr.Length)
 	datagram = binary.BigEndian.AppendUint16(datagram, hdr.MessageSeq)

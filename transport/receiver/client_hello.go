@@ -13,7 +13,7 @@ import (
 	"github.com/hrissan/tinydtls/transport/handshake"
 )
 
-func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []byte, handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello, addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
+func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []byte, handshakeHdr format.MessageFragmentHeader, msg format.ClientHello, addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
 	if !rc.opts.RoleServer {
 		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
 		return conn, dtlserrors.ErrClientHelloReceivedByClient

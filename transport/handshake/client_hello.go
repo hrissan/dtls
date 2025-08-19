@@ -16,7 +16,7 @@ import (
 )
 
 func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions, messageBody []byte,
-	handshakeHdr format.MessageHandshakeHeader, msg format.ClientHello,
+	handshakeHdr format.MessageFragmentHeader, msg format.ClientHello,
 	initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error {
 
 	conn.mu.Lock()
@@ -71,8 +71,8 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 	copy(serverHello.Extensions.KeyShare.X25519PublicKey[:], hctx.X25519Secret.PublicKey().Bytes())
 	// TODO - get body from the rope
 	serverHelloBody := serverHello.Write(nil)
-	serverHelloMessage := format.MessageHandshake{
-		Header: format.MessageHandshakeHeader{
+	serverHelloMessage := format.MessageHandshakeFragment{
+		Header: format.MessageFragmentHeader{
 			HandshakeType: format.HandshakeTypeServerHello,
 			Length:        uint32(len(serverHelloBody)),
 		},
@@ -145,7 +145,7 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 		ContentType:    format.PlaintextContentTypeHandshake,
 		SequenceNumber: 0,
 	}
-	msgHeader := format.MessageHandshakeHeader{
+	msgHeader := format.MessageFragmentHeader{
 		HandshakeType: format.HandshakeTypeServerHello,
 		Length:        0,
 		FragmentInfo: format.FragmentInfo{
@@ -169,7 +169,7 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 	return datagram
 }
 
-func generateEncryptedExtensions() format.MessageHandshake {
+func generateEncryptedExtensions() format.MessageHandshakeFragment {
 	ee := format.ExtensionsSet{
 		SupportedGroupsSet: true,
 	}
@@ -179,8 +179,8 @@ func generateEncryptedExtensions() format.MessageHandshake {
 	ee.SupportedGroups.X25519 = true
 
 	messageBody := ee.Write(nil, false, false, false) // TODO - reuse message bodies in a rope
-	return format.MessageHandshake{
-		Header: format.MessageHandshakeHeader{
+	return format.MessageHandshakeFragment{
+		Header: format.MessageFragmentHeader{
 			HandshakeType: format.HandshakeTypeEncryptedExtensions,
 			Length:        uint32(len(messageBody)),
 		},
@@ -188,7 +188,7 @@ func generateEncryptedExtensions() format.MessageHandshake {
 	}
 }
 
-func generateServerCertificate(opts *options.TransportOptions) format.MessageHandshake {
+func generateServerCertificate(opts *options.TransportOptions) format.MessageHandshakeFragment {
 	msg := format.MessageCertificate{
 		CertificatesLength: len(opts.ServerCertificate.Certificate),
 	}
@@ -196,8 +196,8 @@ func generateServerCertificate(opts *options.TransportOptions) format.MessageHan
 		msg.Certificates[i].CertData = certData // those slices are not retained beyond this func
 	}
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
-	return format.MessageHandshake{
-		Header: format.MessageHandshakeHeader{
+	return format.MessageHandshakeFragment{
+		Header: format.MessageFragmentHeader{
 			HandshakeType: format.HandshakeTypeCertificate,
 			Length:        uint32(len(messageBody)),
 		},
@@ -205,7 +205,7 @@ func generateServerCertificate(opts *options.TransportOptions) format.MessageHan
 	}
 }
 
-func generateServerCertificateVerify(opts *options.TransportOptions, hctx *HandshakeConnection) (format.MessageHandshake, error) {
+func generateServerCertificateVerify(opts *options.TransportOptions, hctx *HandshakeConnection) (format.MessageHandshakeFragment, error) {
 	msg := format.MessageCertificateVerify{
 		SignatureScheme: format.SignatureAlgorithm_RSA_PSS_RSAE_SHA256,
 	}
@@ -221,13 +221,13 @@ func generateServerCertificateVerify(opts *options.TransportOptions, hctx *Hands
 	sig, err := signature.CreateSignature_RSA_PSS_RSAE_SHA256(opts.Rnd, privateRsa, sigMessageHash)
 	if err != nil {
 		log.Printf("create signature error: %v", err)
-		return format.MessageHandshake{}, dtlserrors.ErrCertificateVerifyMessageSignature
+		return format.MessageHandshakeFragment{}, dtlserrors.ErrCertificateVerifyMessageSignature
 	}
 	msg.Signature = sig
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
 
-	return format.MessageHandshake{
-		Header: format.MessageHandshakeHeader{
+	return format.MessageHandshakeFragment{
+		Header: format.MessageFragmentHeader{
 			HandshakeType: format.HandshakeTypeCertificateVerify,
 			Length:        uint32(len(messageBody)),
 		},

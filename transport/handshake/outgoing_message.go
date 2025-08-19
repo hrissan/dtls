@@ -1,13 +1,13 @@
 package handshake
 
 // TODO - move body inside, rename to MessageHandshakeFull
-type MessageHeaderMinimal struct {
+type MessageHandshake struct {
 	HandshakeType byte
 	MessageSeq    uint16
 }
 
 type PartialHandshakeMessage struct {
-	Header MessageHeaderMinimal
+	Header MessageHandshake
 	Body   []byte // TODO - reuse in rope
 	// We support acks from both sides for now, so only single hole. TODO - support more holes
 	// Once SendOffset == SendEnd, message is fully sent

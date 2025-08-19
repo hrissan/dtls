@@ -11,13 +11,13 @@ import (
 	"github.com/hrissan/tinydtls/keys"
 )
 
-func (conn *ConnectionImpl) constructRecord(datagram []byte, header MessageHeaderMinimal, body []byte, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo format.FragmentInfo, rn format.RecordNumber, err error) {
+func (conn *ConnectionImpl) constructRecord(datagram []byte, header MessageHandshake, body []byte, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo format.FragmentInfo, rn format.RecordNumber, err error) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
 	if fragmentOffset >= uint32(len(body)) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
 		panic("invariant of send queue fragment offset violated")
 	}
-	msg := format.MessageHandshake{
-		Header: format.MessageHandshakeHeader{
+	msg := format.MessageHandshakeFragment{
+		Header: format.MessageFragmentHeader{
 			HandshakeType: header.HandshakeType,
 			Length:        uint32(len(body)),
 			FragmentInfo: format.FragmentInfo{
@@ -67,7 +67,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, header MessageHeade
 	return len(da), msg.Header.FragmentInfo, rn, nil
 }
 
-func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg format.MessageHandshake, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, format.RecordNumber, error) {
+func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg format.MessageHandshakeFragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, format.RecordNumber, error) {
 	if *sendNextSegmentSequenceEpoch0 >= math.MaxUint16 {
 		// We arbitrarily decided that we do not need more outgoing sequence numbers for epoch 0
 		// We needed code to prevent overflow below anyway
@@ -96,7 +96,7 @@ func (conn *ConnectionImpl) checkSendLimit() error {
 	return conn.startKeyUpdate(false)
 }
 
-func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg format.MessageHandshake) ([]byte, format.RecordNumber, error) {
+func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg format.MessageHandshakeFragment) ([]byte, format.RecordNumber, error) {
 	if err := conn.checkSendLimit(); err != nil {
 		return nil, format.RecordNumber{}, err
 	}

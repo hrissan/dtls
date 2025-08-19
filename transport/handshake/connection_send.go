@@ -70,7 +70,7 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 		msgBody = msg.Write(msgBody)
 		lenBody := uint32(len(msgBody))
 		outgoing := PartialHandshakeMessage{
-			Header: MessageHeaderMinimal{
+			Header: MessageHandshake{
 				HandshakeType: format.HandshakeTypeKeyUpdate,
 				MessageSeq:    conn.sendKeyUpdateMessageSeq,
 			},

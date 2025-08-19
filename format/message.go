@@ -1,7 +1,6 @@
 package format
 
-// TODO - rename into fragment
-type MessageHandshake struct {
-	Header MessageHandshakeHeader
+type MessageHandshakeFragment struct {
+	Header MessageFragmentHeader
 	Body   []byte // TODO - reuse in rope
 }

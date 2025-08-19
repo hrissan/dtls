@@ -6,7 +6,7 @@ import (
 	"github.com/hrissan/tinydtls/format"
 )
 
-type RecordFragmentRelation struct {
+type recordFragmentRelation struct {
 	rn       format.RecordNumber
 	fragment format.FragmentInfo
 }
@@ -21,8 +21,9 @@ type SendQueue struct {
 	// offset inside messages[messageOffset] or 0 if messageOffset == len(messages)
 	fragmentOffset uint32
 
-	// Unfortunately, not in order because we have epoch 0 and need to resend ServerHello, so linear search
-	sentRecords circular.Buffer[RecordFragmentRelation]
+	// Not in order because we have epoch 0 and need to resend ServerHello,
+	// so linear search, but it is fast, see benchmarks
+	sentRecords circular.Buffer[recordFragmentRelation]
 }
 
 func (sq *SendQueue) Reserve() {
@@ -104,7 +105,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 			}
 			// Unfortunately, not in order because we have epoch 0 and need to resend ServerHello, so linear search
 			// limited to constants.MaxSendRecordsQueue due to check above
-			sq.sentRecords.PushBack(RecordFragmentRelation{rn: rn, fragment: fragmentInfo})
+			sq.sentRecords.PushBack(recordFragmentRelation{rn: rn, fragment: fragmentInfo})
 			datagramSize += recordSize
 			sq.fragmentOffset += fragmentInfo.FragmentLength
 		}
@@ -119,22 +120,25 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 	return datagramSize, nil
 }
 
-func (sq *SendQueue) Ack(conn *ConnectionImpl, rn format.RecordNumber) {
-	rec, ok := format.FragmentInfo{}, false
-	// TODO - benchmark. Is it fast?
-	for i := 0; i != sq.sentRecords.Len(); i++ {
-		element := sq.sentRecords.IndexRef(i)
+func findSentRecordIndex(sentRecords *circular.Buffer[recordFragmentRelation], rn format.RecordNumber) *format.FragmentInfo {
+	for i := 0; i != sentRecords.Len(); i++ {
+		element := sentRecords.IndexRef(i)
 		if element.rn == rn {
-			rec, ok = element.fragment, true
-			element.fragment = format.FragmentInfo{} // delete in the middle
-			for sq.sentRecords.Len() != 0 && sq.sentRecords.Front().fragment == (format.FragmentInfo{}) {
-				sq.sentRecords.PopFront() // delete everything from the front
-			}
-			break
+			return &element.fragment
 		}
 	}
-	if !ok {
+	return nil
+}
+
+func (sq *SendQueue) Ack(conn *ConnectionImpl, rn format.RecordNumber) {
+	fragmentPtr := findSentRecordIndex(&sq.sentRecords, rn)
+	if fragmentPtr == nil {
 		return
+	}
+	rec := *fragmentPtr
+	*fragmentPtr = format.FragmentInfo{} // delete in the middle
+	for sq.sentRecords.Len() != 0 && sq.sentRecords.Front().fragment == (format.FragmentInfo{}) {
+		sq.sentRecords.PopFront() // delete everything from the front
 	}
 	if sq.messages.Len() > int(conn.Keys.NextMessageSeqSend) {
 		panic("invariant violation")

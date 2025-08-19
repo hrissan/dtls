@@ -255,7 +255,7 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 	if conn.NextMessageSeqReceive == math.MaxUint16 {
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}
-	conn.Keys.AddAck(handshakeHdr.MessageSeq, rn)
+	conn.Keys.AddAck(rn)
 	conn.NextMessageSeqReceive++                        // never due to check above
 	log.Printf("received and ignored NewSessionTicket") // TODO
 	return nil
@@ -285,7 +285,7 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, ha
 	if conn.NextMessageSeqReceive == math.MaxUint16 {
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}
-	conn.Keys.AddAck(handshakeHdr.MessageSeq, rn)
+	conn.Keys.AddAck(rn)
 	conn.NextMessageSeqReceive++ // never due to check above
 	log.Printf("received KeyUpdate (%+v), expecting to receive record with the next epoch", msg)
 	conn.Keys.ExpectReceiveEpochUpdate = true // if this leads to epoch overflow, we'll generate error later in the function which actually increments epoch
@@ -540,7 +540,7 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshake(opts *options.TransportOpt
 		if handshakeHdr.MessageSeq < conn.NextMessageSeqReceive {
 			// we cannot send ack for ==, because we do not support holes, and must not ack some fragments
 			// ack state machine is independent of everything else
-			conn.Keys.AddAck(handshakeHdr.MessageSeq, rn)
+			conn.Keys.AddAck(rn)
 			return nil // totally ok to ignore
 		}
 		switch handshakeHdr.HandshakeType {

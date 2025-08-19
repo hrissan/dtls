@@ -26,9 +26,6 @@ type Keys struct {
 
 	SendAcks      replay.Window
 	SendAcksEpoch uint16 // we do not want to lose acks immediately  when switching epoch
-	// end of previous flight, all messages before are implicitly acked by any message from messages
-	// flights exist only during handshake, so we keep this variable here.
-	SendAcksfromMessageSeq uint16
 
 	NewReceiveKeys SymmetricKeys // always correspond to Receive.Symmetric.Epoch + 1
 
@@ -49,10 +46,7 @@ type Keys struct {
 	SequenceNumberLimitExp byte
 }
 
-func (keys *Keys) AddAck(messageSeq uint16, rn format.RecordNumber) {
-	if messageSeq < keys.SendAcksfromMessageSeq {
-		return
-	}
+func (keys *Keys) AddAck(rn format.RecordNumber) {
 	if rn.Epoch() != keys.SendAcksEpoch {
 		keys.SendAcksEpoch = rn.Epoch()
 		keys.SendAcks.Reset()

@@ -73,7 +73,6 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	// implicit ack of all previous flights
 	hctx.SendQueue.Clear()
 
-	conn.Keys.SendAcksfromMessageSeq = conn.NextMessageSeqReceive
 	conn.Keys.SendAcks.Reset()
 	return true
 }
@@ -87,7 +86,7 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 	}
 	// we do not check that message is full here, because if partial message set, we want to clear that by common code
 	if !hctx.receivedPartialMessageSet {
-		conn.Keys.AddAck(handshakeHdr.MessageSeq, rn)
+		conn.Keys.AddAck(rn)
 		if !handshakeHdr.IsFragmented() {
 			conn.NextMessageSeqReceive++ // never due to check above
 			return hctx.receivedFullMessage(conn, handshakeHdr, body)
@@ -117,8 +116,8 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 	if !shouldAck {
 		return nil // we do not support holes, ignore, wait for earlier or later fragment first
 	}
-	conn.Keys.AddAck(handshakeHdr.MessageSeq, rn) // should ack it independent of conditions below
-	if !changed {                                 // nothing new, ignore
+	conn.Keys.AddAck(rn) // should ack it independent of conditions below
+	if !changed {        // nothing new, ignore
 		return nil
 	}
 	copy(hctx.receivedPartialMessage.Body[handshakeHdr.FragmentOffset:], body) // copy all bytes for simplicity

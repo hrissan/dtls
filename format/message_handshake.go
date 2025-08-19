@@ -9,6 +9,7 @@ import (
 var ErrMessageHandshakeTooShort = errors.New("message handshake too short")
 
 const (
+	// hello_request_RESERVED = 0 - we use it as "message not set" flag
 	HandshakeTypeClientHello = 1
 	HandshakeTypeServerHello = 2
 	// HelloRetryRequest message uses the same structure as the ServerHello, but with Random set to the special value

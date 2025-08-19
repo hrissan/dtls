@@ -9,19 +9,19 @@ import (
 	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
-func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl, hdr record.PlaintextRecordHeader, recordData []byte, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl, hdr record.Plaintext, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
 	// log.Printf("dtls: got handshake record (plaintext) %d bytes from %v, message(hex): %x", len(recordData), addr, recordData)
-	if len(recordData) == 0 {
+	if len(hdr.Body) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding
 		return conn, dtlserrors.ErrHandshakeReecordEmpty
 	}
 	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
-	for messageOffset < len(recordData) {
+	for messageOffset < len(hdr.Body) {
 		// log.Printf("dtls: got handshake message %v from %v, message(hex): %x", hdr, addr, messageData)
 		var fragment handshake.Fragment
-		n, err := fragment.Parse(recordData[messageOffset:])
+		n, err := fragment.Parse(hdr.Body[messageOffset:])
 		if err != nil {
-			rc.opts.Stats.BadMessageHeader("handshake", messageOffset, len(recordData), addr, err)
+			rc.opts.Stats.BadMessageHeader("handshake", messageOffset, len(hdr.Body), addr, err)
 			// we cannot continue to the next record.
 			return conn, dtlserrors.WarnPlaintextHandshakeMessageHeaderParsing
 		}

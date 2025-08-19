@@ -26,13 +26,13 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 	log.Printf("dtls: ciphertext %v deprotected with rn={%d,%d} cid(hex): %x from %v, body(hex): %x", hdr, rn.Epoch(), rn.SeqNum(), cid, conn.Addr, decrypted)
 	// [rfc9147:4.1]
 	switch contentType {
-	case record.PlaintextContentTypeAlert:
+	case record.RecordTypeAlert:
 		return conn.ProcessAlert(true, decrypted)
-	case record.PlaintextContentTypeAck:
+	case record.RecordTypeAck:
 		return conn.ProcessEncryptedAck(opts, decrypted)
-	case record.PlaintextContentTypeApplicationData:
+	case record.RecordApplicationData:
 		return conn.ProcessApplicationData(decrypted)
-	case record.PlaintextContentTypeHandshake:
+	case record.RecordTypeHandshake:
 		return conn.ProcessEncryptedHandshakeRecord(opts, decrypted, rn)
 	}
 	return dtlserrors.ErrUnknownInnerPlaintextRecordType

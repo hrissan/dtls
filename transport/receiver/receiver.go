@@ -126,13 +126,13 @@ func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 			}
 			// Minor problems inside record do not conflict with our ability to process next record
 			continue
-		case fb == record.PlaintextContentTypeAlert ||
-			fb == record.PlaintextContentTypeHandshake ||
-			fb == record.PlaintextContentTypeAck:
+		case fb == record.RecordTypeAlert ||
+			fb == record.RecordTypeHandshake ||
+			fb == record.RecordTypeAck:
 			// [rfc9147:4.1], but it seems acks must always be encrypted in DTLS1.3?
 			// TODO - contact DTLS team to clarify standard
-			var hdr record.PlaintextRecordHeader
-			n, recordBody, err := hdr.Parse(datagram[recordOffset:])
+			var hdr record.Plaintext
+			n, err := hdr.Parse(datagram[recordOffset:])
 			if err != nil {
 				rc.opts.Stats.BadRecord("plaintext", recordOffset, len(datagram), addr, err)
 				rc.opts.Stats.Warning(addr, dtlserrors.WarnPlaintextRecordParsing)
@@ -144,18 +144,18 @@ func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 			// TODO - should we check/remove replay received record sequence number?
 			// how to do this without state?
 			switch hdr.ContentType {
-			case record.PlaintextContentTypeAlert:
+			case record.RecordTypeAlert:
 				if conn != nil { // Will not respond with alert, otherwise endless cycle
-					if err := conn.ProcessAlert(false, recordBody); err != nil {
+					if err := conn.ProcessAlert(false, hdr.Body); err != nil {
 						// Anyone can send garbage, do not change state
 						rc.opts.Stats.Warning(addr, err)
 					}
 				}
-			case record.PlaintextContentTypeAck:
-				log.Printf("dtls: got ack record (plaintext) %d bytes from %v, message(hex): %x", len(recordBody), addr, recordBody)
+			case record.RecordTypeAck:
+				log.Printf("dtls: got ack record (plaintext) %d bytes from %v, message(hex): %x", len(hdr.Body), addr, hdr.Body)
 				// unencrypted acks can only acknowledge unencrypted messaged, so very niche, we simply ignore them
-			case record.PlaintextContentTypeHandshake:
-				conn, err = rc.processPlaintextHandshake(conn, hdr, recordBody, addr)
+			case record.RecordTypeHandshake:
+				conn, err = rc.processPlaintextHandshake(conn, hdr, addr)
 				if err != nil {
 					rc.opts.Stats.Warning(addr, err)
 				}

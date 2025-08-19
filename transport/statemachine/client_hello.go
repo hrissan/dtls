@@ -148,8 +148,8 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 	}
 	helloRetryRequest.Extensions.CookieSet = true
 	helloRetryRequest.Extensions.Cookie = ck
-	recordHdr := record.PlaintextRecordHeader{
-		ContentType:    record.PlaintextContentTypeHandshake,
+	recordHdr := record.PlaintextHeader{
+		ContentType:    record.RecordTypeHandshake,
 		SequenceNumber: 0,
 	}
 	msgHeader := handshake.FragmentHeader{

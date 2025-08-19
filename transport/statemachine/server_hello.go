@@ -11,7 +11,7 @@ import (
 	"github.com/hrissan/tinydtls/handshake"
 )
 
-func (conn *ConnectionImpl) ProcessServerHello(fragment handshake.Fragment, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) ReceivedServerHelloFragment(fragment handshake.Fragment, rn format.RecordNumber) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if conn.Handshake == nil {
@@ -23,7 +23,7 @@ func (conn *ConnectionImpl) ProcessServerHello(fragment handshake.Fragment, rn f
 		conn.Keys.AddAck(rn)
 		return nil
 	}
-	return conn.Handshake.ReceivedMessage(conn, fragment, rn)
+	return conn.Handshake.ReceivedFragment(conn, fragment, rn)
 }
 
 func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, msg handshake.Message, serverHello handshake.MsgServerHello) error {
@@ -51,8 +51,7 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, msg handsha
 		msg.AddToHash(hctx.TranscriptHasher)
 
 		clientHelloMsg := hctx.GenerateClientHello(true, serverHello.Extensions.Cookie)
-		hctx.PushMessage(conn, clientHelloMsg)
-		return nil
+		return hctx.PushMessage(conn, clientHelloMsg)
 	}
 	// ServerHello can have messageSeq 0 or 1, depending on whether server used HRR
 	if msg.MsgSeq >= 2 {

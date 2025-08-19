@@ -77,7 +77,7 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	return true
 }
 
-func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, fragment handshake.Fragment, rn format.RecordNumber) error {
+func (hctx *HandshakeConnection) ReceivedFragment(conn *ConnectionImpl, fragment handshake.Fragment, rn format.RecordNumber) error {
 	if fragment.Header.MsgType == handshake.MsgTypeZero { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}
@@ -88,7 +88,7 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, fragment 
 
 	messageOffset := int(fragment.Header.MsgSeq) + hctx.receivedMessages.Len() - int(conn.NextMessageSeqReceive)
 	if messageOffset < 0 {
-		panic("checked before calling HandshakeConnection.ReceivedMessage")
+		panic("checked before calling HandshakeConnection.ReceivedFragment")
 	}
 	if messageOffset >= hctx.receivedMessages.Cap(hctx.receivedMessagesStorage[:]) {
 		return nil // would be beyond queue even if we fill it
@@ -155,12 +155,9 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 }
 
 // also acks (removes) all previous flights
-func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg handshake.Message) {
-	if conn.NextMessageSeqSend >= math.MaxUint16 {
-		// TODO - prevent wrapping next message seq
-		// close connection here
-		return
-		// for now
+func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg handshake.Message) error {
+	if conn.NextMessageSeqSend == math.MaxUint16 {
+		return dtlserrors.ErrSendMessageSeqOverflow
 	}
 	msg.MsgSeq = conn.NextMessageSeqSend
 	conn.NextMessageSeqSend++
@@ -168,4 +165,5 @@ func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg handshake
 	hctx.SendQueue.PushMessage(msg)
 
 	msg.AddToHash(hctx.TranscriptHasher)
+	return nil
 }

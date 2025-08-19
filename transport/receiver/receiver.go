@@ -212,6 +212,5 @@ func (rc *Receiver) startConnection(addr netip.AddrPort) (*statemachine.Connecti
 	hctx.ComputeKeyShare(rc.opts.Rnd)
 	clientHelloMsg := hctx.GenerateClientHello(false, cookie.Cookie{})
 
-	hctx.PushMessage(conn, clientHelloMsg)
-	return conn, nil
+	return conn, hctx.PushMessage(conn, clientHelloMsg)
 }

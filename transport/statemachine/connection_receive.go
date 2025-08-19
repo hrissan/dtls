@@ -115,7 +115,7 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshakeRecord(opts *options.Transp
 			// we will not be able to throw them out (peer will never send fragments again), and we will not
 			// be able to process them immediately.
 			// So all post-handshake messages muet be processed in switch statement above.
-			if err := conn.Handshake.ReceivedMessage(conn, fragment, rn); err != nil {
+			if err := conn.Handshake.ReceivedFragment(conn, fragment, rn); err != nil {
 				return err
 			}
 		}

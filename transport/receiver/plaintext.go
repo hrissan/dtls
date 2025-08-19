@@ -39,7 +39,12 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 				return conn, dtlserrors.WarnPlaintextClientHelloParsing
 			}
 			rc.opts.Stats.ClientHelloMessage(fragment.Header, msgClientHello, addr)
-			conn, err = rc.OnClientHello(conn, fragment, msgClientHello, addr)
+			msg := handshake.Message{
+				MsgType: fragment.Header.MsgType,
+				MsgSeq:  fragment.Header.MsgSeq,
+				Body:    fragment.Body,
+			}
+			conn, err = rc.OnClientHello(conn, msg, msgClientHello, addr)
 			if err != nil {
 				return conn, err
 			}
@@ -48,7 +53,7 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 			if conn == nil {
 				return conn, dtlserrors.ErrServerHelloNoActiveConnection
 			}
-			if err = conn.ProcessServerHello(fragment, format.RecordNumberWith(0, hdr.SequenceNumber)); err != nil {
+			if err = conn.ReceivedServerHelloFragment(fragment, format.RecordNumberWith(0, hdr.SequenceNumber)); err != nil {
 				return conn, err
 			}
 		default:

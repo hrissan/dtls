@@ -13,14 +13,13 @@ import (
 	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
-func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, fragment handshake.Fragment, msgClientHello handshake.MsgClientHello, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, msg handshake.Message, msgClientHello handshake.MsgClientHello, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
 	if !rc.opts.RoleServer {
 		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
 		return conn, dtlserrors.ErrClientHelloReceivedByClient
 	}
 
 	if err := IsSupportedClientHello(&msgClientHello); err != nil {
-		rc.opts.Stats.ErrorClientHelloUnsupportedParams(fragment.Header, msgClientHello, addr, err)
 		return conn, err
 	}
 	// ClientHello is stateless, so we cannot check record sequence number.
@@ -28,16 +27,10 @@ func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, fragment ha
 	// we will reply with the same server hello.
 	// so, setting record sequence number to 0 equals to retransmission of the same message
 	if !msgClientHello.Extensions.CookieSet {
-		if fragment.Header.MsgSeq != 0 {
-			rc.opts.Stats.ErrorClientHelloUnsupportedParams(fragment.Header, msgClientHello, addr, ErrClientHelloWithoutCookieMsgSeqNum)
+		if msg.MsgSeq != 0 {
 			return conn, dtlserrors.ErrClientHelloUnsupportedParams
 		}
 		transcriptHasher := sha256.New()
-		msg := handshake.Message{
-			MsgType: fragment.Header.MsgType,
-			MsgSeq:  fragment.Header.MsgSeq,
-			Body:    fragment.Body,
-		}
 		msg.AddToHash(transcriptHasher)
 
 		var initialHelloTranscriptHash [constants.MaxHashLength]byte
@@ -60,8 +53,7 @@ func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, fragment ha
 		rc.snd.SendHelloRetryDatagram(hrrStorage, len(hrrDatagram), addr)
 		return conn, nil
 	}
-	if fragment.Header.MsgSeq != 1 {
-		rc.opts.Stats.ErrorClientHelloUnsupportedParams(fragment.Header, msgClientHello, addr, ErrClientHelloWithCookieMsgSeqNum)
+	if msg.MsgSeq != 1 {
 		return conn, dtlserrors.ErrClientHelloUnsupportedParams
 	}
 	if !msgClientHello.Extensions.KeyShare.X25519PublicKeySet {
@@ -88,7 +80,7 @@ func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, fragment ha
 		rc.connections[addr] = conn
 		rc.handMu.Unlock()
 	}
-	if err := conn.ReceivedClientHello2(rc.opts, fragment, msgClientHello, initialHelloTranscriptHash, keyShareSet); err != nil {
+	if err := conn.ReceivedClientHello2(rc.opts, msg, msgClientHello, initialHelloTranscriptHash, keyShareSet); err != nil {
 		return conn, err // TODO - close connection here
 	}
 	rc.snd.RegisterConnectionForSend(conn)

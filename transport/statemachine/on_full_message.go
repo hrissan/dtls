@@ -119,8 +119,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg h
 		conn.Keys.ComputeApplicationTrafficSecret(false, hctx.MasterSecret[:], handshakeTranscriptHash)
 
 		// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here
-		hctx.PushMessage(conn, hctx.GenerateFinished(conn))
-		return nil
+		return hctx.PushMessage(conn, hctx.GenerateFinished(conn))
 	case handshake.MsgTypeClientHello:
 	case handshake.MsgTypeKeyUpdate:
 	case handshake.MsgTypeNewSessionTicket:

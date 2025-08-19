@@ -77,13 +77,13 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	return true
 }
 
-func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr handshake.MsgFragmentHeader, body []byte, rn format.RecordNumber) error {
-	if handshakeHdr.HandshakeType == handshake.HandshakeTypeZero { // we use it as a flag of not yet received message below, so check here
+func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr handshake.FragmentHeader, body []byte, rn format.RecordNumber) error {
+	if handshakeHdr.MsgType == handshake.HandshakeTypeZero { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}
 	// Receiving any fragment of any message from the next flight will remove all acks for previous flights.
 	// We must do it before we generate ack for this fragment.
-	flight := HandshakeTypeToFlight(handshakeHdr.HandshakeType, conn.RoleServer) // zero if unknown
+	flight := HandshakeTypeToFlight(handshakeHdr.MsgType, conn.RoleServer) // zero if unknown
 	conn.Handshake.ReceivedFlight(conn, flight)
 
 	messageOffset := int(handshakeHdr.MsgSeq) + hctx.receivedMessages.Len() - int(conn.NextMessageSeqReceive)
@@ -105,7 +105,7 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 	if message.Msg.HandshakeType == 0 { // this fragment, set header, allocate body
 		*message = PartialHandshakeMsg{
 			Msg: HandshakeMsg{
-				HandshakeType: handshakeHdr.HandshakeType,
+				HandshakeType: handshakeHdr.MsgType,
 				MessageSeq:    handshakeHdr.MsgSeq,
 			},
 			SendOffset: 0,
@@ -119,7 +119,7 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 		if handshakeHdr.Length != uint32(len(message.Msg.Body)) {
 			return dtlserrors.ErrHandshakeMessageFragmentLengthMismatch
 		}
-		if handshakeHdr.HandshakeType != message.Msg.HandshakeType {
+		if handshakeHdr.MsgType != message.Msg.HandshakeType {
 			return dtlserrors.ErrHandshakeMessageFragmentTypeMismatch
 		}
 	}
@@ -144,9 +144,9 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 			return nil
 		}
 		body := first.Msg.Body
-		handshakeHdr := handshake.MsgFragmentHeader{
-			HandshakeType: first.Msg.HandshakeType,
-			Length:        uint32(len(body)),
+		handshakeHdr := handshake.FragmentHeader{
+			MsgType: first.Msg.HandshakeType,
+			Length:  uint32(len(body)),
 			FragmentInfo: handshake.FragmentInfo{
 				MsgSeq:         first.Msg.MessageSeq,
 				FragmentOffset: 0,
@@ -164,7 +164,7 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 }
 
 // also acks (removes) all previous flights
-func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg handshake.MessageHandshakeFragment) {
+func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg handshake.Fragment) {
 	if conn.NextMessageSeqSend >= math.MaxUint16 {
 		// TODO - prevent wrapping next message seq
 		// close connection here

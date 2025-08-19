@@ -7,7 +7,7 @@ import (
 	"github.com/hrissan/tinydtls/handshake"
 )
 
-func (hctx *HandshakeConnection) GenerateFinished(conn *ConnectionImpl) handshake.MessageHandshakeFragment {
+func (hctx *HandshakeConnection) GenerateFinished(conn *ConnectionImpl) handshake.Fragment {
 	// [rfc8446:4.4.4] - finished
 	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
 	finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
@@ -19,10 +19,10 @@ func (hctx *HandshakeConnection) GenerateFinished(conn *ConnectionImpl) handshak
 	}
 	copy(msg.VerifyData[:], mustBeFinished)
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
-	return handshake.MessageHandshakeFragment{
-		Header: handshake.MsgFragmentHeader{
-			HandshakeType: handshake.HandshakeTypeFinished,
-			Length:        uint32(len(messageBody)),
+	return handshake.Fragment{
+		Header: handshake.FragmentHeader{
+			MsgType: handshake.HandshakeTypeFinished,
+			Length:  uint32(len(messageBody)),
 		},
 		Body: messageBody,
 	}

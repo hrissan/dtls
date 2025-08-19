@@ -12,8 +12,8 @@ import (
 )
 
 // change into PartialHandshakeMsg
-func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, handshakeHdr handshake.MsgFragmentHeader, body []byte) error {
-	switch handshakeHdr.HandshakeType {
+func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, handshakeHdr handshake.FragmentHeader, body []byte) error {
+	switch handshakeHdr.MsgType {
 	case handshake.HandshakeTypeServerHello:
 		if conn.RoleServer {
 			return dtlserrors.ErrServerHelloReceivedByServer
@@ -131,7 +131,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, hands
 		panic("handled in ConnectionImpl.ProcessHandshake")
 	default:
 		// TODO - process all messages in standard, generate error for the rest
-		log.Printf("TODO - encrypted message type %d not supported", handshakeHdr.HandshakeType)
+		log.Printf("TODO - encrypted message type %d not supported", handshakeHdr.MsgType)
 	}
 	return nil
 }

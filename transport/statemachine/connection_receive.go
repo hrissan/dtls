@@ -76,7 +76,7 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshake(opts *options.TransportOpt
 	}
 	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
 	for messageOffset < len(recordData) {
-		var handshakeHdr handshake.MsgFragmentHeader
+		var handshakeHdr handshake.FragmentHeader
 		n, messageBody, err := handshakeHdr.ParseWithBody(recordData[messageOffset:])
 		if err != nil {
 			opts.Stats.BadMessageHeader("handshake(encrypted)", messageOffset, len(recordData), conn.Addr, err)
@@ -90,12 +90,12 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshake(opts *options.TransportOpt
 			conn.Keys.AddAck(rn)
 			continue
 		}
-		switch handshakeHdr.HandshakeType {
+		switch handshakeHdr.MsgType {
 		case handshake.HandshakeTypeClientHello:
-			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.HandshakeTypeToName(handshakeHdr.HandshakeType), conn.Addr, handshakeHdr)
+			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.HandshakeTypeToName(handshakeHdr.MsgType), conn.Addr, handshakeHdr)
 			return dtlserrors.ErrClientHelloMustNotBeEncrypted
 		case handshake.HandshakeTypeServerHello:
-			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.HandshakeTypeToName(handshakeHdr.HandshakeType), conn.Addr, handshakeHdr)
+			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.HandshakeTypeToName(handshakeHdr.MsgType), conn.Addr, handshakeHdr)
 			return dtlserrors.ErrServerHelloMustNotBeEncrypted
 		case handshake.HandshakeTypeNewSessionTicket:
 			if err := conn.receivedNewSessionTicket(opts, handshakeHdr, messageBody, rn); err != nil {
@@ -123,7 +123,7 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshake(opts *options.TransportOpt
 	return nil
 }
 
-func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOptions, handshakeHdr handshake.MsgFragmentHeader, body []byte, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOptions, handshakeHdr handshake.FragmentHeader, body []byte, rn format.RecordNumber) error {
 	if handshakeHdr.IsFragmented() {
 		// we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
@@ -146,7 +146,7 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 	return nil
 }
 
-func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, handshakeHdr handshake.MsgFragmentHeader, body []byte, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, handshakeHdr handshake.FragmentHeader, body []byte, rn format.RecordNumber) error {
 	var msg handshake.MsgKeyUpdate
 	if err := msg.Parse(body); err != nil {
 		return dtlserrors.ErrKeyUpdateMessageParsing

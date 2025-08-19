@@ -17,10 +17,10 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg Handsh
 	if fragmentOffset >= uint32(len(handshakeMsg.Body)) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
 		panic("invariant of send queue fragment offset violated")
 	}
-	msg := handshake.MessageHandshakeFragment{
-		Header: handshake.MsgFragmentHeader{
-			HandshakeType: handshakeMsg.HandshakeType,
-			Length:        uint32(len(handshakeMsg.Body)),
+	msg := handshake.Fragment{
+		Header: handshake.FragmentHeader{
+			MsgType: handshakeMsg.HandshakeType,
+			Length:  uint32(len(handshakeMsg.Body)),
 			FragmentInfo: handshake.FragmentInfo{
 				MsgSeq:         handshakeMsg.MessageSeq,
 				FragmentOffset: fragmentOffset,
@@ -33,7 +33,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg Handsh
 		if sendNextSegmentSequenceEpoch0 == nil {
 			panic("the same check for plaintext record should be above")
 		}
-		remainingSpace := len(datagram) - handshake.MessageHandshakeHeaderSize + format.PlaintextRecordHeaderSize
+		remainingSpace := len(datagram) - handshake.FragmentHeaderSize + format.PlaintextRecordHeaderSize
 		if remainingSpace <= 0 {
 			return
 		}
@@ -42,7 +42,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg Handsh
 			return // do not send tiny records at the end of datagram
 		}
 		da, rn, err := conn.constructPlaintextRecord(datagram[:0], msg, sendNextSegmentSequenceEpoch0)
-		if uint32(len(da)) != msg.Header.FragmentLength+handshake.MessageHandshakeHeaderSize+format.PlaintextRecordHeaderSize {
+		if uint32(len(da)) != msg.Header.FragmentLength+handshake.FragmentHeaderSize+format.PlaintextRecordHeaderSize {
 			panic("plaintext handshake record construction length invariant failed")
 		}
 		if err != nil {
@@ -50,7 +50,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg Handsh
 		}
 		return len(da), msg.Header.FragmentInfo, rn, nil
 	}
-	remainingSpace := len(datagram) - handshake.MessageHandshakeHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+	remainingSpace := len(datagram) - handshake.FragmentHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 	if remainingSpace <= 0 {
 		return
 	}
@@ -68,7 +68,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg Handsh
 	return len(da), msg.Header.FragmentInfo, rn, nil
 }
 
-func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg handshake.MessageHandshakeFragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, format.RecordNumber, error) {
+func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg handshake.Fragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, format.RecordNumber, error) {
 	if *sendNextSegmentSequenceEpoch0 >= math.MaxUint16 {
 		// We arbitrarily decided that we do not need more outgoing sequence numbers for epoch 0
 		// We needed code to prevent overflow below anyway
@@ -80,7 +80,7 @@ func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg handshake.
 		SequenceNumber: uint64(*sendNextSegmentSequenceEpoch0),
 	}
 	*sendNextSegmentSequenceEpoch0++ // never overflows due to check above
-	data = recordHdr.Write(data, handshake.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
+	data = recordHdr.Write(data, handshake.FragmentHeaderSize+int(msg.Header.FragmentLength))
 	data = msg.Header.Write(data)
 	data = append(data, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
 	return data, rn, nil
@@ -97,7 +97,7 @@ func (conn *ConnectionImpl) checkSendLimit() error {
 	return conn.startKeyUpdate(false)
 }
 
-func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg handshake.MessageHandshakeFragment) ([]byte, format.RecordNumber, error) {
+func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg handshake.Fragment) ([]byte, format.RecordNumber, error) {
 	if err := conn.checkSendLimit(); err != nil {
 		return nil, format.RecordNumber{}, err
 	}

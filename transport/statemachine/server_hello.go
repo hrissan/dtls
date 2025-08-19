@@ -11,7 +11,7 @@ import (
 	"github.com/hrissan/tinydtls/handshake"
 )
 
-func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr handshake.MsgFragmentHeader, messageBody []byte, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr handshake.FragmentHeader, messageBody []byte, rn format.RecordNumber) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if conn.Handshake == nil {
@@ -26,7 +26,7 @@ func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr handshake.MsgFragmen
 	return conn.Handshake.ReceivedMessage(conn, handshakeHdr, messageBody, rn)
 }
 
-func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr handshake.MsgFragmentHeader, messageBody []byte, serverHello handshake.MsgServerHello) error {
+func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr handshake.FragmentHeader, messageBody []byte, serverHello handshake.MsgServerHello) error {
 	if serverHello.Extensions.SupportedVersions.SelectedVersion != handshake.DTLS_VERSION_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
@@ -90,7 +90,7 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHd
 	return nil
 }
 
-func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.Cookie) handshake.MessageHandshakeFragment {
+func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.Cookie) handshake.Fragment {
 	// [rfc8446:4.1.2] the client MUST send the same ClientHello without modification, except as follows
 	clientHello := handshake.MsgClientHello{
 		Random: hctx.LocalRandom,
@@ -137,10 +137,10 @@ func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.C
 	}
 
 	messageBody := clientHello.Write(nil) // TODO - reuse message bodies in a rope
-	return handshake.MessageHandshakeFragment{
-		Header: handshake.MsgFragmentHeader{
-			HandshakeType: handshake.HandshakeTypeClientHello,
-			Length:        uint32(len(messageBody)),
+	return handshake.Fragment{
+		Header: handshake.FragmentHeader{
+			MsgType: handshake.HandshakeTypeClientHello,
+			Length:  uint32(len(messageBody)),
 		},
 		Body: messageBody,
 	}

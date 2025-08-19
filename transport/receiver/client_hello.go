@@ -13,7 +13,7 @@ import (
 	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
-func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, messageBody []byte, handshakeHdr handshake.MsgFragmentHeader, msg handshake.MsgClientHello, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, messageBody []byte, handshakeHdr handshake.FragmentHeader, msg handshake.MsgClientHello, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
 	if !rc.opts.RoleServer {
 		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
 		return conn, dtlserrors.ErrClientHelloReceivedByClient

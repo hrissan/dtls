@@ -72,12 +72,9 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 	copy(serverHello.Extensions.KeyShare.X25519PublicKey[:], hctx.X25519Secret.PublicKey().Bytes())
 	// TODO - get body from the rope
 	serverHelloBody := serverHello.Write(nil)
-	serverHelloMessage := handshake.Fragment{
-		Header: handshake.FragmentHeader{
-			MsgType: handshake.HandshakeTypeServerHello,
-			Length:  uint32(len(serverHelloBody)),
-		},
-		Body: serverHelloBody,
+	serverHelloMessage := handshake.Message{
+		MsgType: handshake.HandshakeTypeServerHello,
+		Body:    serverHelloBody,
 	}
 	_ = hctx.ReceivedFlight(conn, MessagesFlightClientHello2)
 
@@ -170,7 +167,7 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 	return datagram
 }
 
-func generateEncryptedExtensions() handshake.Fragment {
+func generateEncryptedExtensions() handshake.Message {
 	ee := handshake.ExtensionsSet{
 		SupportedGroupsSet: true,
 	}
@@ -180,16 +177,13 @@ func generateEncryptedExtensions() handshake.Fragment {
 	ee.SupportedGroups.X25519 = true
 
 	messageBody := ee.Write(nil, false, false, false) // TODO - reuse message bodies in a rope
-	return handshake.Fragment{
-		Header: handshake.FragmentHeader{
-			MsgType: handshake.HandshakeTypeEncryptedExtensions,
-			Length:  uint32(len(messageBody)),
-		},
-		Body: messageBody,
+	return handshake.Message{
+		MsgType: handshake.HandshakeTypeEncryptedExtensions,
+		Body:    messageBody,
 	}
 }
 
-func generateServerCertificate(opts *options.TransportOptions) handshake.Fragment {
+func generateServerCertificate(opts *options.TransportOptions) handshake.Message {
 	msg := handshake.MsgCertificate{
 		CertificatesLength: len(opts.ServerCertificate.Certificate),
 	}
@@ -197,16 +191,13 @@ func generateServerCertificate(opts *options.TransportOptions) handshake.Fragmen
 		msg.Certificates[i].CertData = certData // those slices are not retained beyond this func
 	}
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
-	return handshake.Fragment{
-		Header: handshake.FragmentHeader{
-			MsgType: handshake.HandshakeTypeCertificate,
-			Length:  uint32(len(messageBody)),
-		},
-		Body: messageBody,
+	return handshake.Message{
+		MsgType: handshake.HandshakeTypeCertificate,
+		Body:    messageBody,
 	}
 }
 
-func generateServerCertificateVerify(opts *options.TransportOptions, hctx *HandshakeConnection) (handshake.Fragment, error) {
+func generateServerCertificateVerify(opts *options.TransportOptions, hctx *HandshakeConnection) (handshake.Message, error) {
 	msg := handshake.MsgCertificateVerify{
 		SignatureScheme: handshake.SignatureAlgorithm_RSA_PSS_RSAE_SHA256,
 	}
@@ -222,16 +213,13 @@ func generateServerCertificateVerify(opts *options.TransportOptions, hctx *Hands
 	sig, err := signature.CreateSignature_RSA_PSS_RSAE_SHA256(opts.Rnd, privateRsa, sigMessageHash)
 	if err != nil {
 		log.Printf("create signature error: %v", err)
-		return handshake.Fragment{}, dtlserrors.ErrCertificateVerifyMessageSignature
+		return handshake.Message{}, dtlserrors.ErrCertificateVerifyMessageSignature
 	}
 	msg.Signature = sig
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
 
-	return handshake.Fragment{
-		Header: handshake.FragmentHeader{
-			MsgType: handshake.HandshakeTypeCertificateVerify,
-			Length:  uint32(len(messageBody)),
-		},
-		Body: messageBody,
+	return handshake.Message{
+		MsgType: handshake.HandshakeTypeCertificateVerify,
+		Body:    messageBody,
 	}, nil
 }

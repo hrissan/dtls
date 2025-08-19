@@ -90,7 +90,7 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHd
 	return nil
 }
 
-func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.Cookie) handshake.Fragment {
+func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.Cookie) handshake.Message {
 	// [rfc8446:4.1.2] the client MUST send the same ClientHello without modification, except as follows
 	clientHello := handshake.MsgClientHello{
 		Random: hctx.LocalRandom,
@@ -137,11 +137,8 @@ func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.C
 	}
 
 	messageBody := clientHello.Write(nil) // TODO - reuse message bodies in a rope
-	return handshake.Fragment{
-		Header: handshake.FragmentHeader{
-			MsgType: handshake.HandshakeTypeClientHello,
-			Length:  uint32(len(messageBody)),
-		},
-		Body: messageBody,
+	return handshake.Message{
+		MsgType: handshake.HandshakeTypeClientHello,
+		Body:    messageBody,
 	}
 }

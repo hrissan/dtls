@@ -164,17 +164,18 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 }
 
 // also acks (removes) all previous flights
-func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg handshake.Fragment) {
+func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg handshake.Message) {
 	if conn.NextMessageSeqSend >= math.MaxUint16 {
 		// TODO - prevent wrapping next message seq
 		// close connection here
-		return // for now
+		return
+		// for now
 	}
-	msg.Header.MsgSeq = conn.NextMessageSeqSend
+	msg.MsgSeq = conn.NextMessageSeqSend
 	conn.NextMessageSeqSend++
 
 	hctx.SendQueue.PushMessage(msg)
 
-	msg.Header.AddToHash(hctx.TranscriptHasher)
+	msg.AddToHash(hctx.TranscriptHasher)
 	_, _ = hctx.TranscriptHasher.Write(msg.Body)
 }

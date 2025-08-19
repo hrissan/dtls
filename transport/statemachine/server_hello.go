@@ -11,19 +11,19 @@ import (
 	"github.com/hrissan/tinydtls/handshake"
 )
 
-func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr handshake.FragmentHeader, messageBody []byte, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) ProcessServerHello(fragment handshake.Fragment, rn format.RecordNumber) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if conn.Handshake == nil {
 		return nil // retransmission, while connection already established
 	}
-	if handshakeHdr.MsgSeq < conn.FirstMessageSeqInReceiveQueue() {
+	if fragment.Header.MsgSeq < conn.FirstMessageSeqInReceiveQueue() {
 		// all messages before were processed by us in the state we already do not remember,
 		// so we must acknowledge unconditionally and do nothing.
 		conn.Keys.AddAck(rn)
 		return nil
 	}
-	return conn.Handshake.ReceivedMessage(conn, handshakeHdr, messageBody, rn)
+	return conn.Handshake.ReceivedMessage(conn, fragment, rn)
 }
 
 func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, msg handshake.Message, serverHello handshake.MsgServerHello) error {

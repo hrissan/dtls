@@ -77,16 +77,16 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	return true
 }
 
-func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr handshake.FragmentHeader, body []byte, rn format.RecordNumber) error {
-	if handshakeHdr.MsgType == handshake.MsgTypeZero { // we use it as a flag of not yet received message below, so check here
+func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, fragment handshake.Fragment, rn format.RecordNumber) error {
+	if fragment.Header.MsgType == handshake.MsgTypeZero { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}
 	// Receiving any fragment of any message from the next flight will remove all acks for previous flights.
 	// We must do it before we generate ack for this fragment.
-	flight := MsgTypeToFlight(handshakeHdr.MsgType, conn.RoleServer) // zero if unknown
+	flight := MsgTypeToFlight(fragment.Header.MsgType, conn.RoleServer) // zero if unknown
 	conn.Handshake.ReceivedFlight(conn, flight)
 
-	messageOffset := int(handshakeHdr.MsgSeq) + hctx.receivedMessages.Len() - int(conn.NextMessageSeqReceive)
+	messageOffset := int(fragment.Header.MsgSeq) + hctx.receivedMessages.Len() - int(conn.NextMessageSeqReceive)
 	if messageOffset < 0 {
 		panic("checked before calling HandshakeConnection.ReceivedMessage")
 	}
@@ -96,34 +96,34 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 	for messageOffset >= hctx.receivedMessages.Len() {
 		hctx.receivedMessages.PushBack(hctx.receivedMessagesStorage[:], PartialHandshakeMsg{})
 		if conn.NextMessageSeqReceive == math.MaxUint16 {
-			// can happen only when handshakeHdr.MsgSeq == math.MaxUint16
+			// can happen only when fragment.MsgSeq == math.MaxUint16
 			return dtlserrors.ErrReceivedMessageSeqOverflow
 		}
 		conn.NextMessageSeqReceive++
 	}
-	message := hctx.receivedMessages.IndexRef(hctx.receivedMessagesStorage[:], messageOffset)
-	if message.Msg.MsgType == 0 { // this fragment, set header, allocate body
-		*message = PartialHandshakeMsg{
+	partialMessage := hctx.receivedMessages.IndexRef(hctx.receivedMessagesStorage[:], messageOffset)
+	if partialMessage.Msg.MsgType == 0 { // this fragment, set header, allocate body
+		*partialMessage = PartialHandshakeMsg{
 			Msg: handshake.Message{
-				MsgType: handshakeHdr.MsgType,
-				MsgSeq:  handshakeHdr.MsgSeq,
+				MsgType: fragment.Header.MsgType,
+				MsgSeq:  fragment.Header.MsgSeq,
 			},
 			SendOffset: 0,
-			SendEnd:    handshakeHdr.Length,
+			SendEnd:    fragment.Header.Length,
 		}
-		message.Msg.Body = make([]byte, handshakeHdr.Length) // TODO - rope from pull
+		partialMessage.Msg.Body = make([]byte, fragment.Header.Length) // TODO - rope from pull
 	} else {
-		if handshakeHdr.MsgSeq != handshakeHdr.MsgSeq {
+		if fragment.Header.MsgSeq != partialMessage.Msg.MsgSeq {
 			panic("message sequence is queue offset and must always match")
 		}
-		if handshakeHdr.Length != uint32(len(message.Msg.Body)) {
+		if fragment.Header.Length != uint32(len(partialMessage.Msg.Body)) {
 			return dtlserrors.ErrHandshakeMessageFragmentLengthMismatch
 		}
-		if handshakeHdr.MsgType != message.Msg.MsgType {
+		if fragment.Header.MsgType != partialMessage.Msg.MsgType {
 			return dtlserrors.ErrHandshakeMessageFragmentTypeMismatch
 		}
 	}
-	shouldAck, changed := message.Ack(handshakeHdr.FragmentOffset, handshakeHdr.FragmentLength)
+	shouldAck, changed := partialMessage.Ack(fragment.Header.FragmentOffset, fragment.Header.FragmentLength)
 	if !shouldAck {
 		return nil // got in the middle of the hole, wait for fragment which we can actully add
 	}
@@ -131,7 +131,7 @@ func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshake
 	if !changed {        // nothing new, save copy
 		return nil
 	}
-	copy(message.Msg.Body[handshakeHdr.FragmentOffset:], body) // copy all bytes for simplicity
+	copy(partialMessage.Msg.Body[fragment.Header.FragmentOffset:], fragment.Body) // copy all bytes for simplicity
 	// now we could ack the first message, so delivery all full messages
 	return hctx.DeliveryReceivedMessages(conn)
 }

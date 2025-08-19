@@ -76,33 +76,33 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshakeRecord(opts *options.Transp
 	}
 	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
 	for messageOffset < len(recordData) {
-		var fragmentHdr handshake.FragmentHeader
-		n, messageBody, err := fragmentHdr.ParseWithBody(recordData[messageOffset:])
+		var fragment handshake.Fragment
+		n, err := fragment.Parse(recordData[messageOffset:])
 		if err != nil {
 			opts.Stats.BadMessageHeader("handshake(encrypted)", messageOffset, len(recordData), conn.Addr, err)
 			return dtlserrors.ErrEncryptedHandshakeMessageHeaderParsing
 		}
 		messageOffset += n
 
-		if fragmentHdr.MsgSeq < conn.FirstMessageSeqInReceiveQueue() {
+		if fragment.Header.MsgSeq < conn.FirstMessageSeqInReceiveQueue() {
 			// all messages before were processed by us in the state we already do not remember,
 			// so we must acknowledge unconditionally and do nothing.
 			conn.Keys.AddAck(rn)
 			continue
 		}
-		switch fragmentHdr.MsgType {
+		switch fragment.Header.MsgType {
 		case handshake.MsgTypeClientHello:
-			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.MsgTypeToName(fragmentHdr.MsgType), conn.Addr, fragmentHdr)
+			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.MsgTypeToName(fragment.Header.MsgType), conn.Addr, fragment.Header)
 			return dtlserrors.ErrClientHelloMustNotBeEncrypted
 		case handshake.MsgTypeServerHello:
-			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.MsgTypeToName(fragmentHdr.MsgType), conn.Addr, fragmentHdr)
+			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.MsgTypeToName(fragment.Header.MsgType), conn.Addr, fragment.Header)
 			return dtlserrors.ErrServerHelloMustNotBeEncrypted
 		case handshake.MsgTypeNewSessionTicket:
-			if err := conn.receivedNewSessionTicket(opts, fragmentHdr, messageBody, rn); err != nil {
+			if err := conn.receivedNewSessionTicket(opts, fragment, rn); err != nil {
 				return err
 			}
 		case handshake.MsgTypeKeyUpdate:
-			if err := conn.receivedKeyUpdate(opts, fragmentHdr, messageBody, rn); err != nil {
+			if err := conn.receivedKeyUpdate(opts, fragment, rn); err != nil {
 				return err
 			}
 		default:
@@ -115,7 +115,7 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshakeRecord(opts *options.Transp
 			// we will not be able to throw them out (peer will never send fragments again), and we will not
 			// be able to process them immediately.
 			// So all post-handshake messages muet be processed in switch statement above.
-			if err := conn.Handshake.ReceivedMessage(conn, fragmentHdr, messageBody, rn); err != nil {
+			if err := conn.Handshake.ReceivedMessage(conn, fragment, rn); err != nil {
 				return err
 			}
 		}
@@ -123,8 +123,8 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshakeRecord(opts *options.Transp
 	return nil
 }
 
-func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOptions, handshakeHdr handshake.FragmentHeader, body []byte, rn format.RecordNumber) error {
-	if handshakeHdr.IsFragmented() {
+func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOptions, fragment handshake.Fragment, rn format.RecordNumber) error {
+	if fragment.Header.IsFragmented() {
 		// we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
 		opts.Stats.Warning(conn.Addr, dtlserrors.WarnNewSessionTicketFragmented)
@@ -134,7 +134,7 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 		opts.Stats.Warning(conn.Addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
 		return nil
 	}
-	if handshakeHdr.MsgSeq > conn.NextMessageSeqReceive {
+	if fragment.Header.MsgSeq > conn.NextMessageSeqReceive {
 		return nil
 	}
 	if conn.NextMessageSeqReceive == math.MaxUint16 {
@@ -146,24 +146,23 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 	return nil
 }
 
-func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, handshakeHdr handshake.FragmentHeader, body []byte, rn format.RecordNumber) error {
-	var msg handshake.MsgKeyUpdate
-	if err := msg.Parse(body); err != nil {
-		return dtlserrors.ErrKeyUpdateMessageParsing
-	}
-	log.Printf("KeyUpdate parsed: %+v", msg)
-
-	if handshakeHdr.IsFragmented() {
+func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, fragment handshake.Fragment, rn format.RecordNumber) error {
+	if fragment.Header.IsFragmented() {
 		// alert - we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
 		opts.Stats.Warning(conn.Addr, dtlserrors.WarnKeyUpdateFragmented)
 		return nil
 	}
+	var msgKeyUpdate handshake.MsgKeyUpdate
+	if err := msgKeyUpdate.Parse(fragment.Body); err != nil {
+		return dtlserrors.ErrKeyUpdateMessageParsing
+	}
+	log.Printf("KeyUpdate parsed: %+v", msgKeyUpdate)
 	if conn.Handshake != nil {
 		opts.Stats.Warning(conn.Addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
 		return nil
 	}
-	if handshakeHdr.MsgSeq > conn.NextMessageSeqReceive {
+	if fragment.Header.MsgSeq > conn.NextMessageSeqReceive {
 		return nil
 	}
 	if conn.NextMessageSeqReceive == math.MaxUint16 {
@@ -171,9 +170,9 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, ha
 	}
 	conn.Keys.AddAck(rn)
 	conn.NextMessageSeqReceive++ // never due to check above
-	log.Printf("received KeyUpdate (%+v), expecting to receive record with the next epoch", msg)
+	log.Printf("received KeyUpdate (%+v), expecting to receive record with the next epoch", msgKeyUpdate)
 	conn.Keys.ExpectReceiveEpochUpdate = true // if this leads to epoch overflow, we'll generate error later in the function which actually increments epoch
-	if msg.UpdateRequested {
+	if msgKeyUpdate.UpdateRequested {
 		if err := conn.startKeyUpdate(false); err != nil { // do not request update, when responding to request
 			return err
 		}

@@ -18,28 +18,28 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
 	for messageOffset < len(recordData) {
 		// log.Printf("dtls: got handshake message %v from %v, message(hex): %x", hdr, addr, messageData)
-		var handshakeHdr handshake.FragmentHeader
-		n, body, err := handshakeHdr.ParseWithBody(recordData[messageOffset:])
+		var fragment handshake.Fragment
+		n, err := fragment.Parse(recordData[messageOffset:])
 		if err != nil {
 			rc.opts.Stats.BadMessageHeader("handshake", messageOffset, len(recordData), addr, err)
 			// we cannot continue to the next record.
 			return conn, dtlserrors.WarnPlaintextHandshakeMessageHeaderParsing
 		}
 		messageOffset += n
-		switch handshakeHdr.MsgType {
+		switch fragment.Header.MsgType {
 		case handshake.MsgTypeClientHello:
 			// on error, we could continue to the next fragment, but state machine will be broken, so we do not
-			var msg handshake.MsgClientHello
-			if handshakeHdr.IsFragmented() {
-				rc.opts.Stats.MustNotBeFragmented(msg.MessageKind(), msg.MessageName(), addr, handshakeHdr)
+			var msgClientHello handshake.MsgClientHello
+			if fragment.Header.IsFragmented() {
+				rc.opts.Stats.MustNotBeFragmented(msgClientHello.MessageKind(), msgClientHello.MessageName(), addr, fragment.Header)
 				return conn, dtlserrors.WarnClientHelloFragmented
 			}
-			if err := msg.Parse(body); err != nil {
-				rc.opts.Stats.BadMessage(msg.MessageKind(), msg.MessageName(), addr, err)
+			if err := msgClientHello.Parse(fragment.Body); err != nil {
+				rc.opts.Stats.BadMessage(msgClientHello.MessageKind(), msgClientHello.MessageName(), addr, err)
 				return conn, dtlserrors.WarnPlaintextClientHelloParsing
 			}
-			rc.opts.Stats.ClientHelloMessage(handshakeHdr, msg, addr)
-			conn, err = rc.OnClientHello(conn, body, handshakeHdr, msg, addr)
+			rc.opts.Stats.ClientHelloMessage(fragment.Header, msgClientHello, addr)
+			conn, err = rc.OnClientHello(conn, fragment, msgClientHello, addr)
 			if err != nil {
 				return conn, err
 			}
@@ -48,11 +48,11 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 			if conn == nil {
 				return conn, dtlserrors.ErrServerHelloNoActiveConnection
 			}
-			if err = conn.ProcessServerHello(handshakeHdr, body, format.RecordNumberWith(0, hdr.SequenceNumber)); err != nil {
+			if err = conn.ProcessServerHello(fragment, format.RecordNumberWith(0, hdr.SequenceNumber)); err != nil {
 				return conn, err
 			}
 		default:
-			rc.opts.Stats.MustBeEncrypted("handshake", handshake.MsgTypeToName(handshakeHdr.MsgType), addr, handshakeHdr)
+			rc.opts.Stats.MustBeEncrypted("handshake", handshake.MsgTypeToName(fragment.Header.MsgType), addr, fragment.Header)
 			// we can continue to the next message, but state machine will be broken
 			return conn, dtlserrors.WarnHandshakeMessageMustBeEncrypted
 		}

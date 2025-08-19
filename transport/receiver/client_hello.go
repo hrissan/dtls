@@ -13,33 +13,33 @@ import (
 	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
-func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, messageBody []byte, handshakeHdr handshake.FragmentHeader, msg handshake.MsgClientHello, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, fragment handshake.Fragment, msgClientHello handshake.MsgClientHello, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
 	if !rc.opts.RoleServer {
 		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
 		return conn, dtlserrors.ErrClientHelloReceivedByClient
 	}
 
-	if err := IsSupportedClientHello(&msg); err != nil {
-		rc.opts.Stats.ErrorClientHelloUnsupportedParams(handshakeHdr, msg, addr, err)
+	if err := IsSupportedClientHello(&msgClientHello); err != nil {
+		rc.opts.Stats.ErrorClientHelloUnsupportedParams(fragment.Header, msgClientHello, addr, err)
 		return conn, err
 	}
 	// ClientHello is stateless, so we cannot check record sequence number.
 	// If client follows protocol and sends the same client hello,
 	// we will reply with the same server hello.
 	// so, setting record sequence number to 0 equals to retransmission of the same message
-	if !msg.Extensions.CookieSet {
-		if handshakeHdr.MsgSeq != 0 {
-			rc.opts.Stats.ErrorClientHelloUnsupportedParams(handshakeHdr, msg, addr, ErrClientHelloWithoutCookieMsgSeqNum)
+	if !msgClientHello.Extensions.CookieSet {
+		if fragment.Header.MsgSeq != 0 {
+			rc.opts.Stats.ErrorClientHelloUnsupportedParams(fragment.Header, msgClientHello, addr, ErrClientHelloWithoutCookieMsgSeqNum)
 			return conn, dtlserrors.ErrClientHelloUnsupportedParams
 		}
 		transcriptHasher := sha256.New()
-		handshakeHdr.AddToHash(transcriptHasher)
-		_, _ = transcriptHasher.Write(messageBody)
+		fragment.Header.AddToHash(transcriptHasher)
+		_, _ = transcriptHasher.Write(fragment.Body)
 
 		var initialHelloTranscriptHash [constants.MaxHashLength]byte
 		transcriptHasher.Sum(initialHelloTranscriptHash[:0])
 
-		keyShareSet := !msg.Extensions.KeyShare.X25519PublicKeySet
+		keyShareSet := !msgClientHello.Extensions.KeyShare.X25519PublicKeySet
 		ck := rc.cookieState.CreateCookie(initialHelloTranscriptHash, keyShareSet, addr, time.Now())
 		rc.opts.Stats.CookieCreated(addr)
 
@@ -56,15 +56,15 @@ func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, messageBody
 		rc.snd.SendHelloRetryDatagram(hrrStorage, len(hrrDatagram), addr)
 		return conn, nil
 	}
-	if handshakeHdr.MsgSeq != 1 {
-		rc.opts.Stats.ErrorClientHelloUnsupportedParams(handshakeHdr, msg, addr, ErrClientHelloWithCookieMsgSeqNum)
+	if fragment.Header.MsgSeq != 1 {
+		rc.opts.Stats.ErrorClientHelloUnsupportedParams(fragment.Header, msgClientHello, addr, ErrClientHelloWithCookieMsgSeqNum)
 		return conn, dtlserrors.ErrClientHelloUnsupportedParams
 	}
-	if !msg.Extensions.KeyShare.X25519PublicKeySet {
+	if !msgClientHello.Extensions.KeyShare.X25519PublicKeySet {
 		// we asked for this key_share above, but client disrespected our demand
 		return conn, dtlserrors.ErrParamsSupportKeyShare
 	}
-	valid, age, initialHelloTranscriptHash, keyShareSet := rc.cookieState.IsCookieValid(addr, msg.Extensions.Cookie, time.Now())
+	valid, age, initialHelloTranscriptHash, keyShareSet := rc.cookieState.IsCookieValid(addr, msgClientHello.Extensions.Cookie, time.Now())
 	if !valid {
 		rc.opts.Stats.CookieChecked(false, age, addr)
 		return conn, dtlserrors.ErrClientHelloCookieInvalid
@@ -84,7 +84,7 @@ func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, messageBody
 		rc.connections[addr] = conn
 		rc.handMu.Unlock()
 	}
-	if err := conn.ReceivedClientHello2(rc.opts, messageBody, handshakeHdr, msg, initialHelloTranscriptHash, keyShareSet); err != nil {
+	if err := conn.ReceivedClientHello2(rc.opts, fragment, msgClientHello, initialHelloTranscriptHash, keyShareSet); err != nil {
 		return conn, err // TODO - close connection here
 	}
 	rc.snd.RegisterConnectionForSend(conn)

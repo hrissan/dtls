@@ -16,8 +16,8 @@ import (
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
-func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions, messageBody []byte,
-	handshakeHdr handshake.FragmentHeader, msg handshake.MsgClientHello,
+func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
+	fragment handshake.Fragment, msgClientHello handshake.MsgClientHello,
 	initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error {
 
 	conn.mu.Lock()
@@ -37,7 +37,7 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 	// TODO - check if the same handshake by storing (age, initialHelloTranscriptHash, keyShareSet)
 	{
 		var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte
-		hrrDatagram := GenerateStatelessHRR(hrrDatagramStorage[:0], msg.Extensions.Cookie, keyShareSet)
+		hrrDatagram := GenerateStatelessHRR(hrrDatagramStorage[:0], msgClientHello.Extensions.Cookie, keyShareSet)
 		if len(hrrDatagram) > len(hrrDatagramStorage) {
 			panic("Large HRR datagram must not be generated")
 		}
@@ -53,8 +53,8 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 		addMessageDataTranscript(hctx.TranscriptHasher, hrrDatagram[13:]) // skip record header
 		debugPrintSum(hctx.TranscriptHasher)
 		// then add second client hello
-		handshakeHdr.AddToHash(hctx.TranscriptHasher)
-		_, _ = hctx.TranscriptHasher.Write(messageBody)
+		fragment.Header.AddToHash(hctx.TranscriptHasher)
+		_, _ = hctx.TranscriptHasher.Write(fragment.Body)
 		debugPrintSum(hctx.TranscriptHasher)
 	}
 	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", keyShareSet, initialHelloTranscriptHash)
@@ -84,7 +84,7 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
 	// TODO - move to calculator goroutine
-	remotePublic, err := ecdh.X25519().NewPublicKey(msg.Extensions.KeyShare.X25519PublicKey[:])
+	remotePublic, err := ecdh.X25519().NewPublicKey(msgClientHello.Extensions.KeyShare.X25519PublicKey[:])
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}

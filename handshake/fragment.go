@@ -50,17 +50,6 @@ func (hdr *FragmentHeader) Parse(record []byte) error {
 	return nil
 }
 
-func (hdr *FragmentHeader) ParseWithBody(record []byte) (n int, body []byte, err error) {
-	if err := hdr.Parse(record); err != nil {
-		return 0, nil, err
-	}
-	endOffset := FragmentHeaderSize + int(hdr.FragmentLength)
-	if len(record) < endOffset {
-		return 0, nil, ErrHandshakeMsgTooShort
-	}
-	return endOffset, record[FragmentHeaderSize:endOffset], nil
-}
-
 func (hdr *FragmentHeader) Write(datagram []byte) []byte {
 	datagram = append(datagram, byte(hdr.MsgType))
 	datagram = format.AppendUint24(datagram, hdr.Length)
@@ -68,4 +57,16 @@ func (hdr *FragmentHeader) Write(datagram []byte) []byte {
 	datagram = format.AppendUint24(datagram, hdr.FragmentOffset)
 	datagram = format.AppendUint24(datagram, hdr.FragmentLength)
 	return datagram
+}
+
+func (fragment *Fragment) Parse(record []byte) (n int, err error) {
+	if err := fragment.Header.Parse(record); err != nil {
+		return 0, err
+	}
+	endOffset := FragmentHeaderSize + int(fragment.Header.FragmentLength)
+	if len(record) < endOffset {
+		return 0, ErrHandshakeMsgTooShort
+	}
+	fragment.Body = record[FragmentHeaderSize:endOffset]
+	return endOffset, nil
 }

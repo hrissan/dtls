@@ -5,6 +5,7 @@ import (
 
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/handshake"
 	"github.com/hrissan/tinydtls/replay"
 )
 
@@ -66,11 +67,11 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 	//}
 	if conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == format.RecordNumber{}) {
 		msgBody := make([]byte, 0, 1) // must be stack-allocated
-		msgKeyUpdate := format.MsgKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
+		msgKeyUpdate := handshake.MsgKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
 		msgBody = msgKeyUpdate.Write(msgBody)
 		lenBody := uint32(len(msgBody))
 		msg := HandshakeMsg{
-			HandshakeType: format.HandshakeTypeKeyUpdate,
+			HandshakeType: handshake.HandshakeTypeKeyUpdate,
 			MessageSeq:    conn.sendKeyUpdateMessageSeq,
 			Body:          msgBody,
 		}

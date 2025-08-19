@@ -11,12 +11,13 @@ import (
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/handshake"
 	"github.com/hrissan/tinydtls/signature"
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
 func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions, messageBody []byte,
-	handshakeHdr format.HandshakeMsgFragmentHeader, msg format.MsgClientHello,
+	handshakeHdr handshake.HandshakeMsgFragmentHeader, msg handshake.MsgClientHello,
 	initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error {
 
 	conn.mu.Lock()
@@ -44,7 +45,7 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 		log.Printf("serverHRRHash2: %x\n", hrrHash[:])
 
 		// [rfc8446:4.4.1] replace initial client hello message with its hash if HRR was used
-		syntheticHashData := []byte{format.HandshakeTypeMessageHash, 0, 0, sha256.Size}
+		syntheticHashData := []byte{handshake.HandshakeTypeMessageHash, 0, 0, sha256.Size}
 		_, _ = hctx.TranscriptHasher.Write(syntheticHashData)
 		_, _ = hctx.TranscriptHasher.Write(initialHelloTranscriptHash[:sha256.Size])
 		debugPrintSum(hctx.TranscriptHasher)
@@ -60,20 +61,20 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 	opts.Rnd.ReadMust(hctx.LocalRandom[:])
 	hctx.ComputeKeyShare(opts.Rnd)
 
-	serverHello := format.MsgServerHello{
+	serverHello := handshake.MsgServerHello{
 		Random:      hctx.LocalRandom,
-		CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
+		CipherSuite: handshake.CypherSuite_TLS_AES_128_GCM_SHA256,
 	}
 	serverHello.Extensions.SupportedVersionsSet = true
-	serverHello.Extensions.SupportedVersions.SelectedVersion = format.DTLS_VERSION_13
+	serverHello.Extensions.SupportedVersions.SelectedVersion = handshake.DTLS_VERSION_13
 	serverHello.Extensions.KeyShareSet = true
 	serverHello.Extensions.KeyShare.X25519PublicKeySet = true
 	copy(serverHello.Extensions.KeyShare.X25519PublicKey[:], hctx.X25519Secret.PublicKey().Bytes())
 	// TODO - get body from the rope
 	serverHelloBody := serverHello.Write(nil)
-	serverHelloMessage := format.MessageHandshakeFragment{
-		Header: format.HandshakeMsgFragmentHeader{
-			HandshakeType: format.HandshakeTypeServerHello,
+	serverHelloMessage := handshake.MessageHandshakeFragment{
+		Header: handshake.HandshakeMsgFragmentHeader{
+			HandshakeType: handshake.HandshakeTypeServerHello,
 			Length:        uint32(len(serverHelloBody)),
 		},
 		Body: serverHelloBody,
@@ -129,15 +130,15 @@ func addMessageDataTranscript(transcriptHasher hash.Hash, messageData []byte) {
 // we must generate the same server hello, because we are stateless, but this message is in transcript
 // TODO - pass selected parameters here from receiver
 func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) []byte {
-	helloRetryRequest := format.MsgServerHello{
-		CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
+	helloRetryRequest := handshake.MsgServerHello{
+		CipherSuite: handshake.CypherSuite_TLS_AES_128_GCM_SHA256,
 	}
 	helloRetryRequest.SetHelloRetryRequest()
 	helloRetryRequest.Extensions.SupportedVersionsSet = true
-	helloRetryRequest.Extensions.SupportedVersions.SelectedVersion = format.DTLS_VERSION_13
+	helloRetryRequest.Extensions.SupportedVersions.SelectedVersion = handshake.DTLS_VERSION_13
 	if keyShareSet {
 		helloRetryRequest.Extensions.KeyShareSet = true
-		helloRetryRequest.Extensions.KeyShare.KeyShareHRRSelectedGroup = format.SupportedGroup_X25519
+		helloRetryRequest.Extensions.KeyShare.KeyShareHRRSelectedGroup = handshake.SupportedGroup_X25519
 	}
 	helloRetryRequest.Extensions.CookieSet = true
 	helloRetryRequest.Extensions.Cookie = ck
@@ -145,10 +146,10 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 		ContentType:    format.PlaintextContentTypeHandshake,
 		SequenceNumber: 0,
 	}
-	msgHeader := format.HandshakeMsgFragmentHeader{
-		HandshakeType: format.HandshakeTypeServerHello,
+	msgHeader := handshake.HandshakeMsgFragmentHeader{
+		HandshakeType: handshake.HandshakeTypeServerHello,
 		Length:        0,
-		FragmentInfo: format.FragmentInfo{
+		FragmentInfo: handshake.FragmentInfo{
 			MsgSeq:         0,
 			FragmentOffset: 0,
 			FragmentLength: 0,
@@ -169,8 +170,8 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 	return datagram
 }
 
-func generateEncryptedExtensions() format.MessageHandshakeFragment {
-	ee := format.ExtensionsSet{
+func generateEncryptedExtensions() handshake.MessageHandshakeFragment {
+	ee := handshake.ExtensionsSet{
 		SupportedGroupsSet: true,
 	}
 	ee.SupportedGroups.SECP256R1 = true
@@ -179,35 +180,35 @@ func generateEncryptedExtensions() format.MessageHandshakeFragment {
 	ee.SupportedGroups.X25519 = true
 
 	messageBody := ee.Write(nil, false, false, false) // TODO - reuse message bodies in a rope
-	return format.MessageHandshakeFragment{
-		Header: format.HandshakeMsgFragmentHeader{
-			HandshakeType: format.HandshakeTypeEncryptedExtensions,
+	return handshake.MessageHandshakeFragment{
+		Header: handshake.HandshakeMsgFragmentHeader{
+			HandshakeType: handshake.HandshakeTypeEncryptedExtensions,
 			Length:        uint32(len(messageBody)),
 		},
 		Body: messageBody,
 	}
 }
 
-func generateServerCertificate(opts *options.TransportOptions) format.MessageHandshakeFragment {
-	msg := format.MsgCertificate{
+func generateServerCertificate(opts *options.TransportOptions) handshake.MessageHandshakeFragment {
+	msg := handshake.MsgCertificate{
 		CertificatesLength: len(opts.ServerCertificate.Certificate),
 	}
 	for i, certData := range opts.ServerCertificate.Certificate {
 		msg.Certificates[i].CertData = certData // those slices are not retained beyond this func
 	}
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
-	return format.MessageHandshakeFragment{
-		Header: format.HandshakeMsgFragmentHeader{
-			HandshakeType: format.HandshakeTypeCertificate,
+	return handshake.MessageHandshakeFragment{
+		Header: handshake.HandshakeMsgFragmentHeader{
+			HandshakeType: handshake.HandshakeTypeCertificate,
 			Length:        uint32(len(messageBody)),
 		},
 		Body: messageBody,
 	}
 }
 
-func generateServerCertificateVerify(opts *options.TransportOptions, hctx *HandshakeConnection) (format.MessageHandshakeFragment, error) {
-	msg := format.MsgCertificateVerify{
-		SignatureScheme: format.SignatureAlgorithm_RSA_PSS_RSAE_SHA256,
+func generateServerCertificateVerify(opts *options.TransportOptions, hctx *HandshakeConnection) (handshake.MessageHandshakeFragment, error) {
+	msg := handshake.MsgCertificateVerify{
+		SignatureScheme: handshake.SignatureAlgorithm_RSA_PSS_RSAE_SHA256,
 	}
 
 	// [rfc8446:4.4.3] - certificate verification
@@ -221,14 +222,14 @@ func generateServerCertificateVerify(opts *options.TransportOptions, hctx *Hands
 	sig, err := signature.CreateSignature_RSA_PSS_RSAE_SHA256(opts.Rnd, privateRsa, sigMessageHash)
 	if err != nil {
 		log.Printf("create signature error: %v", err)
-		return format.MessageHandshakeFragment{}, dtlserrors.ErrCertificateVerifyMessageSignature
+		return handshake.MessageHandshakeFragment{}, dtlserrors.ErrCertificateVerifyMessageSignature
 	}
 	msg.Signature = sig
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
 
-	return format.MessageHandshakeFragment{
-		Header: format.HandshakeMsgFragmentHeader{
-			HandshakeType: format.HandshakeTypeCertificateVerify,
+	return handshake.MessageHandshakeFragment{
+		Header: handshake.HandshakeMsgFragmentHeader{
+			HandshakeType: handshake.HandshakeTypeCertificateVerify,
 			Length:        uint32(len(messageBody)),
 		},
 		Body: messageBody,

@@ -1,8 +1,10 @@
-package format
+package handshake
 
 import (
 	"encoding/binary"
 	"errors"
+
+	"github.com/hrissan/tinydtls/format"
 )
 
 var ErrServerHelloLegacyVersion = errors.New("server hello wrong legacy version")
@@ -31,29 +33,29 @@ func (msg *MsgServerHello) IsHelloRetryRequest() bool {
 
 func (msg *MsgServerHello) Parse(body []byte) (err error) {
 	offset := 0
-	if offset, err = ParserReadUint16Const(body, offset, 0xFEFD, ErrServerHelloLegacyVersion); err != nil {
+	if offset, err = format.ParserReadUint16Const(body, offset, 0xFEFD, ErrServerHelloLegacyVersion); err != nil {
 		return err
 	}
-	if offset, err = ParserReadFixedBytes(body, offset, msg.Random[:]); err != nil {
+	if offset, err = format.ParserReadFixedBytes(body, offset, msg.Random[:]); err != nil {
 		return err
 	}
-	if offset, err = ParserReadByteConst(body, offset, 0, ErrServerHelloLegacySession); err != nil {
+	if offset, err = format.ParserReadByteConst(body, offset, 0, ErrServerHelloLegacySession); err != nil {
 		return err
 	}
-	if offset, msg.CipherSuite, err = ParserReadUint16(body, offset); err != nil {
+	if offset, msg.CipherSuite, err = format.ParserReadUint16(body, offset); err != nil {
 		return err
 	}
-	if offset, err = ParserReadByteConst(body, offset, 0, ErrServerHelloLegacyCompressionMethod); err != nil {
+	if offset, err = format.ParserReadByteConst(body, offset, 0, ErrServerHelloLegacyCompressionMethod); err != nil {
 		return err
 	}
 	var extensionsBody []byte
-	if offset, extensionsBody, err = ParserReadUint16Length(body, offset); err != nil {
+	if offset, extensionsBody, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
 	if err = msg.Extensions.Parse(extensionsBody, false, true, msg.IsHelloRetryRequest()); err != nil {
 		return err
 	}
-	return ParserReadFinish(body, offset)
+	return format.ParserReadFinish(body, offset)
 }
 
 func (msg *MsgServerHello) Write(body []byte) []byte {
@@ -62,8 +64,8 @@ func (msg *MsgServerHello) Write(body []byte) []byte {
 	body = append(body, 0) // legacy_session_id
 	body = binary.BigEndian.AppendUint16(body, msg.CipherSuite)
 	body = append(body, 0) // legacy_compression_methods
-	body, mark := MarkUint16Offset(body)
+	body, mark := format.MarkUint16Offset(body)
 	body = msg.Extensions.WriteInside(body, false, true, msg.IsHelloRetryRequest())
-	FillUint16Offset(body, mark)
+	format.FillUint16Offset(body, mark)
 	return body
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/handshake"
 )
 
 type HandshakeConnection struct {
@@ -42,7 +43,7 @@ type HandshakeConnection struct {
 
 	TranscriptHasher hash.Hash // when messages are added to messages, they are also added to TranscriptHasher
 
-	certificateChain format.MsgCertificate
+	certificateChain handshake.MsgCertificate
 }
 
 func NewHandshakeConnection(hasher hash.Hash) *HandshakeConnection {
@@ -76,7 +77,7 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 	return true
 }
 
-func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr format.HandshakeMsgFragmentHeader, body []byte, rn format.RecordNumber) error {
+func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr handshake.HandshakeMsgFragmentHeader, body []byte, rn format.RecordNumber) error {
 	if handshakeHdr.HandshakeType == 0 { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}
@@ -143,10 +144,10 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 			return nil
 		}
 		body := first.Msg.Body
-		handshakeHdr := format.HandshakeMsgFragmentHeader{
+		handshakeHdr := handshake.HandshakeMsgFragmentHeader{
 			HandshakeType: first.Msg.HandshakeType,
 			Length:        uint32(len(body)),
-			FragmentInfo: format.FragmentInfo{
+			FragmentInfo: handshake.FragmentInfo{
 				MsgSeq:         first.Msg.MessageSeq,
 				FragmentOffset: 0,
 				FragmentLength: uint32(len(body)),
@@ -163,7 +164,7 @@ func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) 
 }
 
 // also acks (removes) all previous flights
-func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg format.MessageHandshakeFragment) {
+func (hctx *HandshakeConnection) PushMessage(conn *ConnectionImpl, msg handshake.MessageHandshakeFragment) {
 	if conn.NextMessageSeqSend >= math.MaxUint16 {
 		// TODO - prevent wrapping next message seq
 		// close connection here

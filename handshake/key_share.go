@@ -1,8 +1,10 @@
-package format
+package handshake
 
 import (
 	"encoding/binary"
 	"errors"
+
+	"github.com/hrissan/tinydtls/format"
 )
 
 type KeyShareSet struct {
@@ -21,11 +23,11 @@ var ErrKeyShareSECP256R1PublicKeyWrongFormat = errors.New("secp256r1 public key 
 
 func (msg *KeyShareSet) parseElement(body []byte, offset int) (_ int, err error) {
 	var keyShareType uint16
-	if offset, keyShareType, err = ParserReadUint16(body, offset); err != nil {
+	if offset, keyShareType, err = format.ParserReadUint16(body, offset); err != nil {
 		return offset, err
 	}
 	var keyShareBody []byte
-	if offset, keyShareBody, err = ParserReadUint16Length(body, offset); err != nil {
+	if offset, keyShareBody, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return offset, err
 	}
 	switch keyShareType { // skip unknown
@@ -58,25 +60,25 @@ func (msg *KeyShareSet) parseInside(body []byte) (err error) {
 func (msg *KeyShareSet) Parse(body []byte, isServerHello bool, isHelloRetryRequest bool) (err error) {
 	offset := 0
 	if isHelloRetryRequest {
-		if offset, msg.KeyShareHRRSelectedGroup, err = ParserReadUint16(body, offset); err != nil {
+		if offset, msg.KeyShareHRRSelectedGroup, err = format.ParserReadUint16(body, offset); err != nil {
 			return err
 		}
-		return ParserReadFinish(body, offset)
+		return format.ParserReadFinish(body, offset)
 	}
 	if isServerHello {
 		if offset, err = msg.parseElement(body, offset); err != nil {
 			return err
 		}
-		return ParserReadFinish(body, offset)
+		return format.ParserReadFinish(body, offset)
 	}
 	var insideBody []byte
-	if offset, insideBody, err = ParserReadUint16Length(body, offset); err != nil {
+	if offset, insideBody, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
 	if err := msg.parseInside(insideBody); err != nil {
 		return err
 	}
-	return ParserReadFinish(body, offset)
+	return format.ParserReadFinish(body, offset)
 }
 
 func (msg *KeyShareSet) Write(body []byte, isServerHello bool, isHelloRetryRequest bool) []byte {
@@ -88,35 +90,35 @@ func (msg *KeyShareSet) Write(body []byte, isServerHello bool, isHelloRetryReque
 	if isServerHello {
 		if msg.X25519PublicKeySet {
 			body = binary.BigEndian.AppendUint16(body, SupportedGroup_X25519)
-			body, mark = MarkUint16Offset(body)
+			body, mark = format.MarkUint16Offset(body)
 			body = append(body, msg.X25519PublicKey[:]...)
-			FillUint16Offset(body, mark)
+			format.FillUint16Offset(body, mark)
 			return body
 		}
 		if msg.SECP256R1PublicKeySet {
 			body = binary.BigEndian.AppendUint16(body, SupportedGroup_SECP256R1)
-			body, mark = MarkUint16Offset(body)
+			body, mark = format.MarkUint16Offset(body)
 			body = append(body, 4)
 			body = append(body, msg.SECP256R1PublicKey[:]...)
-			FillUint16Offset(body, mark)
+			format.FillUint16Offset(body, mark)
 			return body
 		}
 		panic("server hello must contain single selected key_share")
 	}
-	body, externalMark := MarkUint16Offset(body)
+	body, externalMark := format.MarkUint16Offset(body)
 	if msg.X25519PublicKeySet {
 		body = binary.BigEndian.AppendUint16(body, SupportedGroup_X25519)
-		body, mark = MarkUint16Offset(body)
+		body, mark = format.MarkUint16Offset(body)
 		body = append(body, msg.X25519PublicKey[:]...)
-		FillUint16Offset(body, mark)
+		format.FillUint16Offset(body, mark)
 	}
 	if msg.SECP256R1PublicKeySet {
 		body = binary.BigEndian.AppendUint16(body, SupportedGroup_SECP256R1)
-		body, mark = MarkUint16Offset(body)
+		body, mark = format.MarkUint16Offset(body)
 		body = append(body, 4)
 		body = append(body, msg.SECP256R1PublicKey[:]...)
-		FillUint16Offset(body, mark)
+		format.FillUint16Offset(body, mark)
 	}
-	FillUint16Offset(body, externalMark)
+	format.FillUint16Offset(body, externalMark)
 	return body
 }

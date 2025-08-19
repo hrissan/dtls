@@ -1,6 +1,10 @@
-package format
+package handshake
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"github.com/hrissan/tinydtls/format"
+)
 
 const (
 	SupportedGroup_X25519    = 0x001D
@@ -25,7 +29,7 @@ func (msg *SupportedGroupsSet) parseInside(body []byte) (err error) {
 	offset := 0
 	for offset < len(body) {
 		var version uint16
-		if offset, version, err = ParserReadUint16(body, offset); err != nil {
+		if offset, version, err = format.ParserReadUint16(body, offset); err != nil {
 			return err
 		}
 		switch version { // skip unknown
@@ -47,17 +51,17 @@ func (msg *SupportedGroupsSet) parseInside(body []byte) (err error) {
 func (msg *SupportedGroupsSet) Parse(body []byte) (err error) {
 	offset := 0
 	var insideBody []byte
-	if offset, insideBody, err = ParserReadUint16Length(body, offset); err != nil {
+	if offset, insideBody, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
 	if err := msg.parseInside(insideBody); err != nil {
 		return err
 	}
-	return ParserReadFinish(body, offset)
+	return format.ParserReadFinish(body, offset)
 }
 
 func (msg *SupportedGroupsSet) Write(body []byte) []byte {
-	body, mark := MarkUint16Offset(body)
+	body, mark := format.MarkUint16Offset(body)
 	if msg.X25519 {
 		body = binary.BigEndian.AppendUint16(body, SupportedGroup_X25519)
 	}
@@ -73,6 +77,6 @@ func (msg *SupportedGroupsSet) Write(body []byte) []byte {
 	if msg.X448 {
 		body = binary.BigEndian.AppendUint16(body, SupportedGroup_X448)
 	}
-	FillUint16Offset(body, mark)
+	format.FillUint16Offset(body, mark)
 	return body
 }

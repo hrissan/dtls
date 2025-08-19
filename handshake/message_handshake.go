@@ -1,9 +1,11 @@
-package format
+package handshake
 
 import (
 	"encoding/binary"
 	"errors"
 	"hash"
+
+	"github.com/hrissan/tinydtls/format"
 )
 
 var ErrHandshakeMsgTooShort = errors.New("handshake message too short")
@@ -112,9 +114,9 @@ func (hdr *HandshakeMsgFragmentHeader) ParseWithBody(record []byte) (n int, body
 
 func (hdr *HandshakeMsgFragmentHeader) Write(datagram []byte) []byte {
 	datagram = append(datagram, hdr.HandshakeType)
-	datagram = AppendUint24(datagram, hdr.Length)
+	datagram = format.AppendUint24(datagram, hdr.Length)
 	datagram = binary.BigEndian.AppendUint16(datagram, hdr.MsgSeq)
-	datagram = AppendUint24(datagram, hdr.FragmentOffset)
-	datagram = AppendUint24(datagram, hdr.FragmentLength)
+	datagram = format.AppendUint24(datagram, hdr.FragmentOffset)
+	datagram = format.AppendUint24(datagram, hdr.FragmentLength)
 	return datagram
 }

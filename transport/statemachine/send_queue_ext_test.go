@@ -20,7 +20,7 @@ import (
 //BenchmarkSendQueue_AckLinear256-16    	 9869287	       122.5 ns/op
 //BenchmarkSendQueue_AckLog256-16       	38059436	        31.12 ns/op
 
-func findSentRecordIndexExt2(elements []recordFragmentRelation, sentRecords *circular.BufferExt[recordFragmentRelation], rn format.RecordNumber) *format.FragmentInfo {
+func findSentRecordIndexExt2(elements []recordFragmentRelation, sentRecords *circular.BufferExt[recordFragmentRelation], rn format.RecordNumber) *handshake.FragmentInfo {
 	s1, s2 := sentRecords.Slices(elements)
 
 	if ind, ok := slices.BinarySearchFunc(s1, rn, relationPred); ok {

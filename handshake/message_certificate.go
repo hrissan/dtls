@@ -1,9 +1,10 @@
-package format
+package handshake
 
 import (
 	"errors"
 
 	"github.com/hrissan/tinydtls/constants"
+	"github.com/hrissan/tinydtls/format"
 )
 
 var ErrCertificateChainTooLong = errors.New("certificate chain is too long")
@@ -27,11 +28,11 @@ func (msg *MsgCertificate) parseCertificates(body []byte) (err error) {
 			return ErrCertificateChainTooLong
 		}
 		var certData []byte
-		if offset, certData, err = ParserReadUint24Length(body, offset); err != nil {
+		if offset, certData, err = format.ParserReadUint24Length(body, offset); err != nil {
 			return err
 		}
 		var externsionData []byte
-		if offset, externsionData, err = ParserReadUint16Length(body, offset); err != nil {
+		if offset, externsionData, err = format.ParserReadUint16Length(body, offset); err != nil {
 			return err
 		}
 		// TODO - use rope here
@@ -45,35 +46,35 @@ func (msg *MsgCertificate) parseCertificates(body []byte) (err error) {
 func (msg *MsgCertificate) Parse(body []byte) (err error) {
 	offset := 0
 	var requestContextBody []byte
-	if offset, requestContextBody, err = ParserReadByteLength(body, offset); err != nil {
+	if offset, requestContextBody, err = format.ParserReadByteLength(body, offset); err != nil {
 		return err
 	}
 	msg.RequestContextLength = len(requestContextBody)
 	copy(msg.RequestContext[:], requestContextBody)
 	var certificatesBody []byte
-	if offset, certificatesBody, err = ParserReadUint24Length(body, offset); err != nil {
+	if offset, certificatesBody, err = format.ParserReadUint24Length(body, offset); err != nil {
 		return err
 	}
 	if err = msg.parseCertificates(certificatesBody); err != nil {
 		return err
 	}
-	return ParserReadFinish(body, offset)
+	return format.ParserReadFinish(body, offset)
 }
 
 func (msg *MsgCertificate) Write(body []byte) []byte {
-	body, mark := MarkByteOffset(body)
+	body, mark := format.MarkByteOffset(body)
 	body = append(body, msg.RequestContext[:msg.RequestContextLength]...)
-	FillByteOffset(body, mark)
-	body, mark = MarkUint24Offset(body)
+	format.FillByteOffset(body, mark)
+	body, mark = format.MarkUint24Offset(body)
 	for _, c := range msg.Certificates[:msg.CertificatesLength] {
 		var insideMark int
-		body, insideMark = MarkUint24Offset(body)
+		body, insideMark = format.MarkUint24Offset(body)
 		body = append(body, c.CertData...)
-		FillUint24Offset(body, insideMark)
-		body, insideMark = MarkUint16Offset(body)
+		format.FillUint24Offset(body, insideMark)
+		body, insideMark = format.MarkUint16Offset(body)
 		body = append(body, c.ExtenstionsData...)
-		FillUint16Offset(body, insideMark)
+		format.FillUint16Offset(body, insideMark)
 	}
-	FillUint24Offset(body, mark)
+	format.FillUint24Offset(body, mark)
 	return body
 }

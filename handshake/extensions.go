@@ -1,4 +1,4 @@
-package format
+package handshake
 
 import (
 	"encoding/binary"
@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/hrissan/tinydtls/cookie"
+	"github.com/hrissan/tinydtls/format"
 )
 
 const (
@@ -46,13 +47,13 @@ type ExtensionsSet struct {
 func (msg *ExtensionsSet) parseCookie(body []byte) (err error) {
 	offset := 0
 	var insideBody []byte
-	if offset, insideBody, err = ParserReadUint16Length(body, offset); err != nil {
+	if offset, insideBody, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
 	if err := msg.Cookie.SetValue(insideBody); err != nil {
 		return err
 	}
-	return ParserReadFinish(body, offset)
+	return format.ParserReadFinish(body, offset)
 }
 
 // TODO - rename to parseInside
@@ -60,11 +61,11 @@ func (msg *ExtensionsSet) Parse(body []byte, isNewSessionTicket bool, isServerHe
 	offset := 0
 	for offset < len(body) {
 		var extensionType uint16
-		if offset, extensionType, err = ParserReadUint16(body, offset); err != nil {
+		if offset, extensionType, err = format.ParserReadUint16(body, offset); err != nil {
 			return err
 		}
 		var extensionBody []byte
-		if offset, extensionBody, err = ParserReadUint16Length(body, offset); err != nil {
+		if offset, extensionBody, err = format.ParserReadUint16Length(body, offset); err != nil {
 			return err
 		}
 		switch extensionType { // skip unknown/not needed
@@ -113,71 +114,71 @@ func (msg *ExtensionsSet) Parse(body []byte, isNewSessionTicket bool, isServerHe
 func (msg *ExtensionsSet) ParseOutside(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) (err error) {
 	offset := 0
 	var extensionsBody []byte
-	if offset, extensionsBody, err = ParserReadUint16Length(body, offset); err != nil {
+	if offset, extensionsBody, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
 	if err = msg.Parse(extensionsBody, isNewSessionTicket, isServerHello, isHelloRetryRequest); err != nil {
 		return err
 	}
-	return ParserReadFinish(body, offset)
+	return format.ParserReadFinish(body, offset)
 }
 
 func (msg *ExtensionsSet) WriteInside(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) []byte {
 	var mark int
 	if msg.SupportedVersionsSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_SUPPORTED_VERSIONS)
-		body, mark = MarkUint16Offset(body)
+		body, mark = format.MarkUint16Offset(body)
 		body = msg.SupportedVersions.Write(body, isServerHello)
-		FillUint16Offset(body, mark)
+		format.FillUint16Offset(body, mark)
 	}
 	if msg.SupportedGroupsSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_SUPPORTED_GROUPS)
-		body, mark = MarkUint16Offset(body)
+		body, mark = format.MarkUint16Offset(body)
 		body = msg.SupportedGroups.Write(body)
-		FillUint16Offset(body, mark)
+		format.FillUint16Offset(body, mark)
 	}
 	if msg.SignatureAlgorithmsSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_SIGNATURE_ALGORITHMS)
-		body, mark = MarkUint16Offset(body)
+		body, mark = format.MarkUint16Offset(body)
 		body = msg.SignatureAlgorithms.Write(body)
-		FillUint16Offset(body, mark)
+		format.FillUint16Offset(body, mark)
 	}
 	if msg.EarlyDataSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_EARLY_DATA)
-		body, mark = MarkUint16Offset(body)
+		body, mark = format.MarkUint16Offset(body)
 		if isNewSessionTicket {
 			body = binary.BigEndian.AppendUint32(body, msg.EarlyDataMaxSize)
 		}
-		FillUint16Offset(body, mark)
+		format.FillUint16Offset(body, mark)
 	}
 	if msg.EncryptThenMacSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_ENCRYPT_THEN_MAC)
-		body, mark = MarkUint16Offset(body)
-		FillUint16Offset(body, mark)
+		body, mark = format.MarkUint16Offset(body)
+		format.FillUint16Offset(body, mark)
 	}
 	if msg.CookieSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_COOKIE)
-		body, mark = MarkUint16Offset(body)
+		body, mark = format.MarkUint16Offset(body)
 		data := msg.Cookie.GetValue()
 		if len(data) >= math.MaxUint16 {
 			panic("cookie length too big")
 		}
 		body = binary.BigEndian.AppendUint16(body, uint16(len(data)))
 		body = append(body, data...)
-		FillUint16Offset(body, mark)
+		format.FillUint16Offset(body, mark)
 	}
 	if msg.KeyShareSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_KEY_SHARE)
-		body, mark = MarkUint16Offset(body)
+		body, mark = format.MarkUint16Offset(body)
 		body = msg.KeyShare.Write(body, isServerHello, isHelloRetryRequest)
-		FillUint16Offset(body, mark)
+		format.FillUint16Offset(body, mark)
 	}
 	return body
 }
 
 func (msg *ExtensionsSet) Write(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) []byte {
-	body, mark := MarkUint16Offset(body)
+	body, mark := format.MarkUint16Offset(body)
 	body = msg.WriteInside(body, isNewSessionTicket, isServerHello, isHelloRetryRequest)
-	FillUint16Offset(body, mark)
+	format.FillUint16Offset(body, mark)
 	return body
 }

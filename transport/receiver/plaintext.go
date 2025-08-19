@@ -5,6 +5,7 @@ import (
 
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/handshake"
 	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
@@ -17,7 +18,7 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
 	for messageOffset < len(recordData) {
 		// log.Printf("dtls: got handshake message %v from %v, message(hex): %x", hdr, addr, messageData)
-		var handshakeHdr format.HandshakeMsgFragmentHeader
+		var handshakeHdr handshake.HandshakeMsgFragmentHeader
 		n, body, err := handshakeHdr.ParseWithBody(recordData[messageOffset:])
 		if err != nil {
 			rc.opts.Stats.BadMessageHeader("handshake", messageOffset, len(recordData), addr, err)
@@ -26,9 +27,9 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 		}
 		messageOffset += n
 		switch handshakeHdr.HandshakeType {
-		case format.HandshakeTypeClientHello:
+		case handshake.HandshakeTypeClientHello:
 			// on error, we could continue to the next fragment, but state machine will be broken, so we do not
-			var msg format.MsgClientHello
+			var msg handshake.MsgClientHello
 			if handshakeHdr.IsFragmented() {
 				rc.opts.Stats.MustNotBeFragmented(msg.MessageKind(), msg.MessageName(), addr, handshakeHdr)
 				return conn, dtlserrors.WarnClientHelloFragmented
@@ -42,7 +43,7 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 			if err != nil {
 				return conn, err
 			}
-		case format.HandshakeTypeServerHello:
+		case handshake.HandshakeTypeServerHello:
 			// on error, we could continue to the next fragment, but state machine will be broken, so we do not
 			if conn == nil {
 				return conn, dtlserrors.ErrServerHelloNoActiveConnection
@@ -51,7 +52,7 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 				return conn, err
 			}
 		default:
-			rc.opts.Stats.MustBeEncrypted("handshake", format.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)
+			rc.opts.Stats.MustBeEncrypted("handshake", handshake.HandshakeTypeToName(handshakeHdr.HandshakeType), addr, handshakeHdr)
 			// we can continue to the next message, but state machine will be broken
 			return conn, dtlserrors.WarnHandshakeMessageMustBeEncrypted
 		}

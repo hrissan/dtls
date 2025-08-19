@@ -1,4 +1,4 @@
-package format
+package handshake
 
 type MessageHandshakeFragment struct {
 	Header HandshakeMsgFragmentHeader

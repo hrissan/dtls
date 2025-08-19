@@ -8,19 +8,20 @@ import (
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/handshake"
 	"github.com/hrissan/tinydtls/keys"
 )
 
-func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg HandshakeMsg, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo format.FragmentInfo, rn format.RecordNumber, err error) {
+func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg HandshakeMsg, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn format.RecordNumber, err error) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
 	if fragmentOffset >= uint32(len(handshakeMsg.Body)) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
 		panic("invariant of send queue fragment offset violated")
 	}
-	msg := format.MessageHandshakeFragment{
-		Header: format.HandshakeMsgFragmentHeader{
+	msg := handshake.MessageHandshakeFragment{
+		Header: handshake.HandshakeMsgFragmentHeader{
 			HandshakeType: handshakeMsg.HandshakeType,
 			Length:        uint32(len(handshakeMsg.Body)),
-			FragmentInfo: format.FragmentInfo{
+			FragmentInfo: handshake.FragmentInfo{
 				MsgSeq:         handshakeMsg.MessageSeq,
 				FragmentOffset: fragmentOffset,
 				FragmentLength: 0,
@@ -28,11 +29,11 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg Handsh
 		},
 		Body: handshakeMsg.Body,
 	}
-	if handshakeMsg.HandshakeType == format.HandshakeTypeClientHello || handshakeMsg.HandshakeType == format.HandshakeTypeServerHello {
+	if handshakeMsg.HandshakeType == handshake.HandshakeTypeClientHello || handshakeMsg.HandshakeType == handshake.HandshakeTypeServerHello {
 		if sendNextSegmentSequenceEpoch0 == nil {
 			panic("the same check for plaintext record should be above")
 		}
-		remainingSpace := len(datagram) - format.MessageHandshakeHeaderSize + format.PlaintextRecordHeaderSize
+		remainingSpace := len(datagram) - handshake.MessageHandshakeHeaderSize + format.PlaintextRecordHeaderSize
 		if remainingSpace <= 0 {
 			return
 		}
@@ -41,15 +42,15 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg Handsh
 			return // do not send tiny records at the end of datagram
 		}
 		da, rn, err := conn.constructPlaintextRecord(datagram[:0], msg, sendNextSegmentSequenceEpoch0)
-		if uint32(len(da)) != msg.Header.FragmentLength+format.MessageHandshakeHeaderSize+format.PlaintextRecordHeaderSize {
+		if uint32(len(da)) != msg.Header.FragmentLength+handshake.MessageHandshakeHeaderSize+format.PlaintextRecordHeaderSize {
 			panic("plaintext handshake record construction length invariant failed")
 		}
 		if err != nil {
-			return 0, format.FragmentInfo{}, format.RecordNumber{}, err
+			return 0, handshake.FragmentInfo{}, format.RecordNumber{}, err
 		}
 		return len(da), msg.Header.FragmentInfo, rn, nil
 	}
-	remainingSpace := len(datagram) - format.MessageHandshakeHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+	remainingSpace := len(datagram) - handshake.MessageHandshakeHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 	if remainingSpace <= 0 {
 		return
 	}
@@ -59,7 +60,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg Handsh
 	}
 	da, rn, err := conn.constructCiphertextRecord(datagram[:0], msg)
 	if err != nil {
-		return 0, format.FragmentInfo{}, format.RecordNumber{}, err
+		return 0, handshake.FragmentInfo{}, format.RecordNumber{}, err
 	}
 	if len(da) > len(datagram) {
 		panic("ciphertext handshake record construction length invariant failed")
@@ -67,7 +68,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg Handsh
 	return len(da), msg.Header.FragmentInfo, rn, nil
 }
 
-func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg format.MessageHandshakeFragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, format.RecordNumber, error) {
+func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg handshake.MessageHandshakeFragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, format.RecordNumber, error) {
 	if *sendNextSegmentSequenceEpoch0 >= math.MaxUint16 {
 		// We arbitrarily decided that we do not need more outgoing sequence numbers for epoch 0
 		// We needed code to prevent overflow below anyway
@@ -79,7 +80,7 @@ func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg format.Mes
 		SequenceNumber: uint64(*sendNextSegmentSequenceEpoch0),
 	}
 	*sendNextSegmentSequenceEpoch0++ // never overflows due to check above
-	data = recordHdr.Write(data, format.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
+	data = recordHdr.Write(data, handshake.MessageHandshakeHeaderSize+int(msg.Header.FragmentLength))
 	data = msg.Header.Write(data)
 	data = append(data, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
 	return data, rn, nil
@@ -96,7 +97,7 @@ func (conn *ConnectionImpl) checkSendLimit() error {
 	return conn.startKeyUpdate(false)
 }
 
-func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg format.MessageHandshakeFragment) ([]byte, format.RecordNumber, error) {
+func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg handshake.MessageHandshakeFragment) ([]byte, format.RecordNumber, error) {
 	if err := conn.checkSendLimit(); err != nil {
 		return nil, format.RecordNumber{}, err
 	}

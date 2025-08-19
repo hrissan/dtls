@@ -1,6 +1,6 @@
 package statemachine
 
-import "github.com/hrissan/tinydtls/format"
+import "github.com/hrissan/tinydtls/handshake"
 
 const (
 	// zero is reserved as a flag for "flight not set"
@@ -17,14 +17,14 @@ const (
 // we'd not be able to clear acks for previous messages.
 func HandshakeTypeToFlight(handshakeType byte, roleServer bool) byte {
 	switch handshakeType {
-	// case format.HandshakeTypeClientHello: - they are processed by separate state machine
-	// case format.HandshakeTypeServerHello: - they are processed by separate state machine
-	case format.HandshakeTypeEncryptedExtensions:
+	// case handshake.HandshakeTypeClientHello: - they are processed by separate state machine
+	// case handshake.HandshakeTypeServerHello: - they are processed by separate state machine
+	case handshake.HandshakeTypeEncryptedExtensions:
 		return MessagesFlightServerHello_Finished
-	case format.HandshakeTypeCertificate:
-	case format.HandshakeTypeCertificateRequest:
-	case format.HandshakeTypeCertificateVerify:
-	case format.HandshakeTypeFinished:
+	case handshake.HandshakeTypeCertificate:
+	case handshake.HandshakeTypeCertificateRequest:
+	case handshake.HandshakeTypeCertificateVerify:
+	case handshake.HandshakeTypeFinished:
 		if roleServer {
 			return MessagesFlightServerHello_Finished
 		}

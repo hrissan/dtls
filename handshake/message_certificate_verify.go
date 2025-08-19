@@ -1,6 +1,10 @@
-package format
+package handshake
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"github.com/hrissan/tinydtls/format"
+)
 
 // TODO - use rope for all variable memory chunks
 // for now after parsing those slices point to datagram, so must be copied or discarded before next datagram is read
@@ -14,19 +18,19 @@ func (msg *MsgCertificateVerify) MessageName() string { return "CertificateVerif
 
 func (msg *MsgCertificateVerify) Parse(body []byte) (err error) {
 	offset := 0
-	if offset, msg.SignatureScheme, err = ParserReadUint16(body, offset); err != nil {
+	if offset, msg.SignatureScheme, err = format.ParserReadUint16(body, offset); err != nil {
 		return err
 	}
-	if offset, msg.Signature, err = ParserReadUint16Length(body, offset); err != nil {
+	if offset, msg.Signature, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
-	return ParserReadFinish(body, offset)
+	return format.ParserReadFinish(body, offset)
 }
 
 func (msg *MsgCertificateVerify) Write(body []byte) []byte {
 	body = binary.BigEndian.AppendUint16(body, msg.SignatureScheme)
-	body, mark := MarkUint16Offset(body)
+	body, mark := format.MarkUint16Offset(body)
 	body = append(body, msg.Signature...)
-	FillUint16Offset(body, mark)
+	format.FillUint16Offset(body, mark)
 	return body
 }

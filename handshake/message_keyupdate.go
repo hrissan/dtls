@@ -1,6 +1,10 @@
-package format
+package handshake
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/hrissan/tinydtls/format"
+)
 
 var ErrKeyUpdateRequestInvalid = errors.New("KeyUpdate request_update invalid value")
 
@@ -14,7 +18,7 @@ func (msg *MsgKeyUpdate) MessageName() string { return "KeyUpdate" }
 func (msg *MsgKeyUpdate) Parse(body []byte) (err error) {
 	var offset int
 	var requestUpdate byte
-	if offset, requestUpdate, err = ParserReadByte(body, offset); err != nil {
+	if offset, requestUpdate, err = format.ParserReadByte(body, offset); err != nil {
 		return err
 	}
 	switch requestUpdate {
@@ -25,7 +29,7 @@ func (msg *MsgKeyUpdate) Parse(body []byte) (err error) {
 	default:
 		return ErrKeyUpdateRequestInvalid
 	}
-	return ParserReadFinish(body, offset)
+	return format.ParserReadFinish(body, offset)
 }
 
 func (msg *MsgKeyUpdate) Write(body []byte) []byte {

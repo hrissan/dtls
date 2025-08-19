@@ -1,6 +1,10 @@
-package format
+package handshake
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"github.com/hrissan/tinydtls/format"
+)
 
 // [rfc8446:4.2.3]
 
@@ -45,7 +49,7 @@ func (msg *SignatureAlgorithmsSet) parseInside(body []byte) (err error) {
 	offset := 0
 	for offset < len(body) {
 		var version uint16
-		if offset, version, err = ParserReadUint16(body, offset); err != nil {
+		if offset, version, err = format.ParserReadUint16(body, offset); err != nil {
 			return err
 		}
 		switch version { // skip unknown
@@ -85,17 +89,17 @@ func (msg *SignatureAlgorithmsSet) parseInside(body []byte) (err error) {
 func (msg *SignatureAlgorithmsSet) Parse(body []byte) (err error) {
 	offset := 0
 	var insideBody []byte
-	if offset, insideBody, err = ParserReadUint16Length(body, offset); err != nil {
+	if offset, insideBody, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
 	if err := msg.parseInside(insideBody); err != nil {
 		return err
 	}
-	return ParserReadFinish(body, offset)
+	return format.ParserReadFinish(body, offset)
 }
 
 func (msg *SignatureAlgorithmsSet) Write(body []byte) []byte {
-	body, mark := MarkUint16Offset(body)
+	body, mark := format.MarkUint16Offset(body)
 	if msg.ECDSA_SECP256r1_SHA256 {
 		body = binary.BigEndian.AppendUint16(body, SignatureAlgorithm_ECDSA_SECP256r1_SHA256)
 	}
@@ -138,6 +142,6 @@ func (msg *SignatureAlgorithmsSet) Write(body []byte) []byte {
 	if msg.RSA_PSS_PSS_SHA256 {
 		body = binary.BigEndian.AppendUint16(body, SignatureAlgorithm_RSA_PSS_PSS_SHA256)
 	}
-	FillUint16Offset(body, mark)
+	format.FillUint16Offset(body, mark)
 	return body
 }

@@ -4,11 +4,12 @@ import (
 	"github.com/hrissan/tinydtls/circular"
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/handshake"
 )
 
 type recordFragmentRelation struct {
 	rn       format.RecordNumber
-	fragment format.FragmentInfo
+	fragment handshake.FragmentInfo
 }
 
 type SendQueue struct {
@@ -45,7 +46,7 @@ func (sq *SendQueue) Clear() {
 	sq.sentRecords.Clear(sq.sentRecordsStorage[:])
 }
 
-func (sq *SendQueue) PushMessage(msg format.MessageHandshakeFragment) {
+func (sq *SendQueue) PushMessage(msg handshake.MessageHandshakeFragment) {
 	if sq.messages.Len() == sq.messages.Cap(sq.messagesStorage[:]) {
 		// must be never, because no flight contains so many messages
 		panic("too many messages are generated at once")
@@ -84,7 +85,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 			sq.fragmentOffset = outgoing.SendOffset
 		}
 		var sendNextSegmentSequenceEpoch0 *uint16
-		if outgoing.Msg.HandshakeType == format.HandshakeTypeClientHello || outgoing.Msg.HandshakeType == format.HandshakeTypeServerHello {
+		if outgoing.Msg.HandshakeType == handshake.HandshakeTypeClientHello || outgoing.Msg.HandshakeType == handshake.HandshakeTypeServerHello {
 			if conn.Handshake != nil {
 				sendNextSegmentSequenceEpoch0 = &conn.Handshake.SendNextSegmentSequenceEpoch0
 			} else {
@@ -123,7 +124,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 	return datagramSize, nil
 }
 
-func findSentRecordIndex(sentRecords *circular.Buffer[recordFragmentRelation], rn format.RecordNumber) *format.FragmentInfo {
+func findSentRecordIndex(sentRecords *circular.Buffer[recordFragmentRelation], rn format.RecordNumber) *handshake.FragmentInfo {
 	for i := 0; i != sentRecords.Len(); i++ {
 		element := sentRecords.IndexRef(i)
 		if element.rn == rn {
@@ -133,7 +134,7 @@ func findSentRecordIndex(sentRecords *circular.Buffer[recordFragmentRelation], r
 	return nil
 }
 
-func findSentRecordIndexExt(elements []recordFragmentRelation, sentRecords *circular.BufferExt[recordFragmentRelation], rn format.RecordNumber) *format.FragmentInfo {
+func findSentRecordIndexExt(elements []recordFragmentRelation, sentRecords *circular.BufferExt[recordFragmentRelation], rn format.RecordNumber) *handshake.FragmentInfo {
 	for i := 0; i != sentRecords.Len(); i++ {
 		element := sentRecords.IndexRef(elements, i)
 		if element.rn == rn {
@@ -149,8 +150,8 @@ func (sq *SendQueue) Ack(conn *ConnectionImpl, rn format.RecordNumber) {
 		return
 	}
 	rec := *fragmentPtr
-	*fragmentPtr = format.FragmentInfo{} // delete in the middle
-	for sq.sentRecords.Len() != 0 && sq.sentRecords.Front(sq.sentRecordsStorage[:]).fragment == (format.FragmentInfo{}) {
+	*fragmentPtr = handshake.FragmentInfo{} // delete in the middle
+	for sq.sentRecords.Len() != 0 && sq.sentRecords.Front(sq.sentRecordsStorage[:]).fragment == (handshake.FragmentInfo{}) {
 		sq.sentRecords.PopFront(sq.sentRecordsStorage[:]) // delete everything from the front
 	}
 	if sq.messages.Len() > int(conn.NextMessageSeqSend) {

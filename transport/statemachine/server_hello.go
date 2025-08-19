@@ -8,9 +8,10 @@ import (
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/handshake"
 )
 
-func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr format.HandshakeMsgFragmentHeader, messageBody []byte, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr handshake.HandshakeMsgFragmentHeader, messageBody []byte, rn format.RecordNumber) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if conn.Handshake == nil {
@@ -25,11 +26,11 @@ func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr format.HandshakeMsgF
 	return conn.Handshake.ReceivedMessage(conn, handshakeHdr, messageBody, rn)
 }
 
-func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr format.HandshakeMsgFragmentHeader, messageBody []byte, serverHello format.MsgServerHello) error {
-	if serverHello.Extensions.SupportedVersions.SelectedVersion != format.DTLS_VERSION_13 {
+func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr handshake.HandshakeMsgFragmentHeader, messageBody []byte, serverHello handshake.MsgServerHello) error {
+	if serverHello.Extensions.SupportedVersions.SelectedVersion != handshake.DTLS_VERSION_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
-	if serverHello.CipherSuite != format.CypherSuite_TLS_AES_128_GCM_SHA256 {
+	if serverHello.CipherSuite != handshake.CypherSuite_TLS_AES_128_GCM_SHA256 {
 		return dtlserrors.ErrParamsSupportCiphersuites
 	}
 	if serverHello.IsHelloRetryRequest() {
@@ -43,7 +44,7 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHd
 		var initialHelloTranscriptHashStorage [constants.MaxHashLength]byte
 		initialHelloTranscriptHash := hctx.TranscriptHasher.Sum(initialHelloTranscriptHashStorage[:0])
 		hctx.TranscriptHasher.Reset()
-		syntheticHashData := []byte{format.HandshakeTypeMessageHash, 0, 0, byte(len(initialHelloTranscriptHash))}
+		syntheticHashData := []byte{handshake.HandshakeTypeMessageHash, 0, 0, byte(len(initialHelloTranscriptHash))}
 		_, _ = hctx.TranscriptHasher.Write(syntheticHashData)
 		_, _ = hctx.TranscriptHasher.Write(initialHelloTranscriptHash)
 
@@ -89,9 +90,9 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHd
 	return nil
 }
 
-func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.Cookie) format.MessageHandshakeFragment {
+func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.Cookie) handshake.MessageHandshakeFragment {
 	// [rfc8446:4.1.2] the client MUST send the same ClientHello without modification, except as follows
-	clientHello := format.MsgClientHello{
+	clientHello := handshake.MsgClientHello{
 		Random: hctx.LocalRandom,
 	}
 	clientHello.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 = true
@@ -136,9 +137,9 @@ func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.C
 	}
 
 	messageBody := clientHello.Write(nil) // TODO - reuse message bodies in a rope
-	return format.MessageHandshakeFragment{
-		Header: format.HandshakeMsgFragmentHeader{
-			HandshakeType: format.HandshakeTypeClientHello,
+	return handshake.MessageHandshakeFragment{
+		Header: handshake.HandshakeMsgFragmentHeader{
+			HandshakeType: handshake.HandshakeTypeClientHello,
 			Length:        uint32(len(messageBody)),
 		},
 		Body: messageBody,

@@ -1,6 +1,10 @@
-package format
+package handshake
 
-import "encoding/binary"
+import (
+	"encoding/binary"
+
+	"github.com/hrissan/tinydtls/format"
+)
 
 const (
 	CypherSuite_TLS_AES_128_GCM_SHA256       = 0x1301
@@ -23,7 +27,7 @@ func (msg *CipherSuitesSet) Parse(body []byte) (err error) {
 	offset := 0
 	for offset < len(body) {
 		var cipherSuite uint16
-		if offset, cipherSuite, err = ParserReadUint16(body, offset); err != nil {
+		if offset, cipherSuite, err = format.ParserReadUint16(body, offset); err != nil {
 			return err
 		}
 		switch cipherSuite { // skip unknown

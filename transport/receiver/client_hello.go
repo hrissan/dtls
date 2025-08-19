@@ -9,11 +9,11 @@ import (
 
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/handshake"
 	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
-func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, messageBody []byte, handshakeHdr format.HandshakeMsgFragmentHeader, msg format.MsgClientHello, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, messageBody []byte, handshakeHdr handshake.HandshakeMsgFragmentHeader, msg handshake.MsgClientHello, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
 	if !rc.opts.RoleServer {
 		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
 		return conn, dtlserrors.ErrClientHelloReceivedByClient
@@ -94,7 +94,7 @@ func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, messageBody
 var ErrClientHelloWithoutCookieMsgSeqNum = errors.New("client hello without cookie must have msg_seq_num 0")
 var ErrClientHelloWithCookieMsgSeqNum = errors.New("client hello with cookie must have msg_seq_num 1")
 
-func IsSupportedClientHello(msg *format.MsgClientHello) error {
+func IsSupportedClientHello(msg *handshake.MsgClientHello) error {
 	if !msg.Extensions.SupportedVersions.DTLS_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}

@@ -26,7 +26,7 @@ func relationPred(relation recordFragmentRelation, rn format.RecordNumber) int {
 	return format.RecordNumberCmp(relation.rn, rn)
 }
 
-func findSentRecordIndex2(sentRecords *circular.Buffer[recordFragmentRelation], rn format.RecordNumber) *format.FragmentInfo {
+func findSentRecordIndex2(sentRecords *circular.Buffer[recordFragmentRelation], rn format.RecordNumber) *handshake.FragmentInfo {
 	s1, s2 := sentRecords.Slices()
 
 	if ind, ok := slices.BinarySearchFunc(s1, rn, relationPred); ok {

@@ -1,4 +1,4 @@
-package format
+package handshake
 
 // TODO - use rope for all variable memory chunks
 type CertificateEntry struct {

@@ -134,11 +134,11 @@ func (conn *ConnectionImpl) constructDatagramAcks(datagram []byte) (int, error) 
 	if acksSize == 0 {
 		return 0, nil
 	}
-	acksSpace := len(datagram) - record.AckRecordHeaderSize - record.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
-	if acksSpace < record.AckRecordNumberSize { // not a single one fits
+	acksSpace := len(datagram) - record.AckHeaderSize - record.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+	if acksSpace < record.AckElementSize { // not a single one fits
 		return 0, nil
 	}
-	acksCount := min(acksSize, acksSpace/record.AckRecordNumberSize)
+	acksCount := min(acksSize, acksSpace/record.AckElementSize)
 	if acksSpace < constants.MinFragmentBodySize && acksCount != acks.GetBitCount() {
 		return 0, nil // do not send tiny records at the end of datagram
 	}

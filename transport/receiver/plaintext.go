@@ -9,7 +9,7 @@ import (
 	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
-func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl, hdr record.Plaintext, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (rc *Receiver) receivedPlaintextHandshake(conn *statemachine.ConnectionImpl, hdr record.Plaintext, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
 	// log.Printf("dtls: got handshake record (plaintext) %d bytes from %v, message(hex): %x", len(recordData), addr, recordData)
 	if len(hdr.Body) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding
@@ -21,7 +21,6 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 		var fragment handshake.Fragment
 		n, err := fragment.Parse(hdr.Body[messageOffset:])
 		if err != nil {
-			rc.opts.Stats.BadMessageHeader("handshake", messageOffset, len(hdr.Body), addr, err)
 			// we cannot continue to the next record.
 			return conn, dtlserrors.WarnPlaintextHandshakeMessageHeaderParsing
 		}
@@ -29,22 +28,15 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 		switch fragment.Header.MsgType {
 		case handshake.MsgTypeClientHello:
 			// on error, we could continue to the next fragment, but state machine will be broken, so we do not
-			var msgClientHello handshake.MsgClientHello
 			if fragment.Header.IsFragmented() {
-				rc.opts.Stats.MustNotBeFragmented(msgClientHello.MessageKind(), msgClientHello.MessageName(), addr, fragment.Header)
 				return conn, dtlserrors.WarnClientHelloFragmented
 			}
-			if err := msgClientHello.Parse(fragment.Body); err != nil {
-				rc.opts.Stats.BadMessage(msgClientHello.MessageKind(), msgClientHello.MessageName(), addr, err)
-				return conn, dtlserrors.WarnPlaintextClientHelloParsing
-			}
-			rc.opts.Stats.ClientHelloMessage(fragment.Header, msgClientHello, addr)
 			msg := handshake.Message{
 				MsgType: fragment.Header.MsgType,
 				MsgSeq:  fragment.Header.MsgSeq,
 				Body:    fragment.Body,
 			}
-			conn, err = rc.OnClientHello(conn, msg, msgClientHello, addr)
+			conn, err = rc.receivedClientHello(conn, msg, addr)
 			if err != nil {
 				return conn, err
 			}

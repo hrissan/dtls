@@ -11,7 +11,7 @@ import (
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
-func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptions, hdr record.Ciphertext) error {
+func (conn *ConnectionImpl) ReceivedCiphertextRecord(opts *options.TransportOptions, hdr record.Ciphertext) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if err := conn.checkReceiveLimits(); err != nil {
@@ -27,18 +27,18 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 	// [rfc9147:4.1]
 	switch contentType {
 	case record.RecordTypeAlert:
-		return conn.ProcessAlert(true, decrypted)
+		return conn.ReceivedAlert(true, decrypted)
 	case record.RecordTypeAck:
-		return conn.ProcessEncryptedAck(opts, decrypted)
+		return conn.ReceivedEncryptedAck(opts, decrypted)
 	case record.RecordApplicationData:
-		return conn.ProcessApplicationData(decrypted)
+		return conn.ReceivedApplicationData(decrypted)
 	case record.RecordTypeHandshake:
-		return conn.ProcessEncryptedHandshakeRecord(opts, decrypted, rn)
+		return conn.ReceivedEncryptedHandshakeRecord(opts, decrypted, rn)
 	}
 	return dtlserrors.ErrUnknownInnerPlaintextRecordType
 }
 
-func (conn *ConnectionImpl) ProcessAlert(encrypted bool, messageData []byte) error {
+func (conn *ConnectionImpl) ReceivedAlert(encrypted bool, messageData []byte) error {
 	// TODO - beware of unencrypted alert!
 	log.Printf("dtls: got alert record (encrypted=%v) %d bytes from %v, message(hex): %x", encrypted, len(messageData), conn.Addr, messageData)
 	// messageData must be 2 bytes, TODO - parse and process alert
@@ -46,7 +46,7 @@ func (conn *ConnectionImpl) ProcessAlert(encrypted bool, messageData []byte) err
 	return nil
 }
 
-func (conn *ConnectionImpl) ProcessApplicationData(messageData []byte) error {
+func (conn *ConnectionImpl) ReceivedApplicationData(messageData []byte) error {
 	log.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q", len(messageData), conn.Addr, messageData)
 	if conn.RoleServer && conn.Handler != nil {
 		// TODO - controller to play with state. Remove!
@@ -68,7 +68,7 @@ func (conn *ConnectionImpl) ProcessApplicationData(messageData []byte) error {
 	return nil
 }
 
-func (conn *ConnectionImpl) ProcessEncryptedHandshakeRecord(opts *options.TransportOptions, recordData []byte, rn record.Number) error {
+func (conn *ConnectionImpl) ReceivedEncryptedHandshakeRecord(opts *options.TransportOptions, recordData []byte, rn record.Number) error {
 	log.Printf("dtls: got handshake record (encrypted) %d bytes from %v, message(hex): %x", len(recordData), conn.Addr, recordData)
 	if len(recordData) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding

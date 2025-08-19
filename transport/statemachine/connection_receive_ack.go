@@ -10,8 +10,8 @@ import (
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
-func (conn *ConnectionImpl) ProcessEncryptedAck(opts *options.TransportOptions, messageData []byte) error {
-	insideBody, err := record.ParseRecordAcks(messageData)
+func (conn *ConnectionImpl) ReceivedEncryptedAck(opts *options.TransportOptions, messageData []byte) error {
+	insideBody, err := record.ParseAcks(messageData)
 	if err != nil {
 		return dtlserrors.ErrEncryptedAckMessageHeaderParsing
 	}
@@ -30,7 +30,7 @@ func (conn *ConnectionImpl) ProcessEncryptedAck(opts *options.TransportOptions, 
 }
 
 func (conn *ConnectionImpl) processAckBody(opts *options.TransportOptions, insideBody []byte) {
-	for ; len(insideBody) >= record.AckRecordNumberSize; insideBody = insideBody[record.AckRecordNumberSize:] {
+	for ; len(insideBody) >= record.AckElementSize; insideBody = insideBody[record.AckElementSize:] {
 		epoch := binary.BigEndian.Uint64(insideBody)
 		seq := binary.BigEndian.Uint64(insideBody[8:])
 		if epoch > math.MaxUint16 {

@@ -84,6 +84,9 @@ var ErrAckRecordMustBeEncrypted = NewWarning(-600, "ack record must always be en
 var ErrUnknownInnerPlaintextRecordType = NewWarning(-602, "unknown inner plaintext record type")
 var ErrHandshakeReecordEmpty = NewWarning(-603, "handshake record must not be empty")
 
+// encryption
+var ErrEpochDoesNotMatch = NewFatal(-300, "received record epoch bitmask does not match current or next epoch")
+
 // handshake protocol
 var WarnHandshakeMessageMustBeEncrypted = NewWarning(-700, "plaintext handshake messages other than ClientHello, ServerHello must be encrypted")
 

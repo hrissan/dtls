@@ -2,7 +2,6 @@ package receiver
 
 import (
 	"crypto/sha256"
-	"errors"
 	"log"
 	"net/netip"
 	"time"
@@ -13,11 +12,16 @@ import (
 	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
-func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, msg handshake.Message, msgClientHello handshake.MsgClientHello, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (rc *Receiver) receivedClientHello(conn *statemachine.ConnectionImpl, msg handshake.Message, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
 	if !rc.opts.RoleServer {
 		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
 		return conn, dtlserrors.ErrClientHelloReceivedByClient
 	}
+	var msgClientHello handshake.MsgClientHello
+	if err := msgClientHello.Parse(msg.Body); err != nil {
+		return conn, dtlserrors.WarnPlaintextClientHelloParsing
+	}
+	// rc.opts.Stats.ClientHelloMessage(msg.Header, msgClientHello, addr)
 
 	if err := IsSupportedClientHello(&msgClientHello); err != nil {
 		return conn, err
@@ -86,9 +90,6 @@ func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, msg handsha
 	rc.snd.RegisterConnectionForSend(conn)
 	return conn, nil
 }
-
-var ErrClientHelloWithoutCookieMsgSeqNum = errors.New("client hello without cookie must have msg_seq_num 0")
-var ErrClientHelloWithCookieMsgSeqNum = errors.New("client hello with cookie must have msg_seq_num 1")
 
 func IsSupportedClientHello(msg *handshake.MsgClientHello) error {
 	if !msg.Extensions.SupportedVersions.DTLS_13 {

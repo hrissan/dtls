@@ -120,7 +120,7 @@ func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 				// Continue - may be there is ClientHello in the next record?
 				continue
 			}
-			err = conn.ProcessCiphertextRecord(rc.opts, hdr)
+			err = conn.ReceivedCiphertextRecord(rc.opts, hdr)
 			if err != nil {
 				return conn, err
 			}
@@ -146,7 +146,7 @@ func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 			switch hdr.ContentType {
 			case record.RecordTypeAlert:
 				if conn != nil { // Will not respond with alert, otherwise endless cycle
-					if err := conn.ProcessAlert(false, hdr.Body); err != nil {
+					if err := conn.ReceivedAlert(false, hdr.Body); err != nil {
 						// Anyone can send garbage, do not change state
 						rc.opts.Stats.Warning(addr, err)
 					}
@@ -155,8 +155,8 @@ func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 				log.Printf("dtls: got ack record (plaintext) %d bytes from %v, message(hex): %x", len(hdr.Body), addr, hdr.Body)
 				// unencrypted acks can only acknowledge unencrypted messaged, so very niche, we simply ignore them
 			case record.RecordTypeHandshake:
-				conn, err = rc.processPlaintextHandshake(conn, hdr, addr)
-				if err != nil {
+				conn, err = rc.receivedPlaintextHandshake(conn, hdr, addr)
+				if err != nil { // we do not believe plaintext, so only warnings
 					rc.opts.Stats.Warning(addr, err)
 				}
 			}

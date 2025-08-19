@@ -15,8 +15,8 @@ type SendQueue struct {
 	// all messages here belong to the same flight during handshake.
 	// if message in the middle is fully acked, it will stay in the buffer until it becomes
 	// head or tail of buffer, only then it is removed.
-	messages        circular.BufferExt[PartialHandshakeMessage]
-	messagesStorage [constants.MaxSendMessagesQueue]PartialHandshakeMessage
+	messages        circular.BufferExt[PartialHandshakeMsg]
+	messagesStorage [constants.MaxSendMessagesQueue]PartialHandshakeMsg
 	// offset in messages of the message we are sending, len(messages) if all sent
 	messageOffset int
 	// offset inside messages[messageOffset] or 0 if messageOffset == len(messages)
@@ -50,8 +50,8 @@ func (sq *SendQueue) PushMessage(msg format.MessageHandshakeFragment) {
 		// must be never, because no flight contains so many messages
 		panic("too many messages are generated at once")
 	}
-	sq.messages.PushBack(sq.messagesStorage[:], PartialHandshakeMessage{
-		Header: MessageHandshake{
+	sq.messages.PushBack(sq.messagesStorage[:], PartialHandshakeMsg{
+		Msg: HandshakeMsg{
 			HandshakeType: msg.Header.HandshakeType,
 			MessageSeq:    msg.Header.MessageSeq,
 		},
@@ -84,7 +84,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 			sq.fragmentOffset = outgoing.SendOffset
 		}
 		var sendNextSegmentSequenceEpoch0 *uint16
-		if outgoing.Header.HandshakeType == format.HandshakeTypeClientHello || outgoing.Header.HandshakeType == format.HandshakeTypeServerHello {
+		if outgoing.Msg.HandshakeType == format.HandshakeTypeClientHello || outgoing.Msg.HandshakeType == format.HandshakeTypeServerHello {
 			if conn.Handshake != nil {
 				sendNextSegmentSequenceEpoch0 = &conn.Handshake.SendNextSegmentSequenceEpoch0
 			} else {
@@ -98,7 +98,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 				panic("invariant violation")
 			}
 			recordSize, fragmentInfo, rn, err := conn.constructRecord(datagram[datagramSize:],
-				outgoing.Header, outgoing.Body,
+				outgoing.Msg, outgoing.Body,
 				sq.fragmentOffset, outgoing.SendEnd-sq.fragmentOffset, sendNextSegmentSequenceEpoch0)
 			if err != nil {
 				return 0, err

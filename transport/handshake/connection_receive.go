@@ -146,7 +146,7 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 }
 
 func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, handshakeHdr format.MessageFragmentHeader, body []byte, rn format.RecordNumber) error {
-	var msg format.MessageKeyUpdate
+	var msg format.MsgKeyUpdate
 	if err := msg.Parse(body); err != nil {
 		return dtlserrors.ErrKeyUpdateMessageParsing
 	}

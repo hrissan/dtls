@@ -16,7 +16,7 @@ import (
 )
 
 func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions, messageBody []byte,
-	handshakeHdr format.MessageFragmentHeader, msg format.ClientHello,
+	handshakeHdr format.MessageFragmentHeader, msg format.MsgClientHello,
 	initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error {
 
 	conn.mu.Lock()
@@ -60,7 +60,7 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 	opts.Rnd.ReadMust(hctx.LocalRandom[:])
 	hctx.ComputeKeyShare(opts.Rnd)
 
-	serverHello := format.ServerHello{
+	serverHello := format.MsgServerHello{
 		Random:      hctx.LocalRandom,
 		CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
 	}
@@ -129,7 +129,7 @@ func addMessageDataTranscript(transcriptHasher hash.Hash, messageData []byte) {
 // we must generate the same server hello, because we are stateless, but this message is in transcript
 // TODO - pass selected parameters here from receiver
 func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) []byte {
-	helloRetryRequest := format.ServerHello{
+	helloRetryRequest := format.MsgServerHello{
 		CipherSuite: format.CypherSuite_TLS_AES_128_GCM_SHA256,
 	}
 	helloRetryRequest.SetHelloRetryRequest()
@@ -189,7 +189,7 @@ func generateEncryptedExtensions() format.MessageHandshakeFragment {
 }
 
 func generateServerCertificate(opts *options.TransportOptions) format.MessageHandshakeFragment {
-	msg := format.MessageCertificate{
+	msg := format.MsgCertificate{
 		CertificatesLength: len(opts.ServerCertificate.Certificate),
 	}
 	for i, certData := range opts.ServerCertificate.Certificate {
@@ -206,7 +206,7 @@ func generateServerCertificate(opts *options.TransportOptions) format.MessageHan
 }
 
 func generateServerCertificateVerify(opts *options.TransportOptions, hctx *HandshakeConnection) (format.MessageHandshakeFragment, error) {
-	msg := format.MessageCertificateVerify{
+	msg := format.MsgCertificateVerify{
 		SignatureScheme: format.SignatureAlgorithm_RSA_PSS_RSAE_SHA256,
 	}
 

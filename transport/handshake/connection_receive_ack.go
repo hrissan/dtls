@@ -11,7 +11,7 @@ import (
 )
 
 func (conn *ConnectionImpl) ProcessEncryptedAck(opts *options.TransportOptions, messageData []byte) error {
-	insideBody, err := format.ParseMessageAcks(messageData)
+	insideBody, err := format.ParseRecordAcks(messageData)
 	if err != nil {
 		return dtlserrors.ErrEncryptedAckMessageHeaderParsing
 	}
@@ -30,7 +30,7 @@ func (conn *ConnectionImpl) ProcessEncryptedAck(opts *options.TransportOptions, 
 }
 
 func (conn *ConnectionImpl) processAckBody(opts *options.TransportOptions, insideBody []byte) {
-	for ; len(insideBody) >= format.MessageAckRecordNumberSize; insideBody = insideBody[format.MessageAckRecordNumberSize:] {
+	for ; len(insideBody) >= format.AckRecordNumberSize; insideBody = insideBody[format.AckRecordNumberSize:] {
 		epoch := binary.BigEndian.Uint64(insideBody)
 		seq := binary.BigEndian.Uint64(insideBody[8:])
 		if epoch > math.MaxUint16 {

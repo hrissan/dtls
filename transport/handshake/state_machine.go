@@ -14,7 +14,7 @@ func (hctx *HandshakeConnection) GenerateFinished(conn *ConnectionImpl) format.M
 
 	mustBeFinished := conn.Keys.Send.ComputeFinished(sha256.New(), hctx.HandshakeTrafficSecretSend[:], finishedTranscriptHash)
 
-	msg := format.MessageFinished{
+	msg := format.MsgFinished{
 		VerifyDataLength: len(mustBeFinished),
 	}
 	copy(msg.VerifyData[:], mustBeFinished)

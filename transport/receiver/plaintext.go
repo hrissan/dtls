@@ -28,7 +28,7 @@ func (rc *Receiver) processPlaintextHandshake(conn *handshake.ConnectionImpl, hd
 		switch handshakeHdr.HandshakeType {
 		case format.HandshakeTypeClientHello:
 			// on error, we could continue to the next fragment, but state machine will be broken, so we do not
-			var msg format.ClientHello
+			var msg format.MsgClientHello
 			if handshakeHdr.IsFragmented() {
 				rc.opts.Stats.MustNotBeFragmented(msg.MessageKind(), msg.MessageName(), addr, handshakeHdr)
 				return conn, dtlserrors.WarnClientHelloFragmented

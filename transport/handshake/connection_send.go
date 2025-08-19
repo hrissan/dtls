@@ -66,11 +66,11 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 	//}
 	if conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == format.RecordNumber{}) {
 		msgBody := make([]byte, 0, 1) // must be stack-allocated
-		msg := format.MessageKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
+		msg := format.MsgKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
 		msgBody = msg.Write(msgBody)
 		lenBody := uint32(len(msgBody))
-		outgoing := PartialHandshakeMessage{
-			Header: MessageHandshake{
+		outgoing := PartialHandshakeMsg{
+			Msg: HandshakeMsg{
 				HandshakeType: format.HandshakeTypeKeyUpdate,
 				MessageSeq:    conn.sendKeyUpdateMessageSeq,
 			},
@@ -79,7 +79,7 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 			SendEnd:    lenBody,
 		}
 		recordSize, fragmentInfo, rn, err := conn.constructRecord(datagram[datagramSize:],
-			outgoing.Header, outgoing.Body,
+			outgoing.Msg, outgoing.Body,
 			0, lenBody, nil)
 		if err != nil {
 			return 0, false, err
@@ -138,11 +138,11 @@ func (conn *ConnectionImpl) constructDatagramAcks(datagram []byte) (int, error) 
 	if acksSize == 0 {
 		return 0, nil
 	}
-	acksSpace := len(datagram) - format.MessageAckHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
-	if acksSpace < format.MessageAckRecordNumberSize { // not a single one fits
+	acksSpace := len(datagram) - format.AckRecordHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+	if acksSpace < format.AckRecordNumberSize { // not a single one fits
 		return 0, nil
 	}
-	acksCount := min(acksSize, acksSpace/format.MessageAckRecordNumberSize)
+	acksCount := min(acksSize, acksSpace/format.AckRecordNumberSize)
 	if acksSpace < constants.MinFragmentBodySize && acksCount != acks.GetBitCount() {
 		return 0, nil // do not send tiny records at the end of datagram
 	}

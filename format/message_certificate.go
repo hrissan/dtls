@@ -8,7 +8,7 @@ import (
 
 var ErrCertificateChainTooLong = errors.New("certificate chain is too long")
 
-type MessageCertificate struct {
+type MsgCertificate struct {
 	// ProtocolVersion is checked but not stored
 	RequestContextLength int
 	RequestContext       [256]byte // always enough
@@ -17,10 +17,10 @@ type MessageCertificate struct {
 	Certificates       [constants.MaxCertificateChainLength]CertificateEntry
 }
 
-func (msg *MessageCertificate) MessageKind() string { return "handshake" }
-func (msg *MessageCertificate) MessageName() string { return "Certificate" }
+func (msg *MsgCertificate) MessageKind() string { return "handshake" }
+func (msg *MsgCertificate) MessageName() string { return "Certificate" }
 
-func (msg *MessageCertificate) parseCertificates(body []byte) (err error) {
+func (msg *MsgCertificate) parseCertificates(body []byte) (err error) {
 	offset := 0
 	for offset < len(body) {
 		if msg.CertificatesLength >= len(msg.Certificates) {
@@ -42,7 +42,7 @@ func (msg *MessageCertificate) parseCertificates(body []byte) (err error) {
 	return nil
 }
 
-func (msg *MessageCertificate) Parse(body []byte) (err error) {
+func (msg *MsgCertificate) Parse(body []byte) (err error) {
 	offset := 0
 	var requestContextBody []byte
 	if offset, requestContextBody, err = ParserReadByteLength(body, offset); err != nil {
@@ -60,7 +60,7 @@ func (msg *MessageCertificate) Parse(body []byte) (err error) {
 	return ParserReadFinish(body, offset)
 }
 
-func (msg *MessageCertificate) Write(body []byte) []byte {
+func (msg *MsgCertificate) Write(body []byte) []byte {
 	body, mark := MarkByteOffset(body)
 	body = append(body, msg.RequestContext[:msg.RequestContextLength]...)
 	FillByteOffset(body, mark)

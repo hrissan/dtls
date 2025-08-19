@@ -4,14 +4,14 @@ import "errors"
 
 var ErrKeyUpdateRequestInvalid = errors.New("KeyUpdate request_update invalid value")
 
-type MessageKeyUpdate struct {
+type MsgKeyUpdate struct {
 	UpdateRequested bool
 }
 
-func (msg *MessageKeyUpdate) MessageKind() string { return "handshake" }
-func (msg *MessageKeyUpdate) MessageName() string { return "KeyUpdate" }
+func (msg *MsgKeyUpdate) MessageKind() string { return "handshake" }
+func (msg *MsgKeyUpdate) MessageName() string { return "KeyUpdate" }
 
-func (msg *MessageKeyUpdate) Parse(body []byte) (err error) {
+func (msg *MsgKeyUpdate) Parse(body []byte) (err error) {
 	var offset int
 	var requestUpdate byte
 	if offset, requestUpdate, err = ParserReadByte(body, offset); err != nil {
@@ -28,7 +28,7 @@ func (msg *MessageKeyUpdate) Parse(body []byte) (err error) {
 	return ParserReadFinish(body, offset)
 }
 
-func (msg *MessageKeyUpdate) Write(body []byte) []byte {
+func (msg *MsgKeyUpdate) Write(body []byte) []byte {
 	if msg.UpdateRequested {
 		return append(body, 1)
 	}

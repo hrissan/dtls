@@ -9,7 +9,7 @@ var ErrClientHelloLegacyVersion = errors.New("client hello wrong legacy version"
 var ErrClientHelloLegacySessionCookie = errors.New("client hello wrong legacy session or cookie")
 var ErrClientHelloLegacyCompressionMethod = errors.New("client hello wrong legacy compression method")
 
-type ClientHello struct {
+type MsgClientHello struct {
 	// ProtocolVersion is checked but not stored
 	Random [32]byte
 	// legacy_session_id is checked but not stored
@@ -19,10 +19,10 @@ type ClientHello struct {
 	Extensions ExtensionsSet
 }
 
-func (msg *ClientHello) MessageKind() string { return "handshake" }
-func (msg *ClientHello) MessageName() string { return "ClientHello" }
+func (msg *MsgClientHello) MessageKind() string { return "handshake" }
+func (msg *MsgClientHello) MessageName() string { return "ClientHello" }
 
-func (msg *ClientHello) Parse(body []byte) (err error) {
+func (msg *MsgClientHello) Parse(body []byte) (err error) {
 	offset := 0
 	if offset, err = ParserReadUint16Const(body, offset, 0xFEFD, ErrClientHelloLegacyVersion); err != nil {
 		return err
@@ -53,7 +53,7 @@ func (msg *ClientHello) Parse(body []byte) (err error) {
 	return ParserReadFinish(body, offset)
 }
 
-func (msg *ClientHello) Write(body []byte) []byte {
+func (msg *MsgClientHello) Write(body []byte) []byte {
 	body = binary.BigEndian.AppendUint16(body, 0xFEFD)
 
 	body = append(body, msg.Random[:]...)

@@ -13,7 +13,7 @@ import (
 	"github.com/hrissan/tinydtls/transport/handshake"
 )
 
-func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []byte, handshakeHdr format.MessageFragmentHeader, msg format.ClientHello, addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
+func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []byte, handshakeHdr format.MessageFragmentHeader, msg format.MsgClientHello, addr netip.AddrPort) (*handshake.ConnectionImpl, error) {
 	if !rc.opts.RoleServer {
 		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
 		return conn, dtlserrors.ErrClientHelloReceivedByClient
@@ -94,7 +94,7 @@ func (rc *Receiver) OnClientHello(conn *handshake.ConnectionImpl, messageBody []
 var ErrClientHelloWithoutCookieMsgSeqNum = errors.New("client hello without cookie must have msg_seq_num 0")
 var ErrClientHelloWithCookieMsgSeqNum = errors.New("client hello with cookie must have msg_seq_num 1")
 
-func IsSupportedClientHello(msg *format.ClientHello) error {
+func IsSupportedClientHello(msg *format.MsgClientHello) error {
 	if !msg.Extensions.SupportedVersions.DTLS_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}

@@ -6,7 +6,7 @@ import (
 	"hash"
 )
 
-var ErrMessageHandshakeTooShort = errors.New("message handshake too short")
+var ErrHandshakeMsgTooShort = errors.New("handshake message too short")
 
 const (
 	// hello_request_RESERVED = 0 - we use it as "message not set" flag
@@ -89,7 +89,7 @@ func (hdr *MessageFragmentHeader) AddToHash(transcriptHasher hash.Hash) {
 
 func (hdr *MessageFragmentHeader) Parse(record []byte) error {
 	if len(record) < MessageHandshakeHeaderSize {
-		return ErrMessageHandshakeTooShort
+		return ErrHandshakeMsgTooShort
 	}
 	hdr.HandshakeType = record[0]
 	hdr.Length = binary.BigEndian.Uint32(record[0:4]) & 0xFFFFFF
@@ -105,7 +105,7 @@ func (hdr *MessageFragmentHeader) ParseWithBody(record []byte) (n int, body []by
 	}
 	endOffset := MessageHandshakeHeaderSize + int(hdr.FragmentLength)
 	if len(record) < endOffset {
-		return 0, nil, ErrMessageHandshakeTooShort
+		return 0, nil, ErrHandshakeMsgTooShort
 	}
 	return endOffset, record[MessageHandshakeHeaderSize:endOffset], nil
 }

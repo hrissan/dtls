@@ -25,7 +25,7 @@ func (conn *ConnectionImpl) ProcessServerHello(handshakeHdr format.MessageFragme
 	return conn.Handshake.ReceivedMessage(conn, handshakeHdr, messageBody, rn)
 }
 
-func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr format.MessageFragmentHeader, messageBody []byte, serverHello format.ServerHello) error {
+func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHdr format.MessageFragmentHeader, messageBody []byte, serverHello format.MsgServerHello) error {
 	if serverHello.Extensions.SupportedVersions.SelectedVersion != format.DTLS_VERSION_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
@@ -91,7 +91,7 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, handshakeHd
 
 func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.Cookie) format.MessageHandshakeFragment {
 	// [rfc8446:4.1.2] the client MUST send the same ClientHello without modification, except as follows
-	clientHello := format.ClientHello{
+	clientHello := format.MsgClientHello{
 		Random: hctx.LocalRandom,
 	}
 	clientHello.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 = true

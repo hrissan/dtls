@@ -35,10 +35,10 @@ type Stats interface {
 	// logic layer
 	ErrorServerReceivedServerHello(addr netip.AddrPort)
 	ErrorClientReceivedClientHello(addr netip.AddrPort)
-	ErrorClientHelloUnsupportedParams(handshakeHdr format.MessageFragmentHeader, msg format.ClientHello, addr netip.AddrPort, err error)
-	ErrorServerHelloUnsupportedParams(handshakeHdr format.MessageFragmentHeader, msg format.ServerHello, addr netip.AddrPort, err error)
-	ClientHelloMessage(handshakeHdr format.MessageFragmentHeader, msg format.ClientHello, addr netip.AddrPort)
-	ServerHelloMessage(handshakeHdr format.MessageFragmentHeader, msg format.ServerHello, addr netip.AddrPort)
+	ErrorClientHelloUnsupportedParams(handshakeHdr format.MessageFragmentHeader, msg format.MsgClientHello, addr netip.AddrPort, err error)
+	ErrorServerHelloUnsupportedParams(handshakeHdr format.MessageFragmentHeader, msg format.MsgServerHello, addr netip.AddrPort, err error)
+	ClientHelloMessage(handshakeHdr format.MessageFragmentHeader, msg format.MsgClientHello, addr netip.AddrPort)
+	ServerHelloMessage(handshakeHdr format.MessageFragmentHeader, msg format.MsgServerHello, addr netip.AddrPort)
 	ServerHelloRetryRequestQueueOverloaded(addr netip.AddrPort)
 	CookieCreated(addr netip.AddrPort)
 	CookieChecked(valid bool, age time.Duration, addr netip.AddrPort)
@@ -149,28 +149,28 @@ func (s *StatsLog) ErrorClientReceivedClientHello(addr netip.AddrPort) {
 	log.Printf("tinydtls: client received client hello addr=%v", addr)
 }
 
-func (s *StatsLog) ErrorClientHelloUnsupportedParams(handshakeHdr format.MessageFragmentHeader, msg format.ClientHello, addr netip.AddrPort, err error) {
+func (s *StatsLog) ErrorClientHelloUnsupportedParams(handshakeHdr format.MessageFragmentHeader, msg format.MsgClientHello, addr netip.AddrPort, err error) {
 	if !s.printMessages.Load() {
 		return
 	}
 	log.Printf("tinydtls: message %s header=%+v has unsupported params addr=%v: %+v: %v", msg.MessageName(), handshakeHdr, addr, msg, err)
 }
 
-func (s *StatsLog) ErrorServerHelloUnsupportedParams(handshakeHdr format.MessageFragmentHeader, msg format.ServerHello, addr netip.AddrPort, err error) {
+func (s *StatsLog) ErrorServerHelloUnsupportedParams(handshakeHdr format.MessageFragmentHeader, msg format.MsgServerHello, addr netip.AddrPort, err error) {
 	if !s.printMessages.Load() {
 		return
 	}
 	log.Printf("tinydtls: message %s header=%+v has unsupported params addr=%v: %+v: %v", msg.MessageName(), handshakeHdr, addr, msg, err)
 }
 
-func (s *StatsLog) ClientHelloMessage(handshakeHdr format.MessageFragmentHeader, msg format.ClientHello, addr netip.AddrPort) {
+func (s *StatsLog) ClientHelloMessage(handshakeHdr format.MessageFragmentHeader, msg format.MsgClientHello, addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}
 	log.Printf("tinydtls: message %s header=%+v addr=%v: %+v", msg.MessageName(), handshakeHdr, addr, msg)
 }
 
-func (s *StatsLog) ServerHelloMessage(handshakeHdr format.MessageFragmentHeader, msg format.ServerHello, addr netip.AddrPort) {
+func (s *StatsLog) ServerHelloMessage(handshakeHdr format.MessageFragmentHeader, msg format.MsgServerHello, addr netip.AddrPort) {
 	if !s.printMessages.Load() {
 		return
 	}

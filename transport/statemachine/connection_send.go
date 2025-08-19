@@ -6,6 +6,7 @@ import (
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/handshake"
+	"github.com/hrissan/tinydtls/record"
 	"github.com/hrissan/tinydtls/replay"
 )
 
@@ -103,15 +104,15 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 		if datagramSize > 0 {
 			return datagramSize, true, nil
 		}
-		userSpace := len(datagram) - datagramSize - 1 - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+		userSpace := len(datagram) - datagramSize - 1 - record.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 		if userSpace >= constants.MinFragmentBodySize {
-			record := datagram[datagramSize+format.OutgoingCiphertextRecordHeader : datagramSize+format.OutgoingCiphertextRecordHeader+userSpace]
-			recordSize, send, add := conn.Handler.OnWriteApplicationRecord(record)
-			if recordSize > len(record) {
+			recordData := datagram[datagramSize+record.OutgoingCiphertextRecordHeader : datagramSize+record.OutgoingCiphertextRecordHeader+userSpace]
+			recordSize, send, add := conn.Handler.OnWriteApplicationRecord(recordData)
+			if recordSize > len(recordData) {
 				panic("ciphertext user handler overflows allowed record")
 			}
 			if send {
-				da, err := conn.constructCiphertextApplication(datagram[datagramSize : datagramSize+format.OutgoingCiphertextRecordHeader+recordSize])
+				da, err := conn.constructCiphertextApplication(datagram[datagramSize : datagramSize+record.OutgoingCiphertextRecordHeader+recordSize])
 				if err != nil {
 					return 0, false, err
 				}
@@ -134,7 +135,7 @@ func (conn *ConnectionImpl) constructDatagramAcks(datagram []byte) (int, error) 
 	if acksSize == 0 {
 		return 0, nil
 	}
-	acksSpace := len(datagram) - format.AckRecordHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+	acksSpace := len(datagram) - format.AckRecordHeaderSize - record.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 	if acksSpace < format.AckRecordNumberSize { // not a single one fits
 		return 0, nil
 	}

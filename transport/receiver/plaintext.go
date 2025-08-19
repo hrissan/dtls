@@ -6,10 +6,11 @@ import (
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/handshake"
+	"github.com/hrissan/tinydtls/record"
 	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
-func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl, hdr format.PlaintextRecordHeader, recordData []byte, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl, hdr record.PlaintextRecordHeader, recordData []byte, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
 	// log.Printf("dtls: got handshake record (plaintext) %d bytes from %v, message(hex): %x", len(recordData), addr, recordData)
 	if len(recordData) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding

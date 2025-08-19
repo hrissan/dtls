@@ -6,6 +6,7 @@ import (
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/keys"
+	"github.com/hrissan/tinydtls/record"
 )
 
 func (conn *ConnectionImpl) checkReceiveLimits() error {
@@ -33,7 +34,7 @@ func (conn *ConnectionImpl) checkReceiveLimits() error {
 	return conn.startKeyUpdate(true)
 }
 
-func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, seqNumData []byte, header []byte, body []byte) (decrypted []byte, rn format.RecordNumber, contentType byte, err error) {
+func (conn *ConnectionImpl) deprotectLocked(hdr record.CiphertextHeader, seqNumData []byte, header []byte, body []byte) (decrypted []byte, rn format.RecordNumber, contentType byte, err error) {
 	receiver := &conn.Keys.Receive
 	var seq uint64
 	if hdr.MatchesEpoch(receiver.Symmetric.Epoch) {

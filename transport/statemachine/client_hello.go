@@ -10,8 +10,8 @@ import (
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/handshake"
+	"github.com/hrissan/tinydtls/record"
 	"github.com/hrissan/tinydtls/signature"
 	"github.com/hrissan/tinydtls/transport/options"
 )
@@ -148,8 +148,8 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 	}
 	helloRetryRequest.Extensions.CookieSet = true
 	helloRetryRequest.Extensions.Cookie = ck
-	recordHdr := format.PlaintextRecordHeader{
-		ContentType:    format.PlaintextContentTypeHandshake,
+	recordHdr := record.PlaintextRecordHeader{
+		ContentType:    record.PlaintextContentTypeHandshake,
 		SequenceNumber: 0,
 	}
 	msgHeader := handshake.FragmentHeader{

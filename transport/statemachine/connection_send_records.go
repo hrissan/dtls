@@ -10,6 +10,7 @@ import (
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/handshake"
 	"github.com/hrissan/tinydtls/keys"
+	"github.com/hrissan/tinydtls/record"
 )
 
 func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn format.RecordNumber, err error) {
@@ -33,7 +34,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg handsh
 		if sendNextSegmentSequenceEpoch0 == nil {
 			panic("the same check for plaintext record should be above")
 		}
-		remainingSpace := len(datagram) - handshake.FragmentHeaderSize + format.PlaintextRecordHeaderSize
+		remainingSpace := len(datagram) - handshake.FragmentHeaderSize + record.PlaintextRecordHeaderSize
 		if remainingSpace <= 0 {
 			return
 		}
@@ -42,7 +43,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg handsh
 			return // do not send tiny records at the end of datagram
 		}
 		da, rn, err := conn.constructPlaintextRecord(datagram[:0], msg, sendNextSegmentSequenceEpoch0)
-		if uint32(len(da)) != msg.Header.FragmentLength+handshake.FragmentHeaderSize+format.PlaintextRecordHeaderSize {
+		if uint32(len(da)) != msg.Header.FragmentLength+handshake.FragmentHeaderSize+record.PlaintextRecordHeaderSize {
 			panic("plaintext handshake record construction length invariant failed")
 		}
 		if err != nil {
@@ -50,7 +51,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg handsh
 		}
 		return len(da), msg.Header.FragmentInfo, rn, nil
 	}
-	remainingSpace := len(datagram) - handshake.FragmentHeaderSize - format.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+	remainingSpace := len(datagram) - handshake.FragmentHeaderSize - record.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
 	if remainingSpace <= 0 {
 		return
 	}
@@ -75,8 +76,8 @@ func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg handshake.
 		return nil, format.RecordNumber{}, dtlserrors.ErrSendEpoch0RecordSeqOverflow
 	}
 	rn := format.RecordNumberWith(0, uint64(*sendNextSegmentSequenceEpoch0))
-	recordHdr := format.PlaintextRecordHeader{
-		ContentType:    format.PlaintextContentTypeHandshake,
+	recordHdr := record.PlaintextRecordHeader{
+		ContentType:    record.PlaintextContentTypeHandshake,
 		SequenceNumber: uint64(*sendNextSegmentSequenceEpoch0),
 	}
 	*sendNextSegmentSequenceEpoch0++ // never overflows due to check above
@@ -113,7 +114,7 @@ func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg hands
 	keys.FillIVSequence(iv[:], seq)
 
 	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
-	hdr := format.NewCiphertextRecordHeader(false, true, true, epoch)
+	hdr := record.NewCiphertextRecordHeader(false, true, true, epoch)
 	startRecordOffset := len(datagram)
 	datagram = append(datagram, hdr.FirstByte)
 	datagram = binary.BigEndian.AppendUint16(datagram, uint16(seq))
@@ -121,7 +122,7 @@ func (conn *ConnectionImpl) constructCiphertextRecord(datagram []byte, msg hands
 	startBodyOFfset := len(datagram)
 	datagram = msg.Header.Write(datagram)
 	datagram = append(datagram, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
-	datagram = append(datagram, format.PlaintextContentTypeHandshake)
+	datagram = append(datagram, record.PlaintextContentTypeHandshake)
 
 	padding := len(datagram) % 4 // test our code with different padding. TODO - remove later
 	// max padding max correspond to format.MaxOutgoingCiphertextRecordOverhead
@@ -165,7 +166,7 @@ func (conn *ConnectionImpl) constructCiphertextAck(datagram []byte, acks []forma
 	keys.FillIVSequence(iv[:], seq)
 
 	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
-	hdr := format.NewCiphertextRecordHeader(false, true, true, epoch)
+	hdr := record.NewCiphertextRecordHeader(false, true, true, epoch)
 	datagram = append(datagram, hdr.FirstByte)
 	datagram = binary.BigEndian.AppendUint16(datagram, uint16(seq))
 	datagram = append(datagram, 0, 0) // fill length later
@@ -177,7 +178,7 @@ func (conn *ConnectionImpl) constructCiphertextAck(datagram []byte, acks []forma
 		datagram = binary.BigEndian.AppendUint64(datagram, ack.SeqNum())
 	}
 	format.FillUint16Offset(datagram, mark)
-	datagram = append(datagram, format.PlaintextContentTypeAck)
+	datagram = append(datagram, record.PlaintextContentTypeAck)
 
 	padding := len(datagram) % 4 // test our code with different padding. TODO - remove later
 	// max padding max correspond to format.MaxOutgoingCiphertextRecordOverhead
@@ -204,7 +205,7 @@ func (conn *ConnectionImpl) constructCiphertextAck(datagram []byte, acks []forma
 	return datagram, nil
 }
 
-func (conn *ConnectionImpl) constructCiphertextApplication(record []byte) ([]byte, error) {
+func (conn *ConnectionImpl) constructCiphertextApplication(recordBody []byte) ([]byte, error) {
 	// TODO - harmonize with code above
 	if err := conn.checkSendLimit(); err != nil {
 		return nil, err
@@ -221,33 +222,33 @@ func (conn *ConnectionImpl) constructCiphertextApplication(record []byte) ([]byt
 	keys.FillIVSequence(iv[:], seq)
 
 	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
-	hdr := format.NewCiphertextRecordHeader(false, true, true, epoch)
-	const hdrSize = format.OutgoingCiphertextRecordHeader
-	record = append(record, format.PlaintextContentTypeApplicationData)
+	hdr := record.NewCiphertextRecordHeader(false, true, true, epoch)
+	const hdrSize = record.OutgoingCiphertextRecordHeader
+	recordBody = append(recordBody, record.PlaintextContentTypeApplicationData)
 
-	padding := len(record) % 4 // test our code with different padding. TODO - remove later
+	padding := len(recordBody) % 4 // test our code with different padding. TODO - remove later
 	// max padding max correspond to format.MaxOutgoingCiphertextRecordOverhead
 	for i := 0; i != padding+constants.AEADSealSize; i++ {
-		record = append(record, 0)
+		recordBody = append(recordBody, 0)
 	}
 
-	record[0] = hdr.FirstByte
-	binary.BigEndian.PutUint16(record[1:], uint16(seq))
-	binary.BigEndian.PutUint16(record[3:], uint16(len(record)-hdrSize))
+	recordBody[0] = hdr.FirstByte
+	binary.BigEndian.PutUint16(recordBody[1:], uint16(seq))
+	binary.BigEndian.PutUint16(recordBody[3:], uint16(len(recordBody)-hdrSize))
 
-	encrypted := gcm.Seal(record[hdrSize:hdrSize], iv[:], record[hdrSize:len(record)-constants.AEADSealSize], record[:hdrSize])
-	if &encrypted[0] != &record[hdrSize] {
+	encrypted := gcm.Seal(recordBody[hdrSize:hdrSize], iv[:], recordBody[hdrSize:len(recordBody)-constants.AEADSealSize], recordBody[:hdrSize])
+	if &encrypted[0] != &recordBody[hdrSize] {
 		panic("gcm.Seal reallocated datagram storage")
 	}
-	if len(encrypted) != len(record[hdrSize:]) {
+	if len(encrypted) != len(recordBody[hdrSize:]) {
 		panic("gcm.Seal length mismatch")
 	}
 
 	if !conn.Keys.DoNotEncryptSequenceNumbers {
-		if err := send.Symmetric.EncryptSequenceNumbers(record[1:3], record[hdrSize:]); err != nil {
+		if err := send.Symmetric.EncryptSequenceNumbers(recordBody[1:3], recordBody[hdrSize:]); err != nil {
 			panic("cipher text too short when sending")
 		}
 	}
 	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
-	return record, nil
+	return recordBody, nil
 }

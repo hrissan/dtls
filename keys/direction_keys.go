@@ -7,8 +7,8 @@ import (
 	"hash"
 	"log"
 
-	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/hkdf"
+	"github.com/hrissan/tinydtls/record"
 )
 
 var ErrCipherTextAllZeroPadding = errors.New("ciphertext all zero padding")
@@ -98,7 +98,7 @@ func findPaddingOffsetContentType(data []byte) (paddingOffset int, contentType b
 }
 
 // Warning - decrypts in place, seqNumData and body can be garbage after unsuccessfull decryption
-func (keys *SymmetricKeys) Deprotect(hdr format.CiphertextRecordHeader, encryptSN bool, expectedSN uint64, seqNumData []byte, header []byte, body []byte) (decrypted []byte, seq uint64, contentType byte, err error) {
+func (keys *SymmetricKeys) Deprotect(hdr record.CiphertextHeader, encryptSN bool, expectedSN uint64, seqNumData []byte, header []byte, body []byte) (decrypted []byte, seq uint64, contentType byte, err error) {
 	if encryptSN {
 		if err := keys.EncryptSequenceNumbers(seqNumData, body); err != nil {
 			return nil, 0, 0, err

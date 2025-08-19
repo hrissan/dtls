@@ -8,10 +8,11 @@ import (
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
 	"github.com/hrissan/tinydtls/handshake"
+	"github.com/hrissan/tinydtls/record"
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
-func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptions, hdr format.CiphertextRecordHeader, cid []byte, seqNumData []byte, header []byte, body []byte) error {
+func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptions, hdr record.CiphertextHeader, cid []byte, seqNumData []byte, header []byte, body []byte) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if err := conn.checkReceiveLimits(); err != nil {
@@ -26,13 +27,13 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 	log.Printf("dtls: ciphertext %v deprotected with rn={%d,%d} cid(hex): %x from %v, body(hex): %x", hdr, rn.Epoch(), rn.SeqNum(), cid, conn.Addr, decrypted)
 	// [rfc9147:4.1]
 	switch contentType {
-	case format.PlaintextContentTypeAlert:
+	case record.PlaintextContentTypeAlert:
 		return conn.ProcessAlert(true, decrypted)
-	case format.PlaintextContentTypeAck:
+	case record.PlaintextContentTypeAck:
 		return conn.ProcessEncryptedAck(opts, decrypted)
-	case format.PlaintextContentTypeApplicationData:
+	case record.PlaintextContentTypeApplicationData:
 		return conn.ProcessApplicationData(decrypted)
-	case format.PlaintextContentTypeHandshake:
+	case record.PlaintextContentTypeHandshake:
 		return conn.ProcessEncryptedHandshakeRecord(opts, decrypted, rn)
 	}
 	return dtlserrors.ErrUnknownInnerPlaintextRecordType

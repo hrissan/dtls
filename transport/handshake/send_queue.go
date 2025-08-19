@@ -6,6 +6,11 @@ import (
 	"github.com/hrissan/tinydtls/format"
 )
 
+type RecordFragmentRelation struct {
+	rn       format.RecordNumber
+	fragment format.FragmentInfo
+}
+
 type SendQueue struct {
 	// all messages here belong to the same flight during handshake.
 	// if message in the middle is fully acked, it will stay in the buffer until it becomes
@@ -16,11 +21,12 @@ type SendQueue struct {
 	// offset inside messages[messageOffset] or 0 if messageOffset == len(messages)
 	fragmentOffset uint32
 
-	sentRecords map[format.RecordNumber]format.FragmentInfo
+	// Unfortunately, not in order because we have epoch 0 and need to resend ServerHello, so linear search
+	sentRecords circular.Buffer[RecordFragmentRelation]
 }
 
 func (sq *SendQueue) Reserve() {
-	sq.sentRecords = make(map[format.RecordNumber]format.FragmentInfo, constants.MaxSendRecordsQueue)
+	sq.sentRecords.Reserve(constants.MaxSendRecordsQueue)
 	sq.messages.Reserve(constants.MaxSendMessagesQueue)
 }
 
@@ -32,7 +38,7 @@ func (sq *SendQueue) Clear() {
 	sq.messages.Clear()
 	sq.messageOffset = 0
 	sq.fragmentOffset = 0
-	clear(sq.sentRecords)
+	sq.sentRecords.Clear()
 }
 
 func (sq *SendQueue) PushMessage(msg format.MessageHandshake) {
@@ -52,7 +58,7 @@ func (sq *SendQueue) PushMessage(msg format.MessageHandshake) {
 }
 
 func (sq *SendQueue) HasDataToSend() bool {
-	return sq.messageOffset < sq.messages.Len() && len(sq.sentRecords) < constants.MaxSendRecordsQueue
+	return sq.messageOffset < sq.messages.Len() && sq.sentRecords.Len() < constants.MaxSendRecordsQueue
 }
 
 func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (int, error) {
@@ -66,7 +72,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 		if sq.messageOffset == sq.messages.Len() {
 			break
 		}
-		if len(sq.sentRecords) >= constants.MaxSendRecordsQueue {
+		if sq.sentRecords.Len() >= constants.MaxSendRecordsQueue {
 			break
 		}
 		outgoing := sq.messages.IndexRef(sq.messageOffset)
@@ -96,7 +102,9 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 			if recordSize == 0 {
 				break
 			}
-			sq.sentRecords[rn] = fragmentInfo
+			// Unfortunately, not in order because we have epoch 0 and need to resend ServerHello, so linear search
+			// limited to constants.MaxSendRecordsQueue due to check above
+			sq.sentRecords.PushBack(RecordFragmentRelation{rn: rn, fragment: fragmentInfo})
 			datagramSize += recordSize
 			sq.fragmentOffset += fragmentInfo.FragmentLength
 		}
@@ -112,11 +120,22 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 }
 
 func (sq *SendQueue) Ack(conn *ConnectionImpl, rn format.RecordNumber) {
-	rec, ok := sq.sentRecords[rn]
+	rec, ok := format.FragmentInfo{}, false
+	// TODO - benchmark. Is it fast?
+	for i := 0; i != sq.sentRecords.Len(); i++ {
+		element := sq.sentRecords.IndexRef(i)
+		if element.rn == rn {
+			rec, ok = element.fragment, true
+			element.fragment = format.FragmentInfo{} // delete in the middle
+			for sq.sentRecords.Len() != 0 && sq.sentRecords.Front().fragment == (format.FragmentInfo{}) {
+				sq.sentRecords.PopFront() // delete everything from the front
+			}
+			break
+		}
+	}
 	if !ok {
 		return
 	}
-	delete(sq.sentRecords, rn)
 	if sq.messages.Len() > int(conn.Keys.NextMessageSeqSend) {
 		panic("invariant violation")
 	}

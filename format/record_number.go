@@ -49,6 +49,10 @@ func RecordNumberWith(epoch uint16, seqNum uint64) RecordNumber {
 	return RecordNumber{epochSeqNum: (uint64(epoch) << 48) + seqNum}
 }
 
+func (r RecordNumber) Less(other RecordNumber) bool {
+	return r.epochSeqNum < other.epochSeqNum // nicely ordered
+}
+
 func (r RecordNumber) Epoch() uint16 {
 	return uint16(r.epochSeqNum >> 48)
 }
@@ -58,5 +62,5 @@ func (r RecordNumber) SeqNum() uint64 {
 }
 
 func RecordNumberCmp(a, b RecordNumber) int {
-	return cmp.Compare(a.epochSeqNum, b.epochSeqNum)
+	return cmp.Compare(a.epochSeqNum, b.epochSeqNum) // nicely ordered
 }

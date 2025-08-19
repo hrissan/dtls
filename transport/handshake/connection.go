@@ -1,6 +1,7 @@
 package handshake
 
 import (
+	"encoding/binary"
 	"log"
 	"math"
 	"net/netip"
@@ -47,8 +48,10 @@ type ConnectionImpl struct {
 	Addr netip.AddrPort // changes very rarely
 	Keys keys.Keys
 
-	// we do not support those messages to be fragmented, because we do not want
-	// to allocate memory for reassembly
+	// We do not support received messages of this kind to be fragmented,
+	// because we do not want to allocate memory for reassembly,
+	// Also we do not want to support sending them fragmented, because we do not want to track
+	// rn -> fragment relations. We simply track 1 rn per message type instead.
 	sendKeyUpdateRN        format.RecordNumber // if != 0, already sent, on resend overwrite rn
 	sendNewSessionTicketRN format.RecordNumber // if != 0, already sent, on resend overwrite rn
 
@@ -303,6 +306,15 @@ func (conn *ConnectionImpl) startKeyUpdate(updateRequested bool) error {
 	return nil
 }
 
+func (conn *ConnectionImpl) processNewSessionTicketAck(rn format.RecordNumber) {
+	if conn.sendNewSessionTicketMessageSeq != 0 && conn.sendNewSessionTicketRN == (format.RecordNumber{}) || conn.sendNewSessionTicketRN != rn {
+		return
+	}
+	log.Printf("NewSessionTicket ack received")
+	conn.sendNewSessionTicketMessageSeq = 0
+	conn.sendNewSessionTicketRN = format.RecordNumber{}
+}
+
 func (conn *ConnectionImpl) processKeyUpdateAck(rn format.RecordNumber) {
 	if conn.sendKeyUpdateMessageSeq != 0 && conn.sendKeyUpdateRN == (format.RecordNumber{}) || conn.sendKeyUpdateRN != rn {
 		return
@@ -446,7 +458,7 @@ func (conn *ConnectionImpl) ProcessEncryptedAck(opts *options.TransportOptions, 
 		return dtlserrors.ErrEncryptedAckMessageHeaderParsing
 	}
 	log.Printf("dtls: got ack record (encrypted) %d bytes from %v, message(hex): %x", len(messageData), conn.Addr, messageData)
-	conn.ReceiveAcks(opts, insideBody)
+	conn.receiveAcks(opts, insideBody)
 	// if all messages from epoch 2 acked, then switch sending epoch
 	if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Symmetric.Epoch == 2 {
 		conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
@@ -457,6 +469,23 @@ func (conn *ConnectionImpl) ProcessEncryptedAck(opts *options.TransportOptions, 
 		conn.HandlerHasMoreData = true
 	}
 	return nil // ack occupies full record
+}
+
+func (conn *ConnectionImpl) receiveAcks(opts *options.TransportOptions, insideBody []byte) {
+	for ; len(insideBody) >= format.MessageAckRecordNumberSize; insideBody = insideBody[format.MessageAckRecordNumberSize:] {
+		epoch := binary.BigEndian.Uint64(insideBody)
+		seq := binary.BigEndian.Uint64(insideBody[8:])
+		if epoch > math.MaxUint16 {
+			opts.Stats.Warning(conn.Addr, dtlserrors.WarnAckEpochOverflow)
+			continue // prevent overflow below
+		}
+		rn := format.RecordNumberWith(uint16(epoch), seq)
+		if conn.Handshake != nil {
+			conn.Handshake.SendQueue.Ack(conn, rn)
+		}
+		conn.processKeyUpdateAck(rn)
+		conn.processNewSessionTicketAck(rn)
+	}
 }
 
 func (conn *ConnectionImpl) ProcessApplicationData(messageData []byte) error {

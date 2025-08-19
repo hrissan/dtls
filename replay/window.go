@@ -2,8 +2,12 @@ package replay
 
 const replayWidth = 64 // set to 1..4 for fuzzing/testing
 
+// for receiving replay protection we could save 65-th bit implicitly
+// by invariant that nextReceivedSeq-1 is received.
+// but for sending acks we need this structure to contain nothing, so 64-bit explicit bits.
+
 type Window struct {
-	nextReceivedSeq uint64 // nextReceivedSeq-1 is implicitly received
+	nextReceivedSeq uint64
 	received        uint64 // bits for 64 previous messages
 }
 
@@ -14,43 +18,37 @@ func (r *Window) Reset() {
 
 func (r *Window) GetNextReceivedSeq() uint64 { return r.nextReceivedSeq }
 
-func (r *Window) SetReceivedIsUnique(seq uint64) bool {
-	if seq+1 > r.nextReceivedSeq+replayWidth { // efficient big jump
-		r.nextReceivedSeq = seq + 1
+func (r *Window) SetNextReceived(nextSeq uint64) {
+	if nextSeq > r.nextReceivedSeq+replayWidth { // efficient big jump
+		r.nextReceivedSeq = nextSeq
 		r.received = 0
-		return true
+		return
 	}
-	if seq+1 > r.nextReceivedSeq {
-		r.received |= (1 << ((r.nextReceivedSeq - 1) & (replayWidth - 1)))
-		r.nextReceivedSeq++
-		for ; seq+1 > r.nextReceivedSeq; r.nextReceivedSeq++ {
-			r.received &= ^(1 << ((r.nextReceivedSeq - 1) & (replayWidth - 1)))
-		}
-		return true
+	for ; nextSeq > r.nextReceivedSeq; r.nextReceivedSeq++ {
+		r.received &= ^(1 << (r.nextReceivedSeq & (replayWidth - 1)))
 	}
-	if seq+1 == r.nextReceivedSeq {
-		return false
-	}
-	if seq+1+replayWidth < r.nextReceivedSeq {
-		return false
-	}
-	if r.received&(1<<(seq&(replayWidth-1))) != 0 {
-		return false
-	}
-	r.received |= (1 << (seq & (replayWidth - 1)))
-	return true
 }
 
-// messages >= r.nextReceivedSeq are returned as unique
-func (r *Window) IsUnique(seq uint64) bool {
-	if seq+1 > r.nextReceivedSeq {
-		return true
+func (r *Window) SetBit(seq uint64) {
+	if seq >= r.nextReceivedSeq || seq+replayWidth < r.nextReceivedSeq {
+		return
 	}
-	if seq+1 == r.nextReceivedSeq {
-		return false
+	r.received |= (1 << (seq & (replayWidth - 1)))
+}
+
+func (r *Window) ClearBit(seq uint64) {
+	if seq >= r.nextReceivedSeq || seq+replayWidth < r.nextReceivedSeq {
+		return
 	}
-	if seq+1+replayWidth < r.nextReceivedSeq {
-		return false
+	r.received &= ^(1 << (seq & (replayWidth - 1)))
+}
+
+func (r *Window) IsSetBit(seq uint64) bool {
+	if seq >= r.nextReceivedSeq {
+		return false // arbitrary selected to simplify receiver
 	}
-	return r.received&(1<<(seq%replayWidth)) == 0
+	if seq+replayWidth < r.nextReceivedSeq {
+		return true // arbitrary selected to simplify receiver
+	}
+	return r.received&(1<<(seq&(replayWidth-1))) != 0
 }

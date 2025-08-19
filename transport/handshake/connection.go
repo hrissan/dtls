@@ -301,9 +301,11 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 			conn.Keys.FailedDeprotectionCounter++
 			return
 		}
-		if !conn.Keys.ReceiveNextSegmentSequence.SetReceivedIsUnique(seq + 1) {
+		conn.Keys.ReceiveNextSegmentSequence.SetNextReceived(seq + 1)
+		if conn.Keys.ReceiveNextSegmentSequence.IsSetBit(seq) {
 			return // replay protection
 		}
+		conn.Keys.ReceiveNextSegmentSequence.SetBit(seq)
 	} else {
 		if !conn.Keys.ExpectReceiveEpochUpdate || !hdr.MatchesEpoch(receiver.Symmetric.Epoch+1) {
 			return // simply ignore, probably garbage or keys from previous epoch
@@ -334,7 +336,9 @@ func (conn *ConnectionImpl) deprotectLocked(hdr format.CiphertextRecordHeader, s
 		conn.Keys.ExpectReceiveEpochUpdate = false
 		receiver.Symmetric = conn.Keys.NewReceiveKeys // epoch is also copied
 		conn.Keys.ReceiveNextSegmentSequence.Reset()
-		_ = conn.Keys.ReceiveNextSegmentSequence.SetReceivedIsUnique(seq + 1) // always unique
+		conn.Keys.ReceiveNextSegmentSequence.SetNextReceived(seq + 1)
+		// always unique, do not check
+		conn.Keys.ReceiveNextSegmentSequence.SetBit(seq)
 		conn.Keys.FailedDeprotectionCounter = conn.Keys.FailedDeprotectionCounterNewReceiveKeys
 		conn.Keys.NewReceiveKeys = keys.SymmetricKeys{} // remove alias
 		conn.Keys.NewReceiveKeysSet = false

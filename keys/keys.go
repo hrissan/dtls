@@ -23,6 +23,9 @@ type Keys struct {
 	// We need no replay protection for Epoch 0
 	ReceiveNextSegmentSequence replay.Window // for Epoch > 0
 
+	SendAcks      replay.Window
+	SendAcksEpoch uint16 // we do not want to lose acks immediately  when switching epoch
+
 	NewReceiveKeys SymmetricKeys // always correspond to Receive.Symmetric.Epoch + 1
 
 	FailedDeprotectionCounter               uint64

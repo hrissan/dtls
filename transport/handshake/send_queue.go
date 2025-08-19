@@ -16,8 +16,6 @@ type SendQueue struct {
 	// offset inside messages[messageOffset] or 0 if messageOffset == len(messages)
 	fragmentOffset uint32
 
-	// Very sad decision from committee.
-	// Much better decision would be for Ack to simply contain MessageSeq, FragmentOffset, FragmentLength
 	sentRecords map[format.RecordNumber]format.FragmentInfo
 }
 

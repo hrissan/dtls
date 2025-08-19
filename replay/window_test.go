@@ -33,27 +33,34 @@ func (r *windowMirror) ensure(seq uint64) *byte {
 
 func (r *windowMirror) GetNextReceivedSeq() uint64 { return r.nextReceivedSeq }
 
-func (r *windowMirror) SetReceivedIsUnique(seq uint64) bool {
-	if seq+1 > r.nextReceivedSeq {
-		r.nextReceivedSeq = seq + 1
+func (r *windowMirror) SetNextReceived(nextSeq uint64) {
+	if nextSeq > r.nextReceivedSeq {
+		r.nextReceivedSeq = nextSeq
 	}
-	for s := 0; s < int(r.nextReceivedSeq)-replayWidth-1; s++ {
+	for s := 0; s < int(r.nextReceivedSeq)-replayWidth; s++ {
 		*r.ensure(uint64(s)) = 1
 	}
-	unique := *r.ensure(seq) == 0
-	*r.ensure(seq) = 1
-	return unique
 }
 
-// messages >= r.nextReceivedSeq are returned as unique
-func (r *windowMirror) IsUnique(seq uint64) bool {
-	if seq+1 > r.nextReceivedSeq {
-		return true
+func (r *windowMirror) SetBit(seq uint64) {
+	if seq >= r.nextReceivedSeq || seq+replayWidth < r.nextReceivedSeq {
+		return
 	}
-	if len(r.received) <= int(seq) {
-		return true
+	*r.ensure(seq) = 1
+}
+
+func (r *windowMirror) ClearBit(seq uint64) {
+	if seq >= r.nextReceivedSeq || seq+replayWidth < r.nextReceivedSeq {
+		return
 	}
-	return r.received[seq] == 0
+	*r.ensure(seq) = 0
+}
+
+func (r *windowMirror) IsSetBit(seq uint64) bool {
+	if seq >= r.nextReceivedSeq {
+		return false // arbitrary selected to simplify receiver
+	}
+	return *r.ensure(seq) != 0
 }
 
 const maxLastReceivedForFuzzing = 1024 // no benefits of larger values
@@ -62,32 +69,43 @@ func FuzzReplay(f *testing.F) {
 	f.Fuzz(func(t *testing.T, commands []byte) {
 		cb := Window{}
 		cb2 := windowMirror{}
-		lastReceived := uint64(0)
-		for _, c := range commands {
+		nextReceived := uint64(0)
+		for i := 0; i+1 < len(commands); i += 2 {
+			c := commands[i]
+			v := commands[i+1]
 			if cb.GetNextReceivedSeq() != cb2.GetNextReceivedSeq() {
 				t.FailNow()
 			}
-			for j := uint64(0); j < lastReceived+(replayWidth+1)*2; j++ { // arbitrary look ahead
-				if cb.IsUnique(j) != cb2.IsUnique(j) {
+			for j := uint64(0); j < nextReceived+(replayWidth+1)*2; j++ { // arbitrary look ahead
+				if a, b := cb.IsSetBit(j), cb2.IsSetBit(j); a != b {
 					t.FailNow()
 				}
 			}
 			switch {
 			case c == 0:
-				lastReceived = min(lastReceived+1, maxLastReceivedForFuzzing)
-				if cb.SetReceivedIsUnique(lastReceived) != cb2.SetReceivedIsUnique(lastReceived) {
-					t.FailNow()
-				}
-			case c < 3*(replayWidth+1):
-				lastReceived = min(lastReceived+uint64(c), maxLastReceivedForFuzzing)
-				if cb.SetReceivedIsUnique(lastReceived) != cb2.SetReceivedIsUnique(lastReceived) {
-					t.FailNow()
-				}
-			default:
-				if uint64(c) <= lastReceived {
-					if cb.SetReceivedIsUnique(lastReceived-uint64(c)) != cb2.SetReceivedIsUnique(lastReceived-uint64(c)) {
-						t.FailNow()
-					}
+				nextReceived = min(nextReceived+1, maxLastReceivedForFuzzing)
+				cb.SetNextReceived(nextReceived)
+				cb2.SetNextReceived(nextReceived)
+			case c == 1:
+				nextReceived = min(nextReceived+1, maxLastReceivedForFuzzing)
+				cb.SetNextReceived(nextReceived)
+				cb2.SetNextReceived(nextReceived)
+				cb.SetBit(nextReceived - 1)
+				cb2.SetBit(nextReceived - 1)
+			case c == 2:
+				cb.SetBit(uint64(v))
+				cb2.SetBit(uint64(v))
+			case c == 3:
+				cb.ClearBit(uint64(v))
+				cb2.ClearBit(uint64(v))
+			case c == 4:
+				nextReceived = min(nextReceived+uint64(v), maxLastReceivedForFuzzing)
+				cb.SetNextReceived(nextReceived)
+				cb2.SetNextReceived(nextReceived)
+			case c == 5:
+				if nextReceived != 0 {
+					cb.ClearBit(nextReceived - 1)
+					cb2.ClearBit(nextReceived - 1)
 				}
 			}
 		}

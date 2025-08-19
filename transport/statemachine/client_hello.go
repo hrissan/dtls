@@ -45,7 +45,7 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 		log.Printf("serverHRRHash2: %x\n", hrrHash[:])
 
 		// [rfc8446:4.4.1] replace initial client hello message with its hash if HRR was used
-		syntheticHashData := []byte{byte(handshake.HandshakeTypeMessageHash), 0, 0, sha256.Size}
+		syntheticHashData := []byte{byte(handshake.MsgTypeMessageHash), 0, 0, sha256.Size}
 		_, _ = hctx.TranscriptHasher.Write(syntheticHashData)
 		_, _ = hctx.TranscriptHasher.Write(initialHelloTranscriptHash[:sha256.Size])
 		debugPrintSum(hctx.TranscriptHasher)
@@ -73,7 +73,7 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 	// TODO - get body from the rope
 	serverHelloBody := serverHello.Write(nil)
 	serverHelloMessage := handshake.Message{
-		MsgType: handshake.HandshakeTypeServerHello,
+		MsgType: handshake.MsgTypeServerHello,
 		Body:    serverHelloBody,
 	}
 	_ = hctx.ReceivedFlight(conn, MessagesFlightClientHello2)
@@ -144,7 +144,7 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 		SequenceNumber: 0,
 	}
 	msgHeader := handshake.FragmentHeader{
-		MsgType: handshake.HandshakeTypeServerHello,
+		MsgType: handshake.MsgTypeServerHello,
 		Length:  0,
 		FragmentInfo: handshake.FragmentInfo{
 			MsgSeq:         0,
@@ -178,7 +178,7 @@ func generateEncryptedExtensions() handshake.Message {
 
 	messageBody := ee.Write(nil, false, false, false) // TODO - reuse message bodies in a rope
 	return handshake.Message{
-		MsgType: handshake.HandshakeTypeEncryptedExtensions,
+		MsgType: handshake.MsgTypeEncryptedExtensions,
 		Body:    messageBody,
 	}
 }
@@ -192,7 +192,7 @@ func generateServerCertificate(opts *options.TransportOptions) handshake.Message
 	}
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
 	return handshake.Message{
-		MsgType: handshake.HandshakeTypeCertificate,
+		MsgType: handshake.MsgTypeCertificate,
 		Body:    messageBody,
 	}
 }
@@ -219,7 +219,7 @@ func generateServerCertificateVerify(opts *options.TransportOptions, hctx *Hands
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
 
 	return handshake.Message{
-		MsgType: handshake.HandshakeTypeCertificateVerify,
+		MsgType: handshake.MsgTypeCertificateVerify,
 		Body:    messageBody,
 	}, nil
 }

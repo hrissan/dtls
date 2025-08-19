@@ -14,7 +14,7 @@ import (
 // change into PartialHandshakeMsg
 func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg handshake.Message) error {
 	switch msg.MsgType {
-	case handshake.HandshakeTypeServerHello:
+	case handshake.MsgTypeServerHello:
 		if conn.RoleServer {
 			return dtlserrors.ErrServerHelloReceivedByServer
 		}
@@ -23,7 +23,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg h
 			return dtlserrors.WarnPlaintextServerHelloParsing
 		}
 		return hctx.onServerHello(conn, msg, msgServerHello)
-	case handshake.HandshakeTypeEncryptedExtensions:
+	case handshake.MsgTypeEncryptedExtensions:
 		if conn.RoleServer {
 			return dtlserrors.ErrEncryptedExtensionsReceivedByServer
 		}
@@ -35,7 +35,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg h
 		msg.AddToHash(hctx.TranscriptHasher)
 		_, _ = hctx.TranscriptHasher.Write(msg.Body)
 		return nil
-	case handshake.HandshakeTypeCertificate:
+	case handshake.MsgTypeCertificate:
 		var msgCertificate handshake.MsgCertificate
 		if err := msgCertificate.Parse(msg.Body); err != nil {
 			return dtlserrors.ErrCertificateMessageParsing
@@ -48,7 +48,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg h
 		msg.AddToHash(hctx.TranscriptHasher)
 		_, _ = hctx.TranscriptHasher.Write(msg.Body)
 		return nil
-	case handshake.HandshakeTypeCertificateVerify:
+	case handshake.MsgTypeCertificateVerify:
 		var msgCertificateVerify handshake.MsgCertificateVerify
 		if err := msgCertificateVerify.Parse(msg.Body); err != nil {
 			return dtlserrors.ErrCertificateVerifyMessageParsing
@@ -83,7 +83,7 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg h
 		msg.AddToHash(hctx.TranscriptHasher)
 		_, _ = hctx.TranscriptHasher.Write(msg.Body)
 		return nil
-	case handshake.HandshakeTypeFinished:
+	case handshake.MsgTypeFinished:
 		var msgFinished handshake.MsgFinished
 		if err := msgFinished.Parse(msg.Body); err != nil {
 			return dtlserrors.ErrFinishedMessageParsing
@@ -125,9 +125,9 @@ func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg h
 		// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here
 		hctx.PushMessage(conn, hctx.GenerateFinished(conn))
 		return nil
-	case handshake.HandshakeTypeClientHello:
-	case handshake.HandshakeTypeKeyUpdate:
-	case handshake.HandshakeTypeNewSessionTicket:
+	case handshake.MsgTypeClientHello:
+	case handshake.MsgTypeKeyUpdate:
+	case handshake.MsgTypeNewSessionTicket:
 		panic("handled in ConnectionImpl.ProcessHandshake")
 	default:
 		// TODO - process all messages in standard, generate error for the rest

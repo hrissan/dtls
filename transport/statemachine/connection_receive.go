@@ -33,7 +33,7 @@ func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptio
 	case format.PlaintextContentTypeApplicationData:
 		return conn.ProcessApplicationData(decrypted)
 	case format.PlaintextContentTypeHandshake:
-		return conn.ProcessEncryptedHandshake(opts, decrypted, rn)
+		return conn.ProcessEncryptedHandshakeRecord(opts, decrypted, rn)
 	}
 	return dtlserrors.ErrUnknownInnerPlaintextRecordType
 }
@@ -68,7 +68,7 @@ func (conn *ConnectionImpl) ProcessApplicationData(messageData []byte) error {
 	return nil
 }
 
-func (conn *ConnectionImpl) ProcessEncryptedHandshake(opts *options.TransportOptions, recordData []byte, rn format.RecordNumber) error {
+func (conn *ConnectionImpl) ProcessEncryptedHandshakeRecord(opts *options.TransportOptions, recordData []byte, rn format.RecordNumber) error {
 	log.Printf("dtls: got handshake record (encrypted) %d bytes from %v, message(hex): %x", len(recordData), conn.Addr, recordData)
 	if len(recordData) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding
@@ -76,33 +76,33 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshake(opts *options.TransportOpt
 	}
 	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
 	for messageOffset < len(recordData) {
-		var handshakeHdr handshake.FragmentHeader
-		n, messageBody, err := handshakeHdr.ParseWithBody(recordData[messageOffset:])
+		var fragmentHdr handshake.FragmentHeader
+		n, messageBody, err := fragmentHdr.ParseWithBody(recordData[messageOffset:])
 		if err != nil {
 			opts.Stats.BadMessageHeader("handshake(encrypted)", messageOffset, len(recordData), conn.Addr, err)
 			return dtlserrors.ErrEncryptedHandshakeMessageHeaderParsing
 		}
 		messageOffset += n
 
-		if handshakeHdr.MsgSeq < conn.FirstMessageSeqInReceiveQueue() {
+		if fragmentHdr.MsgSeq < conn.FirstMessageSeqInReceiveQueue() {
 			// all messages before were processed by us in the state we already do not remember,
 			// so we must acknowledge unconditionally and do nothing.
 			conn.Keys.AddAck(rn)
 			continue
 		}
-		switch handshakeHdr.MsgType {
-		case handshake.HandshakeTypeClientHello:
-			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.HandshakeTypeToName(handshakeHdr.MsgType), conn.Addr, handshakeHdr)
+		switch fragmentHdr.MsgType {
+		case handshake.MsgTypeClientHello:
+			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.MsgTypeToName(fragmentHdr.MsgType), conn.Addr, fragmentHdr)
 			return dtlserrors.ErrClientHelloMustNotBeEncrypted
-		case handshake.HandshakeTypeServerHello:
-			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.HandshakeTypeToName(handshakeHdr.MsgType), conn.Addr, handshakeHdr)
+		case handshake.MsgTypeServerHello:
+			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.MsgTypeToName(fragmentHdr.MsgType), conn.Addr, fragmentHdr)
 			return dtlserrors.ErrServerHelloMustNotBeEncrypted
-		case handshake.HandshakeTypeNewSessionTicket:
-			if err := conn.receivedNewSessionTicket(opts, handshakeHdr, messageBody, rn); err != nil {
+		case handshake.MsgTypeNewSessionTicket:
+			if err := conn.receivedNewSessionTicket(opts, fragmentHdr, messageBody, rn); err != nil {
 				return err
 			}
-		case handshake.HandshakeTypeKeyUpdate:
-			if err := conn.receivedKeyUpdate(opts, handshakeHdr, messageBody, rn); err != nil {
+		case handshake.MsgTypeKeyUpdate:
+			if err := conn.receivedKeyUpdate(opts, fragmentHdr, messageBody, rn); err != nil {
 				return err
 			}
 		default:
@@ -115,7 +115,7 @@ func (conn *ConnectionImpl) ProcessEncryptedHandshake(opts *options.TransportOpt
 			// we will not be able to throw them out (peer will never send fragments again), and we will not
 			// be able to process them immediately.
 			// So all post-handshake messages muet be processed in switch statement above.
-			if err := conn.Handshake.ReceivedMessage(conn, handshakeHdr, messageBody, rn); err != nil {
+			if err := conn.Handshake.ReceivedMessage(conn, fragmentHdr, messageBody, rn); err != nil {
 				return err
 			}
 		}

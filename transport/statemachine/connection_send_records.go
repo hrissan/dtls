@@ -29,7 +29,7 @@ func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg handsh
 		},
 		Body: handshakeMsg.Body,
 	}
-	if handshakeMsg.MsgType == handshake.HandshakeTypeClientHello || handshakeMsg.MsgType == handshake.HandshakeTypeServerHello {
+	if handshakeMsg.MsgType == handshake.MsgTypeClientHello || handshakeMsg.MsgType == handshake.MsgTypeServerHello {
 		if sendNextSegmentSequenceEpoch0 == nil {
 			panic("the same check for plaintext record should be above")
 		}

@@ -27,7 +27,7 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 		}
 		messageOffset += n
 		switch handshakeHdr.MsgType {
-		case handshake.HandshakeTypeClientHello:
+		case handshake.MsgTypeClientHello:
 			// on error, we could continue to the next fragment, but state machine will be broken, so we do not
 			var msg handshake.MsgClientHello
 			if handshakeHdr.IsFragmented() {
@@ -43,7 +43,7 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 			if err != nil {
 				return conn, err
 			}
-		case handshake.HandshakeTypeServerHello:
+		case handshake.MsgTypeServerHello:
 			// on error, we could continue to the next fragment, but state machine will be broken, so we do not
 			if conn == nil {
 				return conn, dtlserrors.ErrServerHelloNoActiveConnection
@@ -52,7 +52,7 @@ func (rc *Receiver) processPlaintextHandshake(conn *statemachine.ConnectionImpl,
 				return conn, err
 			}
 		default:
-			rc.opts.Stats.MustBeEncrypted("handshake", handshake.HandshakeTypeToName(handshakeHdr.MsgType), addr, handshakeHdr)
+			rc.opts.Stats.MustBeEncrypted("handshake", handshake.MsgTypeToName(handshakeHdr.MsgType), addr, handshakeHdr)
 			// we can continue to the next message, but state machine will be broken
 			return conn, dtlserrors.WarnHandshakeMessageMustBeEncrypted
 		}

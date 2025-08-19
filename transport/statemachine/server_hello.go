@@ -44,7 +44,7 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, msg handsha
 		var initialHelloTranscriptHashStorage [constants.MaxHashLength]byte
 		initialHelloTranscriptHash := hctx.TranscriptHasher.Sum(initialHelloTranscriptHashStorage[:0])
 		hctx.TranscriptHasher.Reset()
-		syntheticHashData := []byte{byte(handshake.HandshakeTypeMessageHash), 0, 0, byte(len(initialHelloTranscriptHash))}
+		syntheticHashData := []byte{byte(handshake.MsgTypeMessageHash), 0, 0, byte(len(initialHelloTranscriptHash))}
 		_, _ = hctx.TranscriptHasher.Write(syntheticHashData)
 		_, _ = hctx.TranscriptHasher.Write(initialHelloTranscriptHash)
 
@@ -138,7 +138,7 @@ func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.C
 
 	messageBody := clientHello.Write(nil) // TODO - reuse message bodies in a rope
 	return handshake.Message{
-		MsgType: handshake.HandshakeTypeClientHello,
+		MsgType: handshake.MsgTypeClientHello,
 		Body:    messageBody,
 	}
 }

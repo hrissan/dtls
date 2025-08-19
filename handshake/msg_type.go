@@ -7,54 +7,54 @@ type MsgType byte
 var ErrHandshakeMsgTooShort = errors.New("handshake message too short")
 
 const (
-	HandshakeTypeZero                = 0 // hello_request_RESERVED - we use it as "message not set" flag
-	HandshakeTypeClientHello MsgType = 1
-	HandshakeTypeServerHello MsgType = 2
+	MsgTypeZero                = 0 // hello_request_RESERVED - we use it as "message not set" flag
+	MsgTypeClientHello MsgType = 1
+	MsgTypeServerHello MsgType = 2
 	// HelloRetryRequest message uses the same structure as the ServerHello, but with Random set to the special value
 	// SHA-256 of "HelloRetryRequest": CF 21 AD 74 E5 9A 61 11 BE 1D 8C 02 1E 65 B8 91 C2 A2 11 16 7A BB 8C 5E 07 9E 09 E2 C8 A8 33 9C
 	// [rfc8446:4.1.3]
-	HandshakeTypeNewSessionTicket    MsgType = 4
-	HandshakeTypeEndOfEarlyData      MsgType = 5
-	HandshakeTypeEncryptedExtensions MsgType = 8
-	HandshakeTypeRequestConnectionID MsgType = 9
-	HandshakeTypeNewConnectionID     MsgType = 10
-	HandshakeTypeCertificate         MsgType = 11
-	HandshakeTypeCertificateRequest  MsgType = 13
-	HandshakeTypeCertificateVerify   MsgType = 15
-	HandshakeTypeFinished            MsgType = 20
-	HandshakeTypeKeyUpdate           MsgType = 24
-	HandshakeTypeMessageHash         MsgType = 254 // synthetic message, never transmitted [rfc9147:5.1]
+	MsgTypeNewSessionTicket    MsgType = 4
+	MsgTypeEndOfEarlyData      MsgType = 5
+	MsgTypeEncryptedExtensions MsgType = 8
+	MsgTypeRequestConnectionID MsgType = 9
+	MsgTypeNewConnectionID     MsgType = 10
+	MsgTypeCertificate         MsgType = 11
+	MsgTypeCertificateRequest  MsgType = 13
+	MsgTypeCertificateVerify   MsgType = 15
+	MsgTypeFinished            MsgType = 20
+	MsgTypeKeyUpdate           MsgType = 24
+	MsgTypeMessageHash         MsgType = 254 // synthetic message, never transmitted [rfc9147:5.1]
 )
 
-func HandshakeTypeToName(t MsgType) string {
+func MsgTypeToName(t MsgType) string {
 	switch t {
-	case HandshakeTypeZero:
+	case MsgTypeZero:
 		return "<zero>"
-	case HandshakeTypeClientHello:
+	case MsgTypeClientHello:
 		return "ClientHello"
-	case HandshakeTypeServerHello:
+	case MsgTypeServerHello:
 		return "ServerHello"
-	case HandshakeTypeNewSessionTicket:
+	case MsgTypeNewSessionTicket:
 		return "NewSessionTicket"
-	case HandshakeTypeEndOfEarlyData:
+	case MsgTypeEndOfEarlyData:
 		return "EndOfEarlyData"
-	case HandshakeTypeEncryptedExtensions:
+	case MsgTypeEncryptedExtensions:
 		return "EncryptedExtensions"
-	case HandshakeTypeRequestConnectionID:
+	case MsgTypeRequestConnectionID:
 		return "RequestConnectionId"
-	case HandshakeTypeNewConnectionID:
+	case MsgTypeNewConnectionID:
 		return "NewConnectionId"
-	case HandshakeTypeCertificate:
+	case MsgTypeCertificate:
 		return "Certificate"
-	case HandshakeTypeCertificateRequest:
+	case MsgTypeCertificateRequest:
 		return "CertificateRequest"
-	case HandshakeTypeCertificateVerify:
+	case MsgTypeCertificateVerify:
 		return "CertificateVerify"
-	case HandshakeTypeFinished:
+	case MsgTypeFinished:
 		return "Finished"
-	case HandshakeTypeKeyUpdate:
+	case MsgTypeKeyUpdate:
 		return "KeyUpdate"
-	case HandshakeTypeMessageHash:
+	case MsgTypeMessageHash:
 		return "MessageHash"
 	default:
 		return "<unknown>"

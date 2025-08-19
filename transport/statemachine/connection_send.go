@@ -71,7 +71,7 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 		msgBody = msgKeyUpdate.Write(msgBody)
 		lenBody := uint32(len(msgBody))
 		msg := handshake.Message{
-			MsgType: handshake.HandshakeTypeKeyUpdate,
+			MsgType: handshake.MsgTypeKeyUpdate,
 			MsgSeq:  conn.sendKeyUpdateMessageSeq,
 			Body:    msgBody,
 		}

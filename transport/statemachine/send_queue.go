@@ -81,7 +81,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 			sq.fragmentOffset = outgoing.SendOffset
 		}
 		var sendNextSegmentSequenceEpoch0 *uint16
-		if outgoing.Msg.MsgType == handshake.HandshakeTypeClientHello || outgoing.Msg.MsgType == handshake.HandshakeTypeServerHello {
+		if outgoing.Msg.MsgType == handshake.MsgTypeClientHello || outgoing.Msg.MsgType == handshake.MsgTypeServerHello {
 			if conn.Handshake != nil {
 				sendNextSegmentSequenceEpoch0 = &conn.Handshake.SendNextSegmentSequenceEpoch0
 			} else {

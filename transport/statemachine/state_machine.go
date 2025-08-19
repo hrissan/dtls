@@ -20,7 +20,7 @@ func (hctx *HandshakeConnection) GenerateFinished(conn *ConnectionImpl) handshak
 	copy(msg.VerifyData[:], mustBeFinished)
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
 	return handshake.Message{
-		MsgType: handshake.HandshakeTypeFinished,
+		MsgType: handshake.MsgTypeFinished,
 		Body:    messageBody,
 	}
 }

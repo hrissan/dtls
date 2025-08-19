@@ -78,12 +78,12 @@ func (hctx *HandshakeConnection) ReceivedFlight(conn *ConnectionImpl, flight byt
 }
 
 func (hctx *HandshakeConnection) ReceivedMessage(conn *ConnectionImpl, handshakeHdr handshake.FragmentHeader, body []byte, rn format.RecordNumber) error {
-	if handshakeHdr.MsgType == handshake.HandshakeTypeZero { // we use it as a flag of not yet received message below, so check here
+	if handshakeHdr.MsgType == handshake.MsgTypeZero { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}
 	// Receiving any fragment of any message from the next flight will remove all acks for previous flights.
 	// We must do it before we generate ack for this fragment.
-	flight := HandshakeTypeToFlight(handshakeHdr.MsgType, conn.RoleServer) // zero if unknown
+	flight := MsgTypeToFlight(handshakeHdr.MsgType, conn.RoleServer) // zero if unknown
 	conn.Handshake.ReceivedFlight(conn, flight)
 
 	messageOffset := int(handshakeHdr.MsgSeq) + hctx.receivedMessages.Len() - int(conn.NextMessageSeqReceive)

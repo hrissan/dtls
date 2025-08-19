@@ -15,16 +15,16 @@ const (
 // we need this function, because we want to clear acks for previous flight when we receive
 // fragment of the message from the next flight. If we wait until we reassemble complete message,
 // we'd not be able to clear acks for previous messages.
-func HandshakeTypeToFlight(handshakeType handshake.MsgType, roleServer bool) byte {
+func MsgTypeToFlight(handshakeType handshake.MsgType, roleServer bool) byte {
 	switch handshakeType {
-	// case handshake.HandshakeTypeClientHello: - they are processed by separate state machine
-	// case handshake.HandshakeTypeServerHello: - they are processed by separate state machine
-	case handshake.HandshakeTypeEncryptedExtensions:
+	// case handshake.MsgTypeClientHello: - they are processed by separate state machine
+	// case handshake.MsgTypeServerHello: - they are processed by separate state machine
+	case handshake.MsgTypeEncryptedExtensions:
 		return MessagesFlightServerHello_Finished
-	case handshake.HandshakeTypeCertificate:
-	case handshake.HandshakeTypeCertificateRequest:
-	case handshake.HandshakeTypeCertificateVerify:
-	case handshake.HandshakeTypeFinished:
+	case handshake.MsgTypeCertificate:
+	case handshake.MsgTypeCertificateRequest:
+	case handshake.MsgTypeCertificateVerify:
+	case handshake.MsgTypeFinished:
 		if roleServer {
 			return MessagesFlightServerHello_Finished
 		}

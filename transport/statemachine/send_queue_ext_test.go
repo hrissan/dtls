@@ -6,6 +6,7 @@ import (
 
 	"github.com/hrissan/tinydtls/circular"
 	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/tinydtls/handshake"
 )
 
 // linear search is faster for small arrays

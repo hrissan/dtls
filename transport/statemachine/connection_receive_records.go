@@ -33,13 +33,12 @@ func (conn *ConnectionImpl) checkReceiveLimits() error {
 	return conn.startKeyUpdate(true)
 }
 
-func (conn *ConnectionImpl) deprotectLocked(hdr record.CiphertextHeader, seqNumData []byte, header []byte, body []byte) (decrypted []byte, rn record.Number, contentType byte, err error) {
+func (conn *ConnectionImpl) deprotectLocked(hdr record.Ciphertext) (decrypted []byte, rn record.Number, contentType byte, err error) {
 	receiver := &conn.Keys.Receive
 	var seq uint64
 	if hdr.MatchesEpoch(receiver.Symmetric.Epoch) {
 		nextSeq := conn.Keys.ReceiveNextSegmentSequence.GetNextReceivedSeq()
-		decrypted, seq, contentType, err = receiver.Symmetric.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, nextSeq,
-			seqNumData, header, body)
+		decrypted, seq, contentType, err = receiver.Symmetric.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, nextSeq)
 		if err != nil {
 			// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
 			conn.Keys.FailedDeprotectionCounter++
@@ -70,8 +69,7 @@ func (conn *ConnectionImpl) deprotectLocked(hdr record.CiphertextHeader, seqNumD
 			conn.Keys.FailedDeprotectionCounterNewReceiveKeys = 0
 			receiver.ComputeNextApplicationTrafficSecret(!conn.RoleServer) // next application traffic secret is calculated from the previous one
 		}
-		decrypted, seq, contentType, err = conn.Keys.NewReceiveKeys.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, 0,
-			seqNumData, header, body)
+		decrypted, seq, contentType, err = conn.Keys.NewReceiveKeys.Deprotect(hdr, !conn.Keys.DoNotEncryptSequenceNumbers, 0)
 		if err != nil {
 			// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
 			conn.Keys.FailedDeprotectionCounterNewReceiveKeys++

@@ -11,19 +11,19 @@ import (
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
-func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptions, hdr record.CiphertextHeader, cid []byte, seqNumData []byte, header []byte, body []byte) error {
+func (conn *ConnectionImpl) ProcessCiphertextRecord(opts *options.TransportOptions, hdr record.Ciphertext) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if err := conn.checkReceiveLimits(); err != nil {
 		return err
 	}
-	decrypted, rn, contentType, err := conn.deprotectLocked(hdr, seqNumData, header, body)
+	decrypted, rn, contentType, err := conn.deprotectLocked(hdr)
 	if err != nil { // TODO - deprotectLocked should return dtlserror.Error
 		opts.Stats.Warning(conn.Addr, dtlserrors.WarnFailedToDeprotectRecord)
 		// either garbage, attack or epoch wrapping
 		return nil
 	}
-	log.Printf("dtls: ciphertext %v deprotected with rn={%d,%d} cid(hex): %x from %v, body(hex): %x", hdr, rn.Epoch(), rn.SeqNum(), cid, conn.Addr, decrypted)
+	log.Printf("dtls: ciphertext deprotected with rn={%d,%d} cid(hex): %x from %v, body(hex): %x", rn.Epoch(), rn.SeqNum(), hdr.CID, conn.Addr, decrypted)
 	// [rfc9147:4.1]
 	switch contentType {
 	case record.RecordTypeAlert:

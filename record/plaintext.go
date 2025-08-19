@@ -32,6 +32,7 @@ type Plaintext struct {
 	// epoch is fixed to 0 for plaintext messages, do not store
 	SequenceNumber uint64 // stored as 48-bit
 	// Length is checked, not stored
+	// Body is alias to buffer which must be parsed/saved and never retained
 	Body []byte
 }
 

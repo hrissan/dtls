@@ -114,9 +114,9 @@ func (conn *ConnectionImpl) constructCiphertextRecord(recordData []byte, msg han
 	keys.FillIVSequence(iv[:], seq)
 
 	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
-	hdr := record.NewCiphertextRecordHeader(false, true, true, epoch)
+	firstByte := record.CiphertextHeaderFirstByte(false, true, true, epoch)
 	startRecordOffset := len(recordData)
-	recordData = append(recordData, hdr.FirstByte)
+	recordData = append(recordData, firstByte)
 	recordData = binary.BigEndian.AppendUint16(recordData, uint16(seq))
 	recordData = append(recordData, 0, 0) // fill length later
 	startBodyOFfset := len(recordData)
@@ -166,8 +166,8 @@ func (conn *ConnectionImpl) constructCiphertextAck(recordBody []byte, acks []rec
 	keys.FillIVSequence(iv[:], seq)
 
 	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
-	hdr := record.NewCiphertextRecordHeader(false, true, true, epoch)
-	recordBody = append(recordBody, hdr.FirstByte)
+	firstByte := record.CiphertextHeaderFirstByte(false, true, true, epoch)
+	recordBody = append(recordBody, firstByte)
 	recordBody = binary.BigEndian.AppendUint16(recordBody, uint16(seq))
 	recordBody = append(recordBody, 0, 0) // fill length later
 	startBodyOFfset := len(recordBody)
@@ -222,7 +222,7 @@ func (conn *ConnectionImpl) constructCiphertextApplication(recordBody []byte) ([
 	keys.FillIVSequence(iv[:], seq)
 
 	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
-	hdr := record.NewCiphertextRecordHeader(false, true, true, epoch)
+	firstByte := record.CiphertextHeaderFirstByte(false, true, true, epoch)
 	const hdrSize = record.OutgoingCiphertextRecordHeader
 	recordBody = append(recordBody, record.RecordApplicationData)
 
@@ -232,7 +232,7 @@ func (conn *ConnectionImpl) constructCiphertextApplication(recordBody []byte) ([
 		recordBody = append(recordBody, 0)
 	}
 
-	recordBody[0] = hdr.FirstByte
+	recordBody[0] = firstByte
 	binary.BigEndian.PutUint16(recordBody[1:], uint16(seq))
 	binary.BigEndian.PutUint16(recordBody[3:], uint16(len(recordBody)-hdrSize))
 

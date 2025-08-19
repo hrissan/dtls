@@ -152,27 +152,25 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 		ContentType:    record.RecordTypeHandshake,
 		SequenceNumber: 0,
 	}
+	// first reserve space for headers by writing with not all variables set
+	datagram = append(datagram, make([]byte, record.PlaintextRecordHeaderSize+handshake.FragmentHeaderSize)...) // reserve space
+	datagram = helloRetryRequest.Write(datagram)
+	msgBodySize := len(datagram) - record.PlaintextRecordHeaderSize - handshake.FragmentHeaderSize
+
+	// now overwrite reserved space
+	da := recordHdr.Write(datagram[:0], handshake.FragmentHeaderSize+msgBodySize)
+
 	msgHeader := handshake.FragmentHeader{
 		MsgType: handshake.MsgTypeServerHello,
-		Length:  0,
+		Length:  uint32(msgBodySize),
 		FragmentInfo: handshake.FragmentInfo{
 			MsgSeq:         0,
 			FragmentOffset: 0,
-			FragmentLength: 0,
+			FragmentLength: uint32(msgBodySize),
 		},
 	}
-	// first reserve space for headers by writing with not all variables set
-	datagram = recordHdr.Write(datagram, 0) // reserve space
-	recordHeaderSize := len(datagram)
-	datagram = msgHeader.Write(datagram) // reserve space
-	msgHeaderSize := len(datagram) - recordHeaderSize
-	datagram = helloRetryRequest.Write(datagram)
-	msgBodySize := len(datagram) - recordHeaderSize - msgHeaderSize
-	msgHeader.Length = uint32(msgBodySize)
-	msgHeader.FragmentLength = msgHeader.Length
-	// now overwrite reserved space
-	_ = recordHdr.Write(datagram[:0], msgHeaderSize+msgBodySize)
-	_ = msgHeader.Write(datagram[recordHeaderSize:recordHeaderSize])
+
+	_ = msgHeader.Write(da)
 	return datagram
 }
 

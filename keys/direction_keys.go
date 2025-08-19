@@ -98,19 +98,19 @@ func findPaddingOffsetContentType(data []byte) (paddingOffset int, contentType b
 }
 
 // Warning - decrypts in place, seqNumData and body can be garbage after unsuccessfull decryption
-func (keys *SymmetricKeys) Deprotect(hdr record.CiphertextHeader, encryptSN bool, expectedSN uint64, seqNumData []byte, header []byte, body []byte) (decrypted []byte, seq uint64, contentType byte, err error) {
+func (keys *SymmetricKeys) Deprotect(hdr record.Ciphertext, encryptSN bool, expectedSN uint64) (decrypted []byte, seq uint64, contentType byte, err error) {
 	if encryptSN {
-		if err := keys.EncryptSequenceNumbers(seqNumData, body); err != nil {
+		if err := keys.EncryptSequenceNumbers(hdr.SeqNum, hdr.Body); err != nil {
 			return nil, 0, 0, err
 		}
 	}
 	gcm := keys.Write
 	iv := keys.WriteIV // copy, otherwise disaster
-	decryptedSeqData, seq := hdr.ClosestSequenceNumber(seqNumData, expectedSN)
+	decryptedSeqData, seq := hdr.ClosestSequenceNumber(hdr.SeqNum, expectedSN)
 	log.Printf("decrypted SN: %d, closest: %d", decryptedSeqData, seq)
 
 	FillIVSequence(iv[:], seq)
-	decrypted, err = gcm.Open(body[:0], iv[:], body, header)
+	decrypted, err = gcm.Open(hdr.Body[:0], iv[:], hdr.Body, hdr.Header)
 	if err != nil {
 		return nil, seq, 0, err
 	}

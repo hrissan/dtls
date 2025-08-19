@@ -103,8 +103,8 @@ func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 		fb := datagram[recordOffset]
 		switch {
 		case record.IsCiphertextRecord(fb):
-			var hdr record.CiphertextHeader
-			n, cid, seqNumData, header, body, err := hdr.Parse(datagram[recordOffset:], rc.opts.CIDLength)
+			var hdr record.Ciphertext
+			n, err := hdr.Parse(datagram[recordOffset:], rc.opts.CIDLength)
 			if err != nil {
 				rc.opts.Stats.BadRecord("ciphertext", recordOffset, len(datagram), addr, err)
 				rc.opts.Stats.Warning(addr, dtlserrors.WarnCiphertextRecordParsing)
@@ -113,14 +113,14 @@ func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 				return conn, nil
 			}
 			recordOffset += n
-			log.Printf("dtls: got ciphertext %v cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, body)
+			// log.Printf("dtls: got ciphertext %v cid(hex): %x from %v, body(hex): %x", hdr., cid, addr, body)
 			if conn == nil {
 				rc.opts.Stats.Warning(addr, dtlserrors.WarnCiphertextNoConnection)
 				// TODO - stateless alert
 				// Continue - may be there is ClientHello in the next record?
 				continue
 			}
-			err = conn.ProcessCiphertextRecord(rc.opts, hdr, cid, seqNumData, header, body)
+			err = conn.ProcessCiphertextRecord(rc.opts, hdr)
 			if err != nil {
 				return conn, err
 			}

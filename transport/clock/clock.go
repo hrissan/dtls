@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/hrissan/tinydtls/intrusive"
-	"github.com/hrissan/tinydtls/transport/handshake"
 	"github.com/hrissan/tinydtls/transport/options"
+	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
 type Clock struct {

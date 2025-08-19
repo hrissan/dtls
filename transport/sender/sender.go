@@ -9,8 +9,8 @@ import (
 
 	"github.com/hrissan/tinydtls/circular"
 	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/transport/handshake"
 	"github.com/hrissan/tinydtls/transport/options"
+	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
 // [rfc9147:4.4]

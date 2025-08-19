@@ -9,10 +9,10 @@ import (
 	"unsafe"
 
 	"github.com/hrissan/tinydtls/keys"
-	"github.com/hrissan/tinydtls/transport/handshake"
 	"github.com/hrissan/tinydtls/transport/options"
 	"github.com/hrissan/tinydtls/transport/receiver"
 	"github.com/hrissan/tinydtls/transport/sender"
+	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
 type Transport struct {

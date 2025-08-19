@@ -10,7 +10,7 @@ import (
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
-	"github.com/hrissan/tinydtls/transport/handshake"
+	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
 func (rc *Receiver) OnClientHello(conn *statemachine.ConnectionImpl, messageBody []byte, handshakeHdr format.HandshakeMsgFragmentHeader, msg format.MsgClientHello, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {

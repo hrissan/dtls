@@ -12,9 +12,9 @@ import (
 	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/format"
-	"github.com/hrissan/tinydtls/transport/handshake"
 	"github.com/hrissan/tinydtls/transport/options"
 	"github.com/hrissan/tinydtls/transport/sender"
+	"github.com/hrissan/tinydtls/transport/statemachine"
 )
 
 var ErrServerCannotStartConnection = errors.New("server can start connection")

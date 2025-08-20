@@ -6,9 +6,9 @@ import (
 	"net/netip"
 	"sync"
 
-	"github.com/hrissan/tinydtls/transport/options"
-	"github.com/hrissan/tinydtls/transport/receiver"
-	"github.com/hrissan/tinydtls/transport/sender"
+	"github.com/hrissan/dtls/transport/options"
+	"github.com/hrissan/dtls/transport/receiver"
+	"github.com/hrissan/dtls/transport/sender"
 )
 
 type Transport struct {
@@ -62,12 +62,12 @@ func (t *Transport) GoRunUDP(socket *net.UDPConn) {
 func OpenSocketMust(addressPort string) *net.UDPConn {
 	udpAddr, err := net.ResolveUDPAddr("udp", addressPort)
 	if err != nil {
-		log.Fatalf("tinydtls: cannot resolve local udp address %s: %v", addressPort, err)
+		log.Fatalf("dtls: cannot resolve local udp address %s: %v", addressPort, err)
 	}
 	socket, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
-		log.Fatalf("tinydtls: cannot listen to udp address %s: %v", addressPort, err)
+		log.Fatalf("dtls: cannot listen to udp address %s: %v", addressPort, err)
 	}
-	log.Printf("tinydtls: opened socket for address %s localAddr %s\n", addressPort, socket.LocalAddr().String())
+	log.Printf("dtls: opened socket for address %s localAddr %s\n", addressPort, socket.LocalAddr().String())
 	return socket
 }

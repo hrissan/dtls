@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hrissan/tinydtls/circular"
-	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/transport/options"
-	"github.com/hrissan/tinydtls/transport/statemachine"
+	"github.com/hrissan/dtls/circular"
+	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/transport/options"
+	"github.com/hrissan/dtls/transport/statemachine"
 )
 
 // [rfc9147:4.4]

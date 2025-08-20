@@ -8,9 +8,9 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/dtlsrand"
-	"github.com/hrissan/tinydtls/hkdf"
+	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/dtlsrand"
+	"github.com/hrissan/dtls/hkdf"
 )
 
 const cookieHashLength = sha256.Size

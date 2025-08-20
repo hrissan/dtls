@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 
-	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/hkdf"
+	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/hkdf"
 )
 
 type SymmetricKeys struct {

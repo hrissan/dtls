@@ -4,9 +4,9 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/hrissan/tinydtls/circular"
-	"github.com/hrissan/tinydtls/handshake"
-	"github.com/hrissan/tinydtls/record"
+	"github.com/hrissan/dtls/circular"
+	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/record"
 )
 
 // linear search is faster for small arrays

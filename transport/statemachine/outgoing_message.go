@@ -1,6 +1,6 @@
 package statemachine
 
-import "github.com/hrissan/tinydtls/handshake"
+import "github.com/hrissan/dtls/handshake"
 
 type partialHandshakeMsg struct {
 	Msg handshake.Message

@@ -3,7 +3,7 @@ package handshake
 import (
 	"encoding/binary"
 
-	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/dtls/format"
 )
 
 // TODO - use rope for all variable memory chunks

@@ -5,9 +5,9 @@ import (
 	"log"
 	"math"
 
-	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/record"
-	"github.com/hrissan/tinydtls/transport/options"
+	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/transport/options"
 )
 
 func (conn *ConnectionImpl) receivedEncryptedAck(opts *options.TransportOptions, messageData []byte) error {

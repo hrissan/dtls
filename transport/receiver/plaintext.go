@@ -4,10 +4,10 @@ import (
 	"log"
 	"net/netip"
 
-	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/handshake"
-	"github.com/hrissan/tinydtls/record"
-	"github.com/hrissan/tinydtls/transport/statemachine"
+	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/transport/statemachine"
 )
 
 func (rc *Receiver) receivedPlaintextRecord(conn *statemachine.ConnectionImpl, hdr record.Plaintext, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {

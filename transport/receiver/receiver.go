@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hrissan/tinydtls/cookie"
-	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/record"
-	"github.com/hrissan/tinydtls/transport/options"
-	"github.com/hrissan/tinydtls/transport/sender"
-	"github.com/hrissan/tinydtls/transport/statemachine"
+	"github.com/hrissan/dtls/cookie"
+	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/transport/options"
+	"github.com/hrissan/dtls/transport/sender"
+	"github.com/hrissan/dtls/transport/statemachine"
 )
 
 var ErrServerCannotStartConnection = errors.New("server can start connection")

@@ -3,7 +3,7 @@ package handshake
 import (
 	"errors"
 
-	"github.com/hrissan/tinydtls/constants"
+	"github.com/hrissan/dtls/constants"
 )
 
 var ErrMsgFinishedTooBig = errors.New("finished message too big")

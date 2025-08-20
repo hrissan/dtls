@@ -21,9 +21,9 @@ func (e *Error) Fatal() bool {
 
 func (e *Error) Error() string {
 	if e.fatal {
-		return fmt.Sprintf("tinydtls (fatal): %d %s", e.code, e.text)
+		return fmt.Sprintf("dtls (fatal): %d %s", e.code, e.text)
 	}
-	return fmt.Sprintf("tinydtls (warning): %d %s", e.code, e.text)
+	return fmt.Sprintf("dtls (warning): %d %s", e.code, e.text)
 }
 
 func IsFatal(err error) bool { // we do not use errors package for now

@@ -3,7 +3,7 @@ package circular_test
 import (
 	"testing"
 
-	"github.com/hrissan/tinydtls/circular"
+	"github.com/hrissan/dtls/circular"
 )
 
 func FuzzCircularBuffer(f *testing.F) {

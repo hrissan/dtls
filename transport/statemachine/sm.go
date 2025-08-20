@@ -3,10 +3,10 @@ package statemachine
 import (
 	"crypto/sha256"
 
-	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/handshake"
-	"github.com/hrissan/tinydtls/record"
-	"github.com/hrissan/tinydtls/transport/options"
+	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/transport/options"
 )
 
 // TODO - move out

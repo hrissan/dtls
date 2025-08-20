@@ -6,13 +6,13 @@ import (
 	"hash"
 	"log"
 
-	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/cookie"
-	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/handshake"
-	"github.com/hrissan/tinydtls/record"
-	"github.com/hrissan/tinydtls/signature"
-	"github.com/hrissan/tinydtls/transport/options"
+	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/cookie"
+	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/signature"
+	"github.com/hrissan/dtls/transport/options"
 )
 
 func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,

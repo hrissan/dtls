@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hrissan/tinydtls/hkdf"
+	"github.com/hrissan/dtls/hkdf"
 )
 
 func equals(t *testing.T, exp, act interface{}) {

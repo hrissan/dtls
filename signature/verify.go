@@ -6,7 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 
-	"github.com/hrissan/tinydtls/dtlsrand"
+	"github.com/hrissan/dtls/dtlsrand"
 )
 
 // worth reading and understanding

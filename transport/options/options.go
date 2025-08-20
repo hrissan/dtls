@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/dtlsrand"
-	"github.com/hrissan/tinydtls/transport/stats"
+	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/dtlsrand"
+	"github.com/hrissan/dtls/transport/stats"
 )
 
 // TODO - set limits in bytes of memory, let implementation calculate

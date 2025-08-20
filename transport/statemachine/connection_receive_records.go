@@ -3,9 +3,9 @@ package statemachine
 import (
 	"math"
 
-	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/keys"
-	"github.com/hrissan/tinydtls/record"
+	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/keys"
+	"github.com/hrissan/dtls/record"
 )
 
 // [rfc9147:4.5.3] we check against AEAD limit, initiate key update well before

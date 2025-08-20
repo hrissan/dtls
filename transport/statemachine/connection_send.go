@@ -3,10 +3,10 @@ package statemachine
 import (
 	"log"
 
-	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/handshake"
-	"github.com/hrissan/tinydtls/record"
-	"github.com/hrissan/tinydtls/replay"
+	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/replay"
 )
 
 func (conn *ConnectionImpl) HasDataToSend() bool {

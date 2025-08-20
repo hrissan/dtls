@@ -3,8 +3,8 @@ package handshake
 import (
 	"errors"
 
-	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/format"
 )
 
 var ErrCertificateChainTooLong = errors.New("certificate chain is too long")

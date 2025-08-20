@@ -3,7 +3,7 @@ package signature
 import (
 	"hash"
 
-	"github.com/hrissan/tinydtls/constants"
+	"github.com/hrissan/dtls/constants"
 )
 
 // [rfc8446:4.4.3]

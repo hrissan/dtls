@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"unsafe" // must be the only "unsafe" we have.
 
-	"github.com/hrissan/tinydtls/keys"
+	"github.com/hrissan/dtls/keys"
 )
 
 // TODO - move this file to tests too check we did not accidentally increased sizeof()

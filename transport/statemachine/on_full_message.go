@@ -3,8 +3,8 @@ package statemachine
 import (
 	"log"
 
-	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/handshake"
+	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/handshake"
 )
 
 func (hctx *handshakeContext) receivedFullMessage(conn *ConnectionImpl, msg handshake.Message) error {

@@ -3,7 +3,7 @@ package record
 import (
 	"errors"
 
-	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/dtls/format"
 )
 
 const AckHeaderSize = 2

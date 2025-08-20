@@ -5,12 +5,12 @@ import (
 	"hash"
 	"math"
 
-	"github.com/hrissan/tinydtls/circular"
-	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/dtlsrand"
-	"github.com/hrissan/tinydtls/handshake"
-	"github.com/hrissan/tinydtls/record"
+	"github.com/hrissan/dtls/circular"
+	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/dtlsrand"
+	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/record"
 )
 
 type handshakeContext struct {

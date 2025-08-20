@@ -3,7 +3,7 @@ package handshake
 import (
 	"errors"
 
-	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/dtls/format"
 )
 
 var ErrKeyUpdateRequestInvalid = errors.New("KeyUpdate request_update invalid value")

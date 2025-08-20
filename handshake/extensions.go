@@ -5,8 +5,8 @@ import (
 	"errors"
 	"math"
 
-	"github.com/hrissan/tinydtls/cookie"
-	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/dtls/cookie"
+	"github.com/hrissan/dtls/format"
 )
 
 const (

@@ -1,10 +1,10 @@
 package statemachine
 
 import (
-	"github.com/hrissan/tinydtls/circular"
-	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/handshake"
-	"github.com/hrissan/tinydtls/record"
+	"github.com/hrissan/dtls/circular"
+	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/record"
 )
 
 type record2Fragment struct {

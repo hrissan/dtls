@@ -4,9 +4,9 @@ import (
 	"crypto/ecdh"
 	"log"
 
-	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/handshake"
+	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/handshake"
 )
 
 type smHandshakeClientExpectServerHello struct {

@@ -6,10 +6,10 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/handshake"
-	"github.com/hrissan/tinydtls/transport/statemachine"
+	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/transport/statemachine"
 )
 
 func (rc *Receiver) receivedClientHello(conn *statemachine.ConnectionImpl, msg handshake.Message, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {

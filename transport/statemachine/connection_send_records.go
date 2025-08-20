@@ -5,12 +5,12 @@ import (
 	"log"
 	"math"
 
-	"github.com/hrissan/tinydtls/constants"
-	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/format"
-	"github.com/hrissan/tinydtls/handshake"
-	"github.com/hrissan/tinydtls/keys"
-	"github.com/hrissan/tinydtls/record"
+	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/format"
+	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/keys"
+	"github.com/hrissan/dtls/record"
 )
 
 func (conn *ConnectionImpl) constructRecord(datagram []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {

@@ -6,9 +6,9 @@ import (
 	"hash"
 	"log"
 
-	"github.com/hrissan/tinydtls/dtlserrors"
-	"github.com/hrissan/tinydtls/hkdf"
-	"github.com/hrissan/tinydtls/record"
+	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/hkdf"
+	"github.com/hrissan/dtls/record"
 )
 
 type DirectionKeys struct {

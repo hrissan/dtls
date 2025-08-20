@@ -1,7 +1,7 @@
 package statemachine
 
 import (
-	"github.com/hrissan/tinydtls/handshake"
+	"github.com/hrissan/dtls/handshake"
 )
 
 type smHandshakeClientExpectCert struct {

@@ -1,6 +1,6 @@
 package statemachine
 
-import "github.com/hrissan/tinydtls/handshake"
+import "github.com/hrissan/dtls/handshake"
 
 const (
 	// zero is reserved as a flag for "flight not set"

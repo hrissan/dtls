@@ -6,9 +6,9 @@ import (
 	"crypto/sha256"
 	"hash"
 
-	"github.com/hrissan/tinydtls/hkdf"
-	"github.com/hrissan/tinydtls/record"
-	"github.com/hrissan/tinydtls/replay"
+	"github.com/hrissan/dtls/hkdf"
+	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/replay"
 )
 
 type Keys struct {

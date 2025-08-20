@@ -6,7 +6,7 @@ import (
 	"crypto/sha256"
 	"testing"
 
-	"github.com/hrissan/tinydtls/dtlsrand"
+	"github.com/hrissan/dtls/dtlsrand"
 )
 
 // cpu: 13th Gen Intel(R) Core(TM) i7-1360P

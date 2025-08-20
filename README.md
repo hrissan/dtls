@@ -1,4 +1,4 @@
-# tinydtls
+# dtls
 
 Very much work in progress - this is only demo for now with no API.
 

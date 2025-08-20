@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 
-	"github.com/hrissan/tinydtls/format"
+	"github.com/hrissan/dtls/format"
 )
 
 const PlaintextRecordHeaderSize = 13

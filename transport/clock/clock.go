@@ -4,9 +4,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hrissan/tinydtls/intrusive"
-	"github.com/hrissan/tinydtls/transport/options"
-	"github.com/hrissan/tinydtls/transport/statemachine"
+	"github.com/hrissan/dtls/intrusive"
+	"github.com/hrissan/dtls/transport/options"
+	"github.com/hrissan/dtls/transport/statemachine"
 )
 
 type Clock struct {

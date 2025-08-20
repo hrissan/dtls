@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/hrissan/tinydtls/intrusive"
+	"github.com/hrissan/dtls/intrusive"
 )
 
 // cpu: 13th Gen Intel(R) Core(TM) i7-1360P

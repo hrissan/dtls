@@ -4,11 +4,11 @@ import (
 	"log"
 	"net/netip"
 
-	"github.com/hrissan/tinydtls/dtlsrand"
-	"github.com/hrissan/tinydtls/transport"
-	"github.com/hrissan/tinydtls/transport/options"
-	"github.com/hrissan/tinydtls/transport/statemachine"
-	"github.com/hrissan/tinydtls/transport/stats"
+	"github.com/hrissan/dtls/dtlsrand"
+	"github.com/hrissan/dtls/transport"
+	"github.com/hrissan/dtls/transport/options"
+	"github.com/hrissan/dtls/transport/statemachine"
+	"github.com/hrissan/dtls/transport/stats"
 )
 
 func main() {
@@ -23,7 +23,7 @@ func main() {
 
 	peerAddr, err := netip.ParseAddrPort("127.0.0.1:11111")
 	if err != nil {
-		log.Panic("tinydtls: cannot parse peer address: ", err)
+		log.Panic("dtls: cannot parse peer address: ", err)
 	}
 	_ = t.StartConnection(peerAddr)
 

@@ -1,3 +1,3 @@
-module github.com/hrissan/tinydtls
+module github.com/hrissan/dtls
 
 go 1.21.0

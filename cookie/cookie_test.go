@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hrissan/tinydtls/cookie"
-	"github.com/hrissan/tinydtls/dtlsrand"
+	"github.com/hrissan/dtls/cookie"
+	"github.com/hrissan/dtls/dtlsrand"
 )
 
 func TestRoundTrip(t *testing.T) {

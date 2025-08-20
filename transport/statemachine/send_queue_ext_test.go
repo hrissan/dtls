@@ -21,7 +21,7 @@ import (
 //BenchmarkSendQueue_AckLinear256-16    	 9869287	       122.5 ns/op
 //BenchmarkSendQueue_AckLog256-16       	38059436	        31.12 ns/op
 
-func findSentRecordIndexExt2(elements []recordFragmentRelation, sentRecords *circular.BufferExt[recordFragmentRelation], rn record.Number) *handshake.FragmentInfo {
+func findSentRecordIndexExt2(elements []record2Fragment, sentRecords *circular.BufferExt[record2Fragment], rn record.Number) *handshake.FragmentInfo {
 	s1, s2 := sentRecords.Slices(elements)
 
 	if ind, ok := slices.BinarySearchFunc(s1, rn, relationPred); ok {
@@ -33,11 +33,11 @@ func findSentRecordIndexExt2(elements []recordFragmentRelation, sentRecords *cir
 	return nil
 }
 
-func prepareBufferExtForTests(elements []recordFragmentRelation) *circular.BufferExt[recordFragmentRelation] {
+func prepareBufferExtForTests(elements []record2Fragment) *circular.BufferExt[record2Fragment] {
 	size := len(elements)
-	sentRecords := &circular.BufferExt[recordFragmentRelation]{}
+	sentRecords := &circular.BufferExt[record2Fragment]{}
 	for i := 0; i < size*3/4; i++ {
-		sentRecords.PushBack(elements, recordFragmentRelation{})
+		sentRecords.PushBack(elements, record2Fragment{})
 	}
 	for i := 0; i < size*3/4; i++ {
 		sentRecords.PopFront(elements)
@@ -45,14 +45,14 @@ func prepareBufferExtForTests(elements []recordFragmentRelation) *circular.Buffe
 	for i := 0; i < size; i++ {
 		rn := record.NumberWith(1, uint64(i))
 		if i%2 == 0 {
-			sentRecords.PushBack(elements, recordFragmentRelation{rn: rn})
+			sentRecords.PushBack(elements, record2Fragment{rn: rn})
 		}
 	}
 	return sentRecords
 }
 
 func TestSendQueue_AckExt(t *testing.T) {
-	var elements [32]recordFragmentRelation
+	var elements [32]record2Fragment
 	sentRecords := prepareBufferExtForTests(elements[:])
 	for i := 0; i < 30; i++ {
 		rn := record.NumberWith(1, uint64(i))
@@ -71,7 +71,7 @@ func TestSendQueue_AckExt(t *testing.T) {
 }
 
 func BenchmarkSendQueue_AckExtLinear16(b *testing.B) {
-	var elements [16]recordFragmentRelation
+	var elements [16]record2Fragment
 	sentRecords := prepareBufferExtForTests(elements[:])
 	for n := 0; n < b.N; n++ {
 		fragmentPtr := findSentRecordIndexExt(elements[:], sentRecords, record.NumberWith(1, uint64(n)))
@@ -82,7 +82,7 @@ func BenchmarkSendQueue_AckExtLinear16(b *testing.B) {
 }
 
 func BenchmarkSendQueue_AckExtLog16(b *testing.B) {
-	var elements [16]recordFragmentRelation
+	var elements [16]record2Fragment
 	sentRecords := prepareBufferExtForTests(elements[:])
 	for n := 0; n < b.N; n++ {
 		fragmentPtr := findSentRecordIndexExt2(elements[:], sentRecords, record.NumberWith(1, uint64(n)))
@@ -93,7 +93,7 @@ func BenchmarkSendQueue_AckExtLog16(b *testing.B) {
 }
 
 func BenchmarkSendQueue_AckExtLinear64(b *testing.B) {
-	var elements [64]recordFragmentRelation
+	var elements [64]record2Fragment
 	sentRecords := prepareBufferExtForTests(elements[:])
 	for n := 0; n < b.N; n++ {
 		fragmentPtr := findSentRecordIndexExt(elements[:], sentRecords, record.NumberWith(1, uint64(n)))
@@ -104,7 +104,7 @@ func BenchmarkSendQueue_AckExtLinear64(b *testing.B) {
 }
 
 func BenchmarkSendQueue_AckExtLog64(b *testing.B) {
-	var elements [64]recordFragmentRelation
+	var elements [64]record2Fragment
 	sentRecords := prepareBufferExtForTests(elements[:])
 	for n := 0; n < b.N; n++ {
 		fragmentPtr := findSentRecordIndexExt2(elements[:], sentRecords, record.NumberWith(1, uint64(n)))
@@ -115,7 +115,7 @@ func BenchmarkSendQueue_AckExtLog64(b *testing.B) {
 }
 
 func BenchmarkSendQueue_AckExtLinear256(b *testing.B) {
-	var elements [256]recordFragmentRelation
+	var elements [256]record2Fragment
 	sentRecords := prepareBufferExtForTests(elements[:])
 	for n := 0; n < b.N; n++ {
 		fragmentPtr := findSentRecordIndexExt(elements[:], sentRecords, record.NumberWith(1, uint64(n)))
@@ -126,7 +126,7 @@ func BenchmarkSendQueue_AckExtLinear256(b *testing.B) {
 }
 
 func BenchmarkSendQueue_AckExtLog256(b *testing.B) {
-	var elements [256]recordFragmentRelation
+	var elements [256]record2Fragment
 	sentRecords := prepareBufferExtForTests(elements[:])
 	for n := 0; n < b.N; n++ {
 		fragmentPtr := findSentRecordIndexExt2(elements[:], sentRecords, record.NumberWith(1, uint64(n)))

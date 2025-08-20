@@ -94,7 +94,7 @@ func NewClientConnection(addr netip.AddrPort, opts *options.TransportOptions) (*
 		roleServer: false,
 		hctx:       hctx,
 	}
-	clientHelloMsg := hctx.GenerateClientHello(false, cookie.Cookie{})
+	clientHelloMsg := hctx.generateClientHello(false, cookie.Cookie{})
 
 	if err := hctx.PushMessage(conn, clientHelloMsg); err != nil {
 		// If you start returning nil, err from this function, do not forget to return conn and hctx to the pool
@@ -105,7 +105,7 @@ func NewClientConnection(addr netip.AddrPort, opts *options.TransportOptions) (*
 
 func (conn *ConnectionImpl) Addr() netip.AddrPort { return conn.addr }
 
-func (conn *ConnectionImpl) FirstMessageSeqInReceiveQueue() uint16 {
+func (conn *ConnectionImpl) firstMessageSeqInReceiveQueue() uint16 {
 	if conn.hctx == nil { // connection has no queue and processes full messages one by one
 		return conn.nextMessageSeqReceive
 	}

@@ -7,17 +7,17 @@ import (
 	"github.com/hrissan/tinydtls/record"
 )
 
-type recordFragmentRelation struct {
+type record2Fragment struct {
 	rn       record.Number
 	fragment handshake.FragmentInfo
 }
 
-type SendQueue struct {
+type sendQueue struct {
 	// all messages here belong to the same flight during handshake.
 	// if message in the middle is fully acked, it will stay in the buffer until it becomes
 	// head or tail of buffer, only then it is removed.
-	messages        circular.BufferExt[PartialHandshakeMsg]
-	messagesStorage [constants.MaxSendMessagesQueue]PartialHandshakeMsg
+	messages        circular.BufferExt[partialHandshakeMsg]
+	messagesStorage [constants.MaxSendMessagesQueue]partialHandshakeMsg
 	// offset in messages of the message we are sending, len(messages) if all sent
 	messageOffset int
 	// offset inside messages[messageOffset] or 0 if messageOffset == len(messages)
@@ -25,44 +25,44 @@ type SendQueue struct {
 
 	// Not in order because we have epoch 0 and need to resend ServerHello,
 	// so linear search, but it is fast, see benchmarks
-	sentRecords        circular.BufferExt[recordFragmentRelation]
-	sentRecordsStorage [constants.MaxSendRecordsQueue]recordFragmentRelation
+	sentRecords        circular.BufferExt[record2Fragment]
+	sentRecordsStorage [constants.MaxSendRecordsQueue]record2Fragment
 }
 
-func (sq *SendQueue) Reserve() {
+func (sq *sendQueue) Reserve() {
 	//uncomment if using Buffer instead of BufferExt
 	//sq.sentRecords.Reserve(constants.MaxSendRecordsQueue)
 	//sq.messages.Reserve(constants.MaxSendMessagesQueue)
 }
 
-func (sq *SendQueue) Len() int {
+func (sq *sendQueue) Len() int {
 	return sq.messages.Len()
 }
 
-func (sq *SendQueue) Clear() {
+func (sq *sendQueue) Clear() {
 	sq.messages.Clear(sq.messagesStorage[:])
 	sq.messageOffset = 0
 	sq.fragmentOffset = 0
 	sq.sentRecords.Clear(sq.sentRecordsStorage[:])
 }
 
-func (sq *SendQueue) PushMessage(msg handshake.Message) {
+func (sq *sendQueue) PushMessage(msg handshake.Message) {
 	if sq.messages.Len() == sq.messages.Cap(sq.messagesStorage[:]) {
 		// must be never, because no flight contains so many messages
 		panic("too many messages are generated at once")
 	}
-	sq.messages.PushBack(sq.messagesStorage[:], PartialHandshakeMsg{
+	sq.messages.PushBack(sq.messagesStorage[:], partialHandshakeMsg{
 		Msg:        msg,
 		SendOffset: 0,
 		SendEnd:    uint32(len(msg.Body)),
 	})
 }
 
-func (sq *SendQueue) HasDataToSend() bool {
+func (sq *sendQueue) HasDataToSend() bool {
 	return sq.messageOffset < sq.messages.Len() && sq.sentRecords.Len() < sq.sentRecords.Cap(sq.sentRecordsStorage[:])
 }
 
-func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (int, error) {
+func (sq *sendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (int, error) {
 	var datagramSize int
 	// we decided to first send our messages, then acks.
 	// because message has a chance to ack the whole flight
@@ -105,7 +105,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 			}
 			// Unfortunately, not in order because we have epoch 0 and need to resend ServerHello, so linear search
 			// limited to constants.MaxSendRecordsQueue due to check above
-			sq.sentRecords.PushBack(sq.sentRecordsStorage[:], recordFragmentRelation{rn: rn, fragment: fragmentInfo})
+			sq.sentRecords.PushBack(sq.sentRecordsStorage[:], record2Fragment{rn: rn, fragment: fragmentInfo})
 			datagramSize += recordSize
 			sq.fragmentOffset += fragmentInfo.FragmentLength
 		}
@@ -120,7 +120,7 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 	return datagramSize, nil
 }
 
-func findSentRecordIndex(sentRecords *circular.Buffer[recordFragmentRelation], rn record.Number) *handshake.FragmentInfo {
+func findSentRecordIndex(sentRecords *circular.Buffer[record2Fragment], rn record.Number) *handshake.FragmentInfo {
 	for i := 0; i != sentRecords.Len(); i++ {
 		element := sentRecords.IndexRef(i)
 		if element.rn == rn {
@@ -130,7 +130,7 @@ func findSentRecordIndex(sentRecords *circular.Buffer[recordFragmentRelation], r
 	return nil
 }
 
-func findSentRecordIndexExt(elements []recordFragmentRelation, sentRecords *circular.BufferExt[recordFragmentRelation], rn record.Number) *handshake.FragmentInfo {
+func findSentRecordIndexExt(elements []record2Fragment, sentRecords *circular.BufferExt[record2Fragment], rn record.Number) *handshake.FragmentInfo {
 	for i := 0; i != sentRecords.Len(); i++ {
 		element := sentRecords.IndexRef(elements, i)
 		if element.rn == rn {
@@ -140,7 +140,7 @@ func findSentRecordIndexExt(elements []recordFragmentRelation, sentRecords *circ
 	return nil
 }
 
-func (sq *SendQueue) Ack(conn *ConnectionImpl, rn record.Number) {
+func (sq *sendQueue) Ack(conn *ConnectionImpl, rn record.Number) {
 	fragmentPtr := findSentRecordIndexExt(sq.sentRecordsStorage[:], &sq.sentRecords, rn)
 	if fragmentPtr == nil {
 		return

@@ -23,11 +23,11 @@ import (
 
 var benchmarkSideEffect = 0
 
-func relationPred(relation recordFragmentRelation, rn record.Number) int {
+func relationPred(relation record2Fragment, rn record.Number) int {
 	return record.RecordNumberCmp(relation.rn, rn)
 }
 
-func findSentRecordIndex2(sentRecords *circular.Buffer[recordFragmentRelation], rn record.Number) *handshake.FragmentInfo {
+func findSentRecordIndex2(sentRecords *circular.Buffer[record2Fragment], rn record.Number) *handshake.FragmentInfo {
 	s1, s2 := sentRecords.Slices()
 
 	if ind, ok := slices.BinarySearchFunc(s1, rn, relationPred); ok {
@@ -39,11 +39,11 @@ func findSentRecordIndex2(sentRecords *circular.Buffer[recordFragmentRelation], 
 	return nil
 }
 
-func prepareBufferForTests(elements int) *circular.Buffer[recordFragmentRelation] {
-	sentRecords := &circular.Buffer[recordFragmentRelation]{}
+func prepareBufferForTests(elements int) *circular.Buffer[record2Fragment] {
+	sentRecords := &circular.Buffer[record2Fragment]{}
 	sentRecords.Reserve(elements)
 	for i := 0; i < elements*3/4; i++ {
-		sentRecords.PushBack(recordFragmentRelation{})
+		sentRecords.PushBack(record2Fragment{})
 	}
 	for i := 0; i < elements*3/4; i++ {
 		sentRecords.PopFront()
@@ -51,7 +51,7 @@ func prepareBufferForTests(elements int) *circular.Buffer[recordFragmentRelation
 	for i := 0; i < elements; i++ {
 		rn := record.NumberWith(1, uint64(i))
 		if i%2 == 0 {
-			sentRecords.PushBack(recordFragmentRelation{rn: rn})
+			sentRecords.PushBack(record2Fragment{rn: rn})
 		}
 	}
 	return sentRecords

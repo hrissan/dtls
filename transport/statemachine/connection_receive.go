@@ -29,11 +29,11 @@ func (conn *ConnectionImpl) ReceivedCiphertextRecord(opts *options.TransportOpti
 	case record.RecordTypeAlert:
 		return conn.ReceivedAlert(true, decrypted)
 	case record.RecordTypeAck:
-		return conn.ReceivedEncryptedAck(opts, decrypted)
+		return conn.receivedEncryptedAck(opts, decrypted)
 	case record.RecordApplicationData:
-		return conn.ReceivedApplicationData(decrypted)
+		return conn.receivedApplicationData(decrypted)
 	case record.RecordTypeHandshake:
-		return conn.ReceivedEncryptedHandshakeRecord(opts, decrypted, rn)
+		return conn.receivedEncryptedHandshakeRecord(opts, decrypted, rn)
 	}
 	return dtlserrors.ErrUnknownInnerPlaintextRecordType
 }
@@ -46,7 +46,7 @@ func (conn *ConnectionImpl) ReceivedAlert(encrypted bool, messageData []byte) er
 	return nil
 }
 
-func (conn *ConnectionImpl) ReceivedApplicationData(messageData []byte) error {
+func (conn *ConnectionImpl) receivedApplicationData(messageData []byte) error {
 	log.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q", len(messageData), conn.addr, messageData)
 	if conn.roleServer && conn.Handler != nil {
 		// TODO - controller to play with state. Remove!
@@ -68,7 +68,7 @@ func (conn *ConnectionImpl) ReceivedApplicationData(messageData []byte) error {
 	return nil
 }
 
-func (conn *ConnectionImpl) ReceivedEncryptedHandshakeRecord(opts *options.TransportOptions, recordData []byte, rn record.Number) error {
+func (conn *ConnectionImpl) receivedEncryptedHandshakeRecord(opts *options.TransportOptions, recordData []byte, rn record.Number) error {
 	log.Printf("dtls: got handshake record (encrypted) %d bytes from %v, message(hex): %x", len(recordData), conn.addr, recordData)
 	if len(recordData) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding
@@ -84,7 +84,7 @@ func (conn *ConnectionImpl) ReceivedEncryptedHandshakeRecord(opts *options.Trans
 		}
 		messageOffset += n
 
-		if fragment.Header.MsgSeq < conn.FirstMessageSeqInReceiveQueue() {
+		if fragment.Header.MsgSeq < conn.firstMessageSeqInReceiveQueue() {
 			// all messages before were processed by us in the state we already do not remember,
 			// so we must acknowledge unconditionally and do nothing.
 			conn.keys.AddAck(rn)

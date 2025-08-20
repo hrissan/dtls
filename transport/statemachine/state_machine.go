@@ -7,7 +7,7 @@ import (
 	"github.com/hrissan/tinydtls/handshake"
 )
 
-func (hctx *handshakeContext) GenerateFinished(conn *ConnectionImpl) handshake.Message {
+func (hctx *handshakeContext) generateFinished(conn *ConnectionImpl) handshake.Message {
 	// [rfc8446:4.4.4] - finished
 	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
 	finishedTranscriptHash := hctx.transcriptHasher.Sum(finishedTranscriptHashStorage[:0])

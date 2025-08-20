@@ -114,7 +114,7 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 		return err
 	}
 
-	if err := hctx.PushMessage(conn, hctx.GenerateFinished(conn)); err != nil {
+	if err := hctx.PushMessage(conn, hctx.generateFinished(conn)); err != nil {
 		return err
 	}
 

@@ -36,10 +36,10 @@ type handshakeContext struct {
 	// handshake is in a state of waiting finish of offloaded calculations.
 	// if full message is received, and it is the first in the queue (or queue is empty),
 	// then
-	receivedMessages        circular.BufferExt[PartialHandshakeMsg]
-	receivedMessagesStorage [constants.MaxReceiveMessagesQueue]PartialHandshakeMsg
+	receivedMessages        circular.BufferExt[partialHandshakeMsg]
+	receivedMessagesStorage [constants.MaxReceiveMessagesQueue]partialHandshakeMsg
 
-	sendQueue SendQueue
+	sendQueue sendQueue
 
 	transcriptHasher hash.Hash // when messages are added to messages, they are also added to transcriptHasher
 
@@ -94,7 +94,7 @@ func (hctx *handshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment ha
 		return nil // would be beyond queue even if we fill it
 	}
 	for messageOffset >= hctx.receivedMessages.Len() {
-		hctx.receivedMessages.PushBack(hctx.receivedMessagesStorage[:], PartialHandshakeMsg{})
+		hctx.receivedMessages.PushBack(hctx.receivedMessagesStorage[:], partialHandshakeMsg{})
 		if conn.nextMessageSeqReceive == math.MaxUint16 {
 			// can happen only when fragment.MsgSeq == math.MaxUint16
 			return dtlserrors.ErrReceivedMessageSeqOverflow
@@ -103,7 +103,7 @@ func (hctx *handshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment ha
 	}
 	partialMessage := hctx.receivedMessages.IndexRef(hctx.receivedMessagesStorage[:], messageOffset)
 	if partialMessage.Msg.MsgType == handshake.MsgTypeZero { // the first fragment, we need to set header, allocate body
-		*partialMessage = PartialHandshakeMsg{
+		*partialMessage = partialHandshakeMsg{
 			Msg: handshake.Message{
 				MsgType: fragment.Header.MsgType,
 				MsgSeq:  fragment.Header.MsgSeq,

@@ -10,7 +10,7 @@ import (
 	"github.com/hrissan/tinydtls/transport/options"
 )
 
-func (conn *ConnectionImpl) ReceivedEncryptedAck(opts *options.TransportOptions, messageData []byte) error {
+func (conn *ConnectionImpl) receivedEncryptedAck(opts *options.TransportOptions, messageData []byte) error {
 	insideBody, err := record.ParseAcks(messageData)
 	if err != nil {
 		return dtlserrors.ErrEncryptedAckMessageHeaderParsing

@@ -17,7 +17,7 @@ func (conn *ConnectionImpl) ReceivedServerHelloFragment(fragment handshake.Fragm
 	if conn.hctx == nil {
 		return nil // retransmission, while connection already established
 	}
-	if fragment.Header.MsgSeq < conn.FirstMessageSeqInReceiveQueue() {
+	if fragment.Header.MsgSeq < conn.firstMessageSeqInReceiveQueue() {
 		// all messages before were processed by us in the state we already do not remember,
 		// so we must acknowledge unconditionally and do nothing.
 		conn.keys.AddAck(rn)
@@ -50,7 +50,7 @@ func (hctx *handshakeContext) onServerHello(conn *ConnectionImpl, msg handshake.
 
 		msg.AddToHash(hctx.transcriptHasher)
 
-		clientHelloMsg := hctx.GenerateClientHello(true, serverHello.Extensions.Cookie)
+		clientHelloMsg := hctx.generateClientHello(true, serverHello.Extensions.Cookie)
 		return hctx.PushMessage(conn, clientHelloMsg)
 	}
 	// ServerHello can have messageSeq 0 or 1, depending on whether server used HRR
@@ -87,7 +87,7 @@ func (hctx *handshakeContext) onServerHello(conn *ConnectionImpl, msg handshake.
 	return nil
 }
 
-func (hctx *handshakeContext) GenerateClientHello(setCookie bool, ck cookie.Cookie) handshake.Message {
+func (hctx *handshakeContext) generateClientHello(setCookie bool, ck cookie.Cookie) handshake.Message {
 	// [rfc8446:4.1.2] the client MUST send the same ClientHello without modification, except as follows
 	clientHello := handshake.MsgClientHello{
 		Random: hctx.localRandom,

@@ -11,7 +11,7 @@ import (
 	"github.com/hrissan/tinydtls/signature"
 )
 
-// change into PartialHandshakeMsg
+// change into partialHandshakeMsg
 func (hctx *handshakeContext) receivedFullMessage(conn *ConnectionImpl, msg handshake.Message) error {
 	switch msg.MsgType {
 	case handshake.MsgTypeServerHello:
@@ -119,7 +119,7 @@ func (hctx *handshakeContext) receivedFullMessage(conn *ConnectionImpl, msg hand
 		conn.keys.ComputeApplicationTrafficSecret(false, hctx.masterSecret[:], handshakeTranscriptHash)
 
 		// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here
-		return hctx.PushMessage(conn, hctx.GenerateFinished(conn))
+		return hctx.PushMessage(conn, hctx.generateFinished(conn))
 	case handshake.MsgTypeClientHello:
 	case handshake.MsgTypeKeyUpdate:
 	case handshake.MsgTypeNewSessionTicket:

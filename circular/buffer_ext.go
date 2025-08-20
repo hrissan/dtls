@@ -1,6 +1,9 @@
+// Copyright (c) 2025, Grigory Buteyko aka Hrissan
+// Licensed under the MIT License. See LICENSE for details.
+
 package circular
 
-// like BufferExt, but with external storage (waiting for generics over arrays)
+// like Buffer, but with external storage (waiting for generics over arrays)
 
 type BufferExt[T any] struct {
 	read_pos  uint // uint because we rely on integer overflow

@@ -1,3 +1,6 @@
+// Copyright (c) 2025, Grigory Buteyko aka Hrissan
+// Licensed under the MIT License. See LICENSE for details.
+
 package constants
 
 // We want fixed-size storage for hashes, as we want to do as few allocations as possible

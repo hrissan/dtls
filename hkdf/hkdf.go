@@ -1,9 +1,7 @@
-// This is a toy implementation and is full of side channels and other defects.
-// DO NOT use this in a real cryptographic application.
+// Copyright (c) 2025, Grigory Buteyko aka Hrissan
+// Licensed under the MIT License. See LICENSE for details.
 
-// based on RFC 5869
-
-// TODO - rewrite to avoid allocations
+// Portions of this file copied from some gist with unclear copyright.
 
 package hkdf
 

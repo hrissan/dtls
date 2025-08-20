@@ -75,11 +75,11 @@ func (rc *Receiver) receivedClientHello(conn *statemachine.ConnectionImpl, msg h
 	}
 	// we should check all parameters above, so that we do not create connection for unsupported params
 	if conn == nil {
-		rc.handMu.Lock()
+		rc.connectionsMu.Lock()
 		// TODO - get from pool
 		conn = statemachine.NewServerConnection(addr)
 		rc.connections[addr] = conn
-		rc.handMu.Unlock()
+		rc.connectionsMu.Unlock()
 	}
 	if err := conn.ReceivedClientHello2(rc.opts, msg, msgClientHello, initialHelloTranscriptHash, keyShareSet); err != nil {
 		return conn, err // TODO - close connection here

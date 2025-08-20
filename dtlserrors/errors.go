@@ -15,11 +15,25 @@ type Error struct {
 	text  string
 }
 
+func (e *Error) Fatal() bool {
+	return e.fatal
+}
+
 func (e *Error) Error() string {
 	if e.fatal {
 		return fmt.Sprintf("tinydtls (fatal): %d %s", e.code, e.text)
 	}
 	return fmt.Sprintf("tinydtls (warning): %d %s", e.code, e.text)
+}
+
+func IsFatal(err error) bool { // we do not use errors package for now
+	if err == nil {
+		return false
+	}
+	if e, ok := err.(*Error); ok {
+		return e.fatal
+	}
+	return true // TODO - panic here after we replace all error with dtlserrors.Error
 }
 
 func NewFatal(code int, text string) error {
@@ -87,7 +101,7 @@ var ErrUnknownInnerPlaintextRecordType = NewWarning(-602, "unknown inner plainte
 var ErrHandshakeReecordEmpty = NewWarning(-603, "handshake record must not be empty")
 
 // encryption
-var ErrCannotDecryptInEpoach0 = NewFatal(-300, "cannot decrypt record at epoch 0")
+var WarnCannotDecryptInEpoach0 = NewFatal(-300, "cannot decrypt record at epoch 0")
 var ErrEpochDoesNotMatch = NewFatal(-300, "received record epoch bitmask does not match current or next epoch")
 
 // handshake protocol

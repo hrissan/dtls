@@ -10,7 +10,6 @@ import (
 func (conn *ConnectionImpl) ReceivedServerHelloFragment(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
-	// TODO - remove this function, call state machine directly
 
 	return conn.State().OnHandshakeMsgFragment(conn, opts, fragment, rn)
 }

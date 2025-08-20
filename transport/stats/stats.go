@@ -9,6 +9,7 @@ import (
 	"github.com/hrissan/tinydtls/handshake"
 )
 
+// TODO - replace with tiny interface + errors from stlserrors
 type Stats interface {
 	Warning(addr netip.AddrPort, err error)
 

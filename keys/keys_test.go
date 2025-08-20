@@ -23,6 +23,10 @@ func findPaddingOffsetContentType1X(data []byte) (paddingOffset int, contentType
 }
 
 /*
+// Commented, because we do not want dependency on unsafe.
+// BTW our code can be declared safe only if we prove it contains no race conditions,
+// which is hard to impossible (but we'll try).
+
 func findPaddingOffsetContentTypeUnsafe32(data []byte) (paddingOffset int, contentType byte) {
 	offset := len(data)
 

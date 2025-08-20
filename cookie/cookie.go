@@ -14,7 +14,7 @@ import (
 )
 
 const cookieHashLength = sha256.Size
-const saltLength = 24
+const saltLength = 16 // arguably, this is enough
 
 type CookieState struct {
 	cookieSecret [32]byte // [rfc9147:5.1]

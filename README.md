@@ -1,5 +1,7 @@
 # tinydtls
 
+Very much work in progress - this is only demo for now with no API.
+
 # requirements
 
 ## semantic
@@ -169,7 +171,7 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 # TODO list (not in particular order)
 
-* even-based API for very efficient servers and clients
+* event-based API for very efficient servers and clients
 
 * golang-style standard API for normal servers and clients
 
@@ -179,7 +181,7 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 * NewSessionTicket and resuming sessions support for both server and client
 
-* Harmonize errors. Before error is returned, print context (message/record data, etc.)
+* Harmonize errors. Before error is returned, log (rare) offending context (message/record data, etc.)
 
 * Process fatal errors to terminate connections.
 
@@ -187,7 +189,7 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 * Replay protection for plaintext records (?).
 
-* Support client certificates
+* Support client certificates request / response
 
 * Pack several handshake message into single record (now they are in separate)
 

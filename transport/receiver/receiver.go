@@ -19,7 +19,6 @@ import (
 var ErrServerCannotStartConnection = errors.New("server can start connection")
 
 // Receiver also performs stateless logic
-
 type Receiver struct {
 	opts        *options.TransportOptions
 	cookieState cookie.CookieState

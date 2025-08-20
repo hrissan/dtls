@@ -101,8 +101,11 @@ var ErrUnknownInnerPlaintextRecordType = NewWarning(-602, "unknown inner plainte
 var ErrHandshakeReecordEmpty = NewWarning(-603, "handshake record must not be empty")
 
 // encryption
-var WarnCannotDecryptInEpoach0 = NewFatal(-300, "cannot decrypt record at epoch 0")
-var ErrEpochDoesNotMatch = NewFatal(-300, "received record epoch bitmask does not match current or next epoch")
+var WarnCannotDecryptInEpoch0 = NewWarning(-300, "cannot decrypt record at epoch 0")
+var WarnEpochDoesNotMatch = NewWarning(-300, "received record epoch bitmask does not match current or next epoch")
+var WarnCipherTextTooShortForSNDecryption = NewWarning(-300, "ciphertext too short for SN decryption")
+var WarnAEADDeprotectionFailed = NewWarning(-300, "ciphertext AEAD decryption failed")
+var ErrCipherTextAllZeroPadding = NewFatal(-300, "ciphertext all zero padding") // fatal, because inside deprotected record
 
 // handshake protocol
 var WarnHandshakeMessageMustBeEncrypted = NewWarning(-700, "plaintext handshake messages other than ClientHello, ServerHello must be encrypted")

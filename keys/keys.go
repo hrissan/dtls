@@ -4,15 +4,12 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/sha256"
-	"errors"
 	"hash"
 
 	"github.com/hrissan/tinydtls/hkdf"
 	"github.com/hrissan/tinydtls/record"
 	"github.com/hrissan/tinydtls/replay"
 )
-
-var ErrCipherTextTooShortForSNDecryption = errors.New("ciphertext too short for SN decryption")
 
 type Keys struct {
 	// fields sorted to minimize padding

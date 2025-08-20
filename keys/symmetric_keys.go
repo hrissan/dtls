@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 
+	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/hkdf"
 )
 
@@ -29,8 +30,7 @@ func (keys *SymmetricKeys) ComputeKeys(secret []byte) {
 func (keys *SymmetricKeys) EncryptSequenceNumbers(seqNum []byte, cipherText []byte) error {
 	var mask [32]byte // Some space good for many ciphers, TODO - check constant mush earlier
 	if len(cipherText) < keys.SN.BlockSize() {
-		// TODO - generate alert
-		return ErrCipherTextTooShortForSNDecryption
+		return dtlserrors.WarnCipherTextTooShortForSNDecryption
 	}
 	keys.SN.Encrypt(mask[:], cipherText)
 	if len(seqNum) == 1 {

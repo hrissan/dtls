@@ -18,14 +18,13 @@ func (conn *ConnectionImpl) ReceivedCiphertextRecord(opts *options.TransportOpti
 		return err
 	}
 	decrypted, rn, contentType, err := conn.deprotectLocked(hdr)
-	if err != nil { // TODO - deprotectLocked should return dtlserror.Error
-		opts.Stats.Warning(conn.addr, dtlserrors.WarnFailedToDeprotectRecord)
+	if err != nil {
 		// either garbage, attack or epoch wrapping
-		return nil
+		return err
 	}
 	log.Printf("dtls: ciphertext deprotected with rn={%d,%d} cid(hex): %x from %v, body(hex): %x", rn.Epoch(), rn.SeqNum(), hdr.CID, conn.addr, decrypted)
 	// [rfc9147:4.1]
-	switch contentType {
+	switch contentType { // TODO - call StateMachine here
 	case record.RecordTypeAlert:
 		return conn.ReceivedAlert(true, decrypted)
 	case record.RecordTypeAck:
@@ -49,7 +48,7 @@ func (conn *ConnectionImpl) ReceivedAlert(encrypted bool, messageData []byte) er
 func (conn *ConnectionImpl) receivedApplicationData(messageData []byte) error {
 	log.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q", len(messageData), conn.addr, messageData)
 	if conn.roleServer && conn.Handler != nil {
-		// TODO - controller to play with state. Remove!
+		// TODO - controller to play with state. Remove after testing!
 		if strings.HasPrefix(string(messageData), "upds") && conn.sendKeyUpdateMessageSeq == 0 {
 			if err := conn.startKeyUpdate(false); err != nil {
 				return err
@@ -68,13 +67,15 @@ func (conn *ConnectionImpl) receivedApplicationData(messageData []byte) error {
 	return nil
 }
 
+// TODO - replace this func with call to state machine
 func (conn *ConnectionImpl) receivedEncryptedHandshakeRecord(opts *options.TransportOptions, recordData []byte, rn record.Number) error {
 	log.Printf("dtls: got handshake record (encrypted) %d bytes from %v, message(hex): %x", len(recordData), conn.addr, recordData)
 	if len(recordData) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding
 		return dtlserrors.ErrHandshakeReecordEmpty
 	}
-	messageOffset := 0 // there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
+	messageOffset := 0
+	// there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]
 	for messageOffset < len(recordData) {
 		var fragment handshake.Fragment
 		n, err := fragment.Parse(recordData[messageOffset:])

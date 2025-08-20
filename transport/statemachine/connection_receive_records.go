@@ -8,6 +8,8 @@ import (
 	"github.com/hrissan/tinydtls/record"
 )
 
+// [rfc9147:4.5.3] we check against AEAD limit, initiate key update well before
+// reaching limit, and close connection if limit reached
 func (conn *ConnectionImpl) checkReceiveLimits() error {
 	receiveLimit := conn.keys.SequenceNumberLimit()
 	if conn.keys.FailedDeprotectionCounterNewReceiveKeys >= receiveLimit {
@@ -37,13 +39,13 @@ func (conn *ConnectionImpl) checkReceiveLimits() error {
 func (conn *ConnectionImpl) deprotectLocked(hdr record.Ciphertext) ([]byte, record.Number, byte, error) {
 	receiver := &conn.keys.Receive
 	if receiver.Symmetric.Epoch == 0 {
-		return nil, record.Number{}, 0, dtlserrors.WarnCannotDecryptInEpoach0
+		return nil, record.Number{}, 0, dtlserrors.WarnCannotDecryptInEpoch0
 	}
 	if hdr.MatchesEpoch(receiver.Symmetric.Epoch) {
 		nextSeq := conn.keys.ReceiveNextSegmentSequence.GetNextReceivedSeq()
 		decrypted, seq, contentType, err := receiver.Symmetric.Deprotect(hdr, !conn.keys.DoNotEncryptSequenceNumbers, nextSeq)
 		if err != nil {
-			// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
+			// [rfc9147:4.5.3] check against AEAD limit
 			conn.keys.FailedDeprotectionCounter++
 			return nil, record.Number{}, 0, err
 		}
@@ -56,7 +58,7 @@ func (conn *ConnectionImpl) deprotectLocked(hdr record.Ciphertext) ([]byte, reco
 	}
 	if !conn.keys.ExpectReceiveEpochUpdate || !hdr.MatchesEpoch(receiver.Symmetric.Epoch+1) {
 		// simply ignore, probably garbage or keys from previous epoch
-		return nil, record.Number{}, 0, dtlserrors.ErrEpochDoesNotMatch
+		return nil, record.Number{}, 0, dtlserrors.WarnEpochDoesNotMatch
 	}
 	// We check here that receiver.Epoch+1 does not overflow, because we increment it below
 	if receiver.Symmetric.Epoch == math.MaxUint16 {
@@ -75,7 +77,7 @@ func (conn *ConnectionImpl) deprotectLocked(hdr record.Ciphertext) ([]byte, reco
 	}
 	decrypted, seq, contentType, err := conn.keys.NewReceiveKeys.Deprotect(hdr, !conn.keys.DoNotEncryptSequenceNumbers, 0)
 	if err != nil {
-		// [rfc9147:4.5.3] TODO - check against AEAD limit, initiate key update well before reaching limit, and close connection if limit reached
+		// [rfc9147:4.5.3] check against AEAD limit
 		conn.keys.FailedDeprotectionCounterNewReceiveKeys++
 		return nil, record.Number{}, 0, err
 	}

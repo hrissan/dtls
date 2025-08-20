@@ -3,15 +3,13 @@ package keys
 import (
 	"crypto/sha256"
 	"encoding/binary"
-	"errors"
 	"hash"
 	"log"
 
+	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/hkdf"
 	"github.com/hrissan/tinydtls/record"
 )
-
-var ErrCipherTextAllZeroPadding = errors.New("ciphertext all zero padding")
 
 type DirectionKeys struct {
 	// fields sorted to minimize padding
@@ -112,12 +110,12 @@ func (keys *SymmetricKeys) Deprotect(hdr record.Ciphertext, encryptSN bool, expe
 	FillIVSequence(iv[:], seq)
 	decrypted, err = gcm.Open(hdr.Body[:0], iv[:], hdr.Body, hdr.Header)
 	if err != nil {
-		return nil, seq, 0, err
+		return nil, seq, 0, dtlserrors.WarnAEADDeprotectionFailed
 	}
 	paddingOffset, contentType := findPaddingOffsetContentType(decrypted) // [rfc8446:5.4]
 	if paddingOffset < 0 {
 		// TODO - send alert
-		return nil, seq, 0, ErrCipherTextAllZeroPadding
+		return nil, seq, 0, dtlserrors.ErrCipherTextAllZeroPadding
 	}
 	return decrypted[:paddingOffset], seq, contentType, nil
 }

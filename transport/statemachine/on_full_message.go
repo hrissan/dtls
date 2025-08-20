@@ -12,7 +12,7 @@ import (
 )
 
 // change into PartialHandshakeMsg
-func (hctx *HandshakeConnection) receivedFullMessage(conn *ConnectionImpl, msg handshake.Message) error {
+func (hctx *HandshakeContext) receivedFullMessage(conn *ConnectionImpl, msg handshake.Message) error {
 	switch msg.MsgType {
 	case handshake.MsgTypeServerHello:
 		if conn.RoleServer {

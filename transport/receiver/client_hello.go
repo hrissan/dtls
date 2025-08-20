@@ -75,12 +75,9 @@ func (rc *Receiver) receivedClientHello(conn *statemachine.ConnectionImpl, msg h
 	}
 
 	if conn == nil {
-		conn = &statemachine.ConnectionImpl{
-			Addr:       addr,
-			RoleServer: true,
-			Handshake:  nil, // will be set below
-		}
 		rc.handMu.Lock()
+		// TODO - get from pool
+		conn = statemachine.NewServerConnection(addr)
 		rc.connections[addr] = conn
 		rc.handMu.Unlock()
 	}

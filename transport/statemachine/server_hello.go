@@ -26,7 +26,7 @@ func (conn *ConnectionImpl) ReceivedServerHelloFragment(fragment handshake.Fragm
 	return conn.Handshake.ReceivedFragment(conn, fragment, rn)
 }
 
-func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, msg handshake.Message, serverHello handshake.MsgServerHello) error {
+func (hctx *HandshakeContext) onServerHello(conn *ConnectionImpl, msg handshake.Message, serverHello handshake.MsgServerHello) error {
 	if serverHello.Extensions.SupportedVersions.SelectedVersion != handshake.DTLS_VERSION_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
@@ -87,7 +87,7 @@ func (hctx *HandshakeConnection) onServerHello(conn *ConnectionImpl, msg handsha
 	return nil
 }
 
-func (hctx *HandshakeConnection) GenerateClientHello(setCookie bool, ck cookie.Cookie) handshake.Message {
+func (hctx *HandshakeContext) GenerateClientHello(setCookie bool, ck cookie.Cookie) handshake.Message {
 	// [rfc8446:4.1.2] the client MUST send the same ClientHello without modification, except as follows
 	clientHello := handshake.MsgClientHello{
 		Random: hctx.LocalRandom,

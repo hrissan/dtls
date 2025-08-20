@@ -1,14 +1,17 @@
 package statemachine
 
 import (
+	"crypto/sha256"
 	"log"
 	"math"
 	"net/netip"
 	"sync"
 
+	"github.com/hrissan/tinydtls/cookie"
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/keys"
 	"github.com/hrissan/tinydtls/record"
+	"github.com/hrissan/tinydtls/transport/options"
 )
 
 type ConnectionHandler interface {
@@ -50,7 +53,7 @@ type ConnectionImpl struct {
 	sendKeyUpdateRN        record.Number // if != 0, already sent, on resend overwrite rn
 	sendNewSessionTicketRN record.Number // if != 0, already sent, on resend overwrite rn
 
-	Handshake *HandshakeConnection // content is also protected by mutex above
+	Handshake *HandshakeContext // content is also protected by mutex above
 	Handler   ConnectionHandler
 
 	// this counter does not reset with a new epoch
@@ -67,6 +70,37 @@ type ConnectionImpl struct {
 	InSenderQueue    bool  // intrusive, must not be changed except by sender, protected by sender mutex
 	TimerHeapIndex   int   // intrusive, must not be changed except by clock, protected by clock mutex
 	FireTimeUnixNano int64 // time.Time object is larger and might be invalid as a heap predicate
+}
+
+func NewServerConnection(addr netip.AddrPort) *ConnectionImpl {
+	return &ConnectionImpl{
+		Addr:       addr,
+		RoleServer: true,
+	}
+}
+
+func NewClientConnection(addr netip.AddrPort, opts *options.TransportOptions) (*ConnectionImpl, error) {
+	// TODO - take from pool, limit # of outstanding handshakes
+	hctx := NewHandshakeContext(sha256.New())
+	opts.Rnd.ReadMust(hctx.LocalRandom[:])
+	// We'd like to postpone ECC until HRR, but wolfssl requires key_share in the first client_hello
+	// TODO - offload to separate goroutine
+	// TODO - contact wolfssl team?
+	hctx.ComputeKeyShare(opts.Rnd)
+
+	// TODO - take from pool, limit # of connections
+	conn := &ConnectionImpl{
+		Addr:       addr,
+		RoleServer: false,
+		Handshake:  hctx,
+	}
+	clientHelloMsg := hctx.GenerateClientHello(false, cookie.Cookie{})
+
+	if err := hctx.PushMessage(conn, clientHelloMsg); err != nil {
+		// If you start returning nil, err from this function, do not forget to return conn and hctx to the pool
+		panic("push message for client hello must always succeed")
+	}
+	return conn, nil
 }
 
 func (conn *ConnectionImpl) FirstMessageSeqInReceiveQueue() uint16 {

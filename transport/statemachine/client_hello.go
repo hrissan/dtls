@@ -22,12 +22,13 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
-	// TODO - lock conn here
 	if conn.Handshake != nil {
 		// TODO - replace older handshakes with the new ones (by cookie age or other parameters)
+		// attacker cannot control age for addr, so will not be able to disrupt connection by sending
+		// rogue packets
 		return nil
 	}
-	hctx := NewHandshakeConnection(sha256.New())
+	hctx := NewHandshakeContext(sha256.New())
 	conn.Handshake = hctx
 
 	conn.Handshake.SendNextSegmentSequenceEpoch0 = 1 // sequence 0 was HRR
@@ -204,7 +205,7 @@ func generateServerCertificate(opts *options.TransportOptions) handshake.Message
 	}
 }
 
-func generateServerCertificateVerify(opts *options.TransportOptions, hctx *HandshakeConnection) (handshake.Message, error) {
+func generateServerCertificateVerify(opts *options.TransportOptions, hctx *HandshakeContext) (handshake.Message, error) {
 	msg := handshake.MsgCertificateVerify{
 		SignatureScheme: handshake.SignatureAlgorithm_RSA_PSS_RSAE_SHA256,
 	}

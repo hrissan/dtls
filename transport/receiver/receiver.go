@@ -1,7 +1,6 @@
 package receiver
 
 import (
-	"crypto/sha256"
 	"errors"
 	"log"
 	"net"
@@ -35,7 +34,7 @@ type Receiver struct {
 	connections map[netip.AddrPort]*statemachine.ConnectionImpl
 
 	// TODO - limit on max number of parallel handshakes, clear items by LRU
-	// handshakesPool circular.Buffer[*statemachine.HandshakeConnection] - TODO
+	// handshakesPool circular.Buffer[*statemachine.HandshakeContext] - TODO
 
 	// we move handshake here, once it is finished
 	//connections map[netip.AddrPort]*Connection
@@ -196,21 +195,10 @@ func (rc *Receiver) startConnection(addr netip.AddrPort) (*statemachine.Connecti
 		return nil, ErrConnectionInProgress // for now will wait for previous handshake timeout first
 	} // TODO - if this is long going handshake, clear and start again?
 
-	// TODO - get from pool
-	hctx := statemachine.NewHandshakeConnection(sha256.New())
-	conn = &statemachine.ConnectionImpl{
-		Addr:       addr,
-		RoleServer: false,
-		Handshake:  hctx,
+	conn, err := statemachine.NewClientConnection(addr, rc.opts)
+	if err != nil {
+		return nil, err
 	}
 	rc.connections[addr] = conn
-
-	rc.opts.Rnd.ReadMust(hctx.LocalRandom[:])
-	// We'd like to postpone ECC until HRR, but wolfssl requires key_share in the first client_hello
-	// TODO - offload to separate goroutine
-	// TODO - contact wolfssl team?
-	hctx.ComputeKeyShare(rc.opts.Rnd)
-	clientHelloMsg := hctx.GenerateClientHello(false, cookie.Cookie{})
-
-	return conn, hctx.PushMessage(conn, clientHelloMsg)
+	return conn, nil
 }

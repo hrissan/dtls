@@ -5,8 +5,9 @@ import (
 	"fmt"
 )
 
-// we do not allocation on error returning path,
-// so all errors are completely static
+// we want no allocations on error returning path,
+// so all errors are completely static.
+// TODO - after they stop changing, assign unique codes)
 
 type Error struct {
 	fatal bool
@@ -31,7 +32,7 @@ func NewFatal(code int, text string) error {
 
 func NewWarning(code int, text string) error {
 	return &Error{
-		fatal: true,
+		fatal: false,
 		code:  code,
 		text:  text,
 	}

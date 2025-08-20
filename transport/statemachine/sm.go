@@ -31,19 +31,29 @@ func (hctx *handshakeContext) generateFinished(conn *ConnectionImpl) handshake.M
 type stateMachineStateID byte
 
 const (
-	smIDPanic                             stateMachineStateID = 0
-	smIDClientSentHello                   stateMachineStateID = 1
-	smIDHandshakeServerExpectClientHello2 stateMachineStateID = 2
-	smIDHandshakeServerExpectFinished     stateMachineStateID = 3
-	smIDPostHandshake                     stateMachineStateID = 4
+	smIDPanic                                 stateMachineStateID = 0
+	smIDClientSentHello                       stateMachineStateID = 1
+	smIDHandshakeServerExpectClientHello2     stateMachineStateID = 2
+	smIDHandshakeServerExpectFinished         stateMachineStateID = 3
+	smIDHandshakeClientExpectServerHello      stateMachineStateID = 5
+	smIDHandshakeClientExpectServerEE         stateMachineStateID = 6
+	smIDHandshakeClientExpectServerCert       stateMachineStateID = 7
+	smIDHandshakeClientExpectServerCertVerify stateMachineStateID = 8
+	smIDHandshakeClientExpectServerFinished   stateMachineStateID = 9
+	smIDPostHandshake                         stateMachineStateID = 10
 )
 
 var stateMachineStates = [...]StateMachine{
-	smIDPanic:                             nil, // forgot to initialize stateID
-	smIDClientSentHello:                   &smClientSentHello1{},
-	smIDHandshakeServerExpectClientHello2: &smHandshakeServerExpectClientHello2{},
-	smIDHandshakeServerExpectFinished:     &smHandshakeServerExpectFinished{},
-	smIDPostHandshake:                     &smPostHandshake{},
+	smIDPanic:                                 nil, // forgot to initialize stateID
+	smIDClientSentHello:                       &smClientSentHello1{},
+	smIDHandshakeServerExpectClientHello2:     &smHandshakeServerExpectClientHello2{},
+	smIDHandshakeServerExpectFinished:         &smHandshakeServerExpectFinished{},
+	smIDHandshakeClientExpectServerHello:      &smHandshakeClientExpectServerHello{},
+	smIDHandshakeClientExpectServerEE:         &smHandshakeClientExpectEE{},
+	smIDHandshakeClientExpectServerCert:       &smHandshakeClientExpectCert{},
+	smIDHandshakeClientExpectServerCertVerify: &smHandshakeClientExpectCertVerify{},
+	smIDHandshakeClientExpectServerFinished:   &smHandshakeClientExpectFinished{},
+	smIDPostHandshake:                         &smPostHandshake{},
 }
 
 type StateMachine interface {

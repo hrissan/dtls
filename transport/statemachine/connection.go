@@ -94,6 +94,7 @@ func NewClientConnection(addr netip.AddrPort, opts *options.TransportOptions) (*
 	conn := &ConnectionImpl{
 		addr:       addr,
 		roleServer: false,
+		stateID:    smIDHandshakeClientExpectServerHello,
 		hctx:       hctx,
 	}
 	clientHelloMsg := hctx.generateClientHello(false, cookie.Cookie{})

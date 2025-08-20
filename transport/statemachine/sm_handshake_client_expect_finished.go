@@ -7,20 +7,13 @@ import (
 	"github.com/hrissan/tinydtls/constants"
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/handshake"
-	"github.com/hrissan/tinydtls/transport/options"
 )
 
-type smHandshakeServerExpectFinished struct {
+type smHandshakeClientExpectFinished struct {
 	smHandshake
 }
 
-func (*smHandshakeServerExpectFinished) OnClientHello2(conn *ConnectionImpl, opts *options.TransportOptions,
-	msg handshake.Message, msgClientHello handshake.MsgClientHello,
-	initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error {
-	return nil // retransmission. If not, we'll reset our handshake soon if unsuccessful, and process it
-}
-
-func (*smHandshakeServerExpectFinished) OnFinished(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgFinished) error {
+func (*smHandshakeClientExpectFinished) OnFinished(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgFinished) error {
 	hctx := conn.hctx
 	// [rfc8446:4.4.4] - finished
 	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
@@ -52,6 +45,7 @@ func (*smHandshakeServerExpectFinished) OnFinished(conn *ConnectionImpl, msg han
 	handshakeTranscriptHash := hctx.transcriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
 	conn.keys.ComputeApplicationTrafficSecret(false, hctx.masterSecret[:], handshakeTranscriptHash)
+	conn.stateID = smIDPostHandshake
 
 	// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here
 	return hctx.PushMessage(conn, hctx.generateFinished(conn))

@@ -29,9 +29,7 @@ func (*smPostHandshake) OnHandshakeMsgFragment(conn *ConnectionImpl, opts *optio
 	}
 	switch fragment.Header.MsgType {
 	case handshake.MsgTypeClientHello:
-		panic("TODO - should not be called")
-	case handshake.MsgTypeServerHello:
-		panic("TODO - should not be called")
+		panic("TODO - should not be called, client_hello is special")
 	case handshake.MsgTypeNewSessionTicket:
 		if err := conn.receivedNewSessionTicket(opts, fragment, rn); err != nil {
 			return err
@@ -41,13 +39,13 @@ func (*smPostHandshake) OnHandshakeMsgFragment(conn *ConnectionImpl, opts *optio
 			return err
 		}
 	}
-	return dtlserrors.ErrPostHandshakeMessageDuringHandshake
+	return dtlserrors.ErrHandshakeMessagePostHandshake
 }
 
 func (*smPostHandshake) OnClientHello2(conn *ConnectionImpl, opts *options.TransportOptions,
 	msg handshake.Message, msgClientHello handshake.MsgClientHello,
 	initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error {
-	panic("implement or remove")
+	return nil // TODO - send encrypted empty ack on ClientHello1. Here, reset/close connection.
 }
 
 func (*smPostHandshake) OnServerHello(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgServerHello) error {

@@ -105,6 +105,7 @@ var ErrParamsSupportOnlyDTLS13 = NewWarning(-705, "unsupported version - only DT
 var ErrParamsSupportCiphersuites = NewWarning(-705, "unsupported ciphersuite - only TLS_AES_128_GCM_SHA256 supported")
 var ErrParamsSupportKeyShare = NewWarning(-705, "unsupported key share - only X25519 supported")
 var ErrServerHRRMustContainCookie = errors.New("server HelloRetryRequest must contain valid cookie")
+var ErrServerHRRMustHaveMsgSeq0 = errors.New("server HelloRetryRequest must have message seq 0")
 
 var ErrClientHelloCookieInvalid = NewWarning(-705, "ClientHello cookie failed validation")
 var ErrClientHelloCookieAge = NewWarning(-706, "ClientHello cookie expired")

@@ -9,21 +9,15 @@ import (
 	"github.com/hrissan/tinydtls/dtlserrors"
 	"github.com/hrissan/tinydtls/handshake"
 	"github.com/hrissan/tinydtls/record"
+	"github.com/hrissan/tinydtls/transport/options"
 )
 
-func (conn *ConnectionImpl) ReceivedServerHelloFragment(fragment handshake.Fragment, rn record.Number) error {
+func (conn *ConnectionImpl) ReceivedServerHelloFragment(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
-	if conn.hctx == nil {
-		return nil // retransmission, while connection already established
-	}
-	if fragment.Header.MsgSeq < conn.firstMessageSeqInReceiveQueue() {
-		// all messages before were processed by us in the state we already do not remember,
-		// so we must acknowledge unconditionally and do nothing.
-		conn.keys.AddAck(rn)
-		return nil
-	}
-	return conn.hctx.ReceivedFragment(conn, fragment, rn)
+	// TODO - remove this function, call state machine directly
+
+	return conn.State().OnHandshakeMsgFragment(conn, opts, fragment, rn)
 }
 
 func (hctx *handshakeContext) onServerHello(conn *ConnectionImpl, msg handshake.Message, serverHello handshake.MsgServerHello) error {

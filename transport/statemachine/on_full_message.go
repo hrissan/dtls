@@ -11,44 +11,43 @@ import (
 	"github.com/hrissan/tinydtls/signature"
 )
 
-// change into partialHandshakeMsg
 func (hctx *handshakeContext) receivedFullMessage(conn *ConnectionImpl, msg handshake.Message) error {
 	switch msg.MsgType {
 	case handshake.MsgTypeServerHello:
 		if conn.roleServer {
 			return dtlserrors.ErrServerHelloReceivedByServer
 		}
-		var msgServerHello handshake.MsgServerHello
-		if err := msgServerHello.Parse(msg.Body); err != nil {
+		var msgParsed handshake.MsgServerHello
+		if err := msgParsed.Parse(msg.Body); err != nil {
 			return dtlserrors.WarnPlaintextServerHelloParsing
 		}
-		return hctx.onServerHello(conn, msg, msgServerHello)
+		return conn.State().OnServerHello(conn, msg, msgParsed)
 	case handshake.MsgTypeEncryptedExtensions:
 		if conn.roleServer {
 			return dtlserrors.ErrEncryptedExtensionsReceivedByServer
 		}
-		var msgExtensions handshake.ExtensionsSet
-		if err := msgExtensions.ParseOutside(msg.Body, false, true, false); err != nil {
+		var msgParsed handshake.ExtensionsSet
+		if err := msgParsed.ParseOutside(msg.Body, false, true, false); err != nil {
 			return dtlserrors.ErrExtensionsMessageParsing
 		}
-		log.Printf("encrypted extensions parsed: %+v", msgExtensions)
+		log.Printf("encrypted extensions parsed: %+v", msgParsed)
 		msg.AddToHash(hctx.transcriptHasher)
-		return nil
+		return conn.State().OnEncryptedExtensions(conn, msg, msgParsed)
 	case handshake.MsgTypeCertificate:
-		var msgCertificate handshake.MsgCertificate
-		if err := msgCertificate.Parse(msg.Body); err != nil {
+		var msgParsed handshake.MsgCertificate
+		if err := msgParsed.Parse(msg.Body); err != nil {
 			return dtlserrors.ErrCertificateMessageParsing
 		}
 		// We do not want checks here, because receiving goroutine should not be blocked for long
 		// We have to first receive everything up to finished, send acks,
 		// then offload ECC to separate core and trigger state machine depending on result
-		log.Printf("certificate parsed: %+v", msgCertificate)
-		hctx.certificateChain = msgCertificate
+		log.Printf("certificate parsed: %+v", msgParsed)
+		hctx.certificateChain = msgParsed
 		msg.AddToHash(hctx.transcriptHasher)
-		return nil
+		return conn.State().OnCertificate(conn, msg, msgParsed)
 	case handshake.MsgTypeCertificateVerify:
-		var msgCertificateVerify handshake.MsgCertificateVerify
-		if err := msgCertificateVerify.Parse(msg.Body); err != nil {
+		var msgParsed handshake.MsgCertificateVerify
+		if err := msgParsed.Parse(msg.Body); err != nil {
 			return dtlserrors.ErrCertificateVerifyMessageParsing
 		}
 		// TODO - We do not want checks here, because receiving goroutine should not be blocked for long
@@ -58,7 +57,7 @@ func (hctx *handshakeContext) receivedFullMessage(conn *ConnectionImpl, msg hand
 		if hctx.certificateChain.CertificatesLength == 0 {
 			return dtlserrors.ErrCertificateChainEmpty
 		}
-		if msgCertificateVerify.SignatureScheme != handshake.SignatureAlgorithm_RSA_PSS_RSAE_SHA256 {
+		if msgParsed.SignatureScheme != handshake.SignatureAlgorithm_RSA_PSS_RSAE_SHA256 {
 			// TODO - more algorithms
 			return dtlserrors.ErrCertificateAlgorithmUnsupported
 		}
@@ -74,52 +73,19 @@ func (hctx *handshakeContext) receivedFullMessage(conn *ConnectionImpl, msg hand
 		if err != nil {
 			return dtlserrors.ErrCertificateLoadError
 		}
-		if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash, msgCertificateVerify.Signature); err != nil {
+		if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash, msgParsed.Signature); err != nil {
 			return dtlserrors.ErrCertificateSignatureInvalid
 		}
-		log.Printf("certificate verify ok: %+v", msgCertificateVerify)
+		log.Printf("certificate verify ok: %+v", msgParsed)
 		msg.AddToHash(hctx.transcriptHasher)
-		return nil
+		return conn.State().OnCertificateVerify(conn, msg, msgParsed)
 	case handshake.MsgTypeFinished:
-		var msgFinished handshake.MsgFinished
-		if err := msgFinished.Parse(msg.Body); err != nil {
+		var msgParsed handshake.MsgFinished
+		if err := msgParsed.Parse(msg.Body); err != nil {
 			return dtlserrors.ErrFinishedMessageParsing
 		}
-		// [rfc8446:4.4.4] - finished
-		var finishedTranscriptHashStorage [constants.MaxHashLength]byte
-		finishedTranscriptHash := hctx.transcriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
-		mustBeFinished := conn.keys.Receive.ComputeFinished(sha256.New(), hctx.handshakeTrafficSecretReceive[:], finishedTranscriptHash)
-		if string(msgFinished.VerifyData[:msgFinished.VerifyDataLength]) != string(mustBeFinished) {
-			return dtlserrors.ErrFinishedMessageVerificationFailed
-		}
-		log.Printf("finished message verify ok: %+v", msgFinished)
-		if conn.roleServer {
-			if conn.hctx != nil && conn.hctx.sendQueue.Len() == 0 && conn.keys.Send.Symmetric.Epoch == 2 {
-				conn.keys.Send.Symmetric.ComputeKeys(conn.keys.Send.ApplicationTrafficSecret[:])
-				conn.keys.Send.Symmetric.Epoch = 3
-				conn.keys.SendNextSegmentSequence = 0
-				conn.hctx = nil
-				// TODO - why wolf closes connection if we send application data immediately?
-				//conn.Handler = &exampleHandler{toSend: "Hello from server\n"}
-				conn.Handler = &exampleHandler{}
-				conn.handlerHasMoreData = true
-				// we need conn.hctx here to send acks for last client flight.
-				// we will set conn.hctx to 0 when we switch to epoch 3
-				// TODO - move acks to Connection?
-			}
-			return nil
-		}
-		// server finished is not part of traffic secret transcript
-		msg.AddToHash(hctx.transcriptHasher)
-
-		var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
-		handshakeTranscriptHash := hctx.transcriptHasher.Sum(handshakeTranscriptHashStorage[:0])
-
-		conn.keys.ComputeApplicationTrafficSecret(false, hctx.masterSecret[:], handshakeTranscriptHash)
-
-		// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here
-		return hctx.PushMessage(conn, hctx.generateFinished(conn))
+		return conn.State().OnFinished(conn, msg, msgParsed)
 	case handshake.MsgTypeClientHello:
 	case handshake.MsgTypeKeyUpdate:
 	case handshake.MsgTypeNewSessionTicket:

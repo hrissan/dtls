@@ -73,7 +73,7 @@ func (rc *Receiver) receivedClientHello(conn *statemachine.ConnectionImpl, msg h
 		rc.opts.Stats.CookieChecked(false, age, addr)
 		return conn, dtlserrors.ErrClientHelloCookieAge
 	}
-
+	// we should check all parameters above, so that we do not create connection for unsupported params
 	if conn == nil {
 		rc.handMu.Lock()
 		// TODO - get from pool

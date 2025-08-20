@@ -36,6 +36,9 @@ func (conn *ConnectionImpl) checkReceiveLimits() error {
 // returns contentType == 0 (which is impossible due to padding format) with err == nil when replay detected
 func (conn *ConnectionImpl) deprotectLocked(hdr record.Ciphertext) ([]byte, record.Number, byte, error) {
 	receiver := &conn.keys.Receive
+	if receiver.Symmetric.Epoch == 0 {
+		return nil, record.Number{}, 0, dtlserrors.ErrCannotDecryptInEpoach0
+	}
 	if hdr.MatchesEpoch(receiver.Symmetric.Epoch) {
 		nextSeq := conn.keys.ReceiveNextSegmentSequence.GetNextReceivedSeq()
 		decrypted, seq, contentType, err := receiver.Symmetric.Deprotect(hdr, !conn.keys.DoNotEncryptSequenceNumbers, nextSeq)

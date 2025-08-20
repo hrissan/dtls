@@ -124,19 +124,6 @@ func (conn *ConnectionImpl) receivedEncryptedHandshakeRecord(opts *options.Trans
 }
 
 func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
-	if fragment.Header.IsFragmented() {
-		// we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
-		// They are short though, so we do not ack them, there is chance peer will resend them in full
-		opts.Stats.Warning(conn.addr, dtlserrors.WarnNewSessionTicketFragmented)
-		return nil
-	}
-	if conn.hctx != nil {
-		opts.Stats.Warning(conn.addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
-		return nil
-	}
-	if fragment.Header.MsgSeq > conn.nextMessageSeqReceive {
-		return nil
-	}
 	if conn.nextMessageSeqReceive == math.MaxUint16 {
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}
@@ -147,12 +134,6 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 }
 
 func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
-	if fragment.Header.IsFragmented() {
-		// alert - we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
-		// They are short though, so we do not ack them, there is chance peer will resend them in full
-		opts.Stats.Warning(conn.addr, dtlserrors.WarnKeyUpdateFragmented)
-		return nil
-	}
 	var msgKeyUpdate handshake.MsgKeyUpdate
 	if err := msgKeyUpdate.Parse(fragment.Body); err != nil {
 		return dtlserrors.ErrKeyUpdateMessageParsing
@@ -160,9 +141,6 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, fr
 	log.Printf("KeyUpdate parsed: %+v", msgKeyUpdate)
 	if conn.hctx != nil {
 		opts.Stats.Warning(conn.addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
-		return nil
-	}
-	if fragment.Header.MsgSeq > conn.nextMessageSeqReceive {
 		return nil
 	}
 	if conn.nextMessageSeqReceive == math.MaxUint16 {

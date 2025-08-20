@@ -39,8 +39,7 @@ func NewWarning(code int, text string) error {
 
 var WarnServerHelloFragmented = NewWarning(-398, "fragmented ServerHello message not supported")
 var WarnClientHelloFragmented = NewWarning(-399, "fragmented ClientHello message not supported")
-var WarnNewSessionTicketFragmented = NewWarning(-400, "fragmented NewSessionTicket message not supported, waiting for retransmission")
-var WarnKeyUpdateFragmented = NewWarning(-401, "fragmented KeyUpdate message not supported, waiting for retransmission")
+var WarnPostHandshakeMessageFragmented = NewWarning(-400, "fragmented post-handshake message not supported by this implementation, waiting for retransmission")
 var WarnAckEpochOverflow = NewWarning(-403, "ack record epoch overflows 2^16")
 var WarnPlaintextRecordParsing = NewWarning(-405, "plaintext record header failed to parse")
 var WarnCiphertextRecordParsing = NewWarning(-406, "ciphertext record header failed to parse")
@@ -62,6 +61,8 @@ var ErrCertificateMessageParsing = NewWarning(-508, "Certificate handshake messa
 var ErrCertificateVerifyMessageParsing = NewWarning(-509, "CertificateVerify handshake message failed to parse")
 var ErrFinishedMessageParsing = NewWarning(-510, "Finished handshake message failed to parse")
 var ErrKeyUpdateMessageParsing = NewWarning(-511, "KeyUpdate handshake message failed to parse")
+
+var ErrUnexpectedMessage = NewWarning(-507, "unexpeted message")
 
 var ErrCertificateChainEmpty = NewWarning(-512, "certificate chain is empty")
 var ErrCertificateLoadError = NewWarning(-513, "certificate load error")
@@ -85,6 +86,7 @@ var ErrUnknownInnerPlaintextRecordType = NewWarning(-602, "unknown inner plainte
 var ErrHandshakeReecordEmpty = NewWarning(-603, "handshake record must not be empty")
 
 // encryption
+var ErrCannotDecryptInEpoach0 = NewFatal(-300, "cannot decrypt record at epoch 0")
 var ErrEpochDoesNotMatch = NewFatal(-300, "received record epoch bitmask does not match current or next epoch")
 
 // handshake protocol

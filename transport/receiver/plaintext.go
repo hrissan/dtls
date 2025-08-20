@@ -45,7 +45,7 @@ func (rc *Receiver) receivedPlaintextHandshake(conn *statemachine.ConnectionImpl
 			if conn == nil {
 				return conn, dtlserrors.ErrServerHelloNoActiveConnection
 			}
-			if err = conn.ReceivedServerHelloFragment(fragment, record.NumberWith(0, hdr.SequenceNumber)); err != nil {
+			if err = conn.ReceivedServerHelloFragment(rc.opts, fragment, record.NumberWith(0, hdr.SequenceNumber)); err != nil {
 				return conn, err
 			}
 		default:

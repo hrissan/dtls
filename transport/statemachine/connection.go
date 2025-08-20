@@ -64,8 +64,9 @@ type ConnectionImpl struct {
 	sendKeyUpdateMessageSeq        uint16 // != 0 if set
 	sendKeyUpdateUpdateRequested   bool   // fully defines content of KeyUpdate we are sending
 
-	roleServer         bool // changes very rarely
-	handlerHasMoreData bool // set when user signals it has data, clears after OnWriteRecord returns false
+	roleServer         bool                // changes very rarely
+	stateID            stateMachineStateID // index in global table
+	handlerHasMoreData bool                // set when user signals it has data, clears after OnWriteRecord returns false
 
 	InSenderQueue    bool  // intrusive, must not be changed except by sender, protected by sender mutex
 	TimerHeapIndex   int   // intrusive, must not be changed except by clock, protected by clock mutex
@@ -76,6 +77,7 @@ func NewServerConnection(addr netip.AddrPort) *ConnectionImpl {
 	return &ConnectionImpl{
 		addr:       addr,
 		roleServer: true,
+		stateID:    smIDHandshakeServerExpectClientHello2,
 	}
 }
 
@@ -104,6 +106,7 @@ func NewClientConnection(addr netip.AddrPort, opts *options.TransportOptions) (*
 }
 
 func (conn *ConnectionImpl) Addr() netip.AddrPort { return conn.addr }
+func (conn *ConnectionImpl) State() StateMachine  { return stateMachineStates[conn.stateID] }
 
 func (conn *ConnectionImpl) firstMessageSeqInReceiveQueue() uint16 {
 	if conn.hctx == nil { // connection has no queue and processes full messages one by one

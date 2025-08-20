@@ -27,7 +27,6 @@ type handshakeContext struct {
 	sendNextRecordSequenceEpoch0 uint16
 
 	// state machine sets this to true or false depending on state.
-	// TODO - return bool from DeliveryReceivedMessages instead
 	CanDeliveryMessages bool
 
 	currentFlight byte // both send and receive
@@ -53,6 +52,13 @@ func newHandshakeContext(hasher hash.Hash) *handshakeContext {
 	}
 	hctx.sendQueue.Reserve()
 	return hctx
+}
+
+func (hctx *handshakeContext) firstMessageSeqInReceiveQueue(conn *ConnectionImpl) uint16 {
+	if hctx.receivedMessages.Len() > int(conn.nextMessageSeqReceive) {
+		panic("received messages queue invariant violated")
+	}
+	return conn.nextMessageSeqReceive - uint16(hctx.receivedMessages.Len())
 }
 
 func (hctx *handshakeContext) ComputeKeyShare(rnd dtlsrand.Rand) {
@@ -133,11 +139,11 @@ func (hctx *handshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment ha
 	}
 	copy(partialMessage.Msg.Body[fragment.Header.FragmentOffset:], fragment.Body) // copy all bytes for simplicity
 	// now we could ack the first message, so delivery all full messages
-	return hctx.DeliveryReceivedMessages(conn)
+	return hctx.DeliverReceivedMessages(conn)
 }
 
 // called when fully received message or when hctx.CanDeliveryMessages change
-func (hctx *handshakeContext) DeliveryReceivedMessages(conn *ConnectionImpl) error {
+func (hctx *handshakeContext) DeliverReceivedMessages(conn *ConnectionImpl) error {
 	for hctx.receivedMessages.Len() != 0 && hctx.CanDeliveryMessages { // check here because changes in receivedFullMessage
 		first := hctx.receivedMessages.FrontRef(hctx.receivedMessagesStorage[:])
 		if first.Msg.MsgType == handshake.MsgTypeZero || !first.FullyAcked() {

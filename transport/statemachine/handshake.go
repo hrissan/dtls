@@ -102,7 +102,7 @@ func (hctx *HandshakeConnection) ReceivedFragment(conn *ConnectionImpl, fragment
 		conn.NextMessageSeqReceive++
 	}
 	partialMessage := hctx.receivedMessages.IndexRef(hctx.receivedMessagesStorage[:], messageOffset)
-	if partialMessage.Msg.MsgType == 0 { // this fragment, set header, allocate body
+	if partialMessage.Msg.MsgType == handshake.MsgTypeZero { // the first fragment, we need to set header, allocate body
 		*partialMessage = PartialHandshakeMsg{
 			Msg: handshake.Message{
 				MsgType: fragment.Header.MsgType,
@@ -140,7 +140,8 @@ func (hctx *HandshakeConnection) ReceivedFragment(conn *ConnectionImpl, fragment
 func (hctx *HandshakeConnection) DeliveryReceivedMessages(conn *ConnectionImpl) error {
 	for hctx.receivedMessages.Len() != 0 && hctx.CanDeliveryMessages { // check here because changes in receivedFullMessage
 		first := hctx.receivedMessages.FrontRef(hctx.receivedMessagesStorage[:])
-		if !first.FullyAcked() {
+		if first.Msg.MsgType == handshake.MsgTypeZero || !first.FullyAcked() {
+			// not a single fragment received, or not fully acknowledged
 			return nil
 		}
 		msg := first.Msg

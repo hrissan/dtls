@@ -80,11 +80,11 @@ func (keys *DirectionKeys) ComputeNextApplicationTrafficSecret(serverKeys bool) 
 // contentType is the first non-zero byte from the end
 func findPaddingOffsetContentType(data []byte) (paddingOffset int, contentType byte) {
 	offset := len(data)
-	for ; offset > 16; offset -= 16 {
-		if binary.LittleEndian.Uint64(data[offset-16:]) != 0 {
-			break
-		}
-		if binary.LittleEndian.Uint64(data[offset-8:]) != 0 {
+	for ; offset > 16; offset -= 16 { // poor man's SIMD
+		slice := data[offset-16 : offset]
+		val1 := binary.LittleEndian.Uint64(slice)
+		val2 := binary.LittleEndian.Uint64(slice[8:])
+		if (val1 | val2) != 0 {
 			break
 		}
 	}

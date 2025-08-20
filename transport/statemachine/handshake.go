@@ -13,18 +13,18 @@ import (
 	"github.com/hrissan/tinydtls/record"
 )
 
-type HandshakeContext struct {
-	LocalRandom  [32]byte
-	X25519Secret *ecdh.PrivateKey // Tons of allocations here. TODO - compute in calculator goroutine
+type handshakeContext struct {
+	localRandom  [32]byte
+	x25519Secret *ecdh.PrivateKey // Tons of allocations here. TODO - compute in calculator goroutine
 
-	MasterSecret                  [32]byte
-	HandshakeTrafficSecretSend    [32]byte // we need this to generate finished message.
-	HandshakeTrafficSecretReceive [32]byte // we need this to check peer's finished message.
+	masterSecret                  [32]byte
+	handshakeTrafficSecretSend    [32]byte // we need this to generate finished message.
+	handshakeTrafficSecretReceive [32]byte // we need this to check peer's finished message.
 
 	// for ServerHello retransmit and replay protection
 	// we decided 2^16 ServerHello/ClientHello is enough for all practical purposes,
 	// see dtlserrors.ErrSendEpoch0RecordSeqOverflow
-	SendNextSegmentSequenceEpoch0 uint16
+	sendNextRecordSequenceEpoch0 uint16
 
 	// state machine sets this to true or false depending on state.
 	// TODO - return bool from DeliveryReceivedMessages instead
@@ -39,67 +39,67 @@ type HandshakeContext struct {
 	receivedMessages        circular.BufferExt[PartialHandshakeMsg]
 	receivedMessagesStorage [constants.MaxReceiveMessagesQueue]PartialHandshakeMsg
 
-	SendQueue SendQueue
+	sendQueue SendQueue
 
-	TranscriptHasher hash.Hash // when messages are added to messages, they are also added to TranscriptHasher
+	transcriptHasher hash.Hash // when messages are added to messages, they are also added to transcriptHasher
 
 	certificateChain handshake.MsgCertificate
 }
 
-func NewHandshakeContext(hasher hash.Hash) *HandshakeContext {
-	hctx := &HandshakeContext{
-		TranscriptHasher:    hasher,
+func newHandshakeContext(hasher hash.Hash) *handshakeContext {
+	hctx := &handshakeContext{
+		transcriptHasher:    hasher,
 		CanDeliveryMessages: true,
 	}
-	hctx.SendQueue.Reserve()
+	hctx.sendQueue.Reserve()
 	return hctx
 }
 
-func (hctx *HandshakeContext) ComputeKeyShare(rnd dtlsrand.Rand) {
+func (hctx *handshakeContext) ComputeKeyShare(rnd dtlsrand.Rand) {
 	var X25519Secret [32]byte
 	rnd.ReadMust(X25519Secret[:])
 	priv, err := ecdh.X25519().NewPrivateKey(X25519Secret[:])
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	hctx.X25519Secret = priv
+	hctx.x25519Secret = priv
 }
 
-func (hctx *HandshakeContext) ReceivedFlight(conn *ConnectionImpl, flight byte) (newFlight bool) {
+func (hctx *handshakeContext) ReceivedFlight(conn *ConnectionImpl, flight byte) (newFlight bool) {
 	if flight <= hctx.currentFlight {
 		return false
 	}
 	hctx.currentFlight = flight
 	// implicit ack of all previous flights
-	hctx.SendQueue.Clear()
+	hctx.sendQueue.Clear()
 
-	conn.Keys.SendAcks.Reset()
+	conn.keys.SendAcks.Reset()
 	return true
 }
 
-func (hctx *HandshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment handshake.Fragment, rn record.Number) error {
+func (hctx *handshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment handshake.Fragment, rn record.Number) error {
 	if fragment.Header.MsgType == handshake.MsgTypeZero { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}
 	// Receiving any fragment of any message from the next flight will remove all acks for previous flights.
 	// We must do it before we generate ack for this fragment.
-	flight := MsgTypeToFlight(fragment.Header.MsgType, conn.RoleServer) // zero if unknown
-	conn.Handshake.ReceivedFlight(conn, flight)
+	flight := MsgTypeToFlight(fragment.Header.MsgType, conn.roleServer) // zero if unknown
+	conn.hctx.ReceivedFlight(conn, flight)
 
-	messageOffset := int(fragment.Header.MsgSeq) + hctx.receivedMessages.Len() - int(conn.NextMessageSeqReceive)
+	messageOffset := int(fragment.Header.MsgSeq) + hctx.receivedMessages.Len() - int(conn.nextMessageSeqReceive)
 	if messageOffset < 0 {
-		panic("checked before calling HandshakeContext.ReceivedFragment")
+		panic("checked before calling handshakeContext.ReceivedFragment")
 	}
 	if messageOffset >= hctx.receivedMessages.Cap(hctx.receivedMessagesStorage[:]) {
 		return nil // would be beyond queue even if we fill it
 	}
 	for messageOffset >= hctx.receivedMessages.Len() {
 		hctx.receivedMessages.PushBack(hctx.receivedMessagesStorage[:], PartialHandshakeMsg{})
-		if conn.NextMessageSeqReceive == math.MaxUint16 {
+		if conn.nextMessageSeqReceive == math.MaxUint16 {
 			// can happen only when fragment.MsgSeq == math.MaxUint16
 			return dtlserrors.ErrReceivedMessageSeqOverflow
 		}
-		conn.NextMessageSeqReceive++
+		conn.nextMessageSeqReceive++
 	}
 	partialMessage := hctx.receivedMessages.IndexRef(hctx.receivedMessagesStorage[:], messageOffset)
 	if partialMessage.Msg.MsgType == handshake.MsgTypeZero { // the first fragment, we need to set header, allocate body
@@ -127,7 +127,7 @@ func (hctx *HandshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment ha
 	if !shouldAck {
 		return nil // got in the middle of the hole, wait for fragment which we can actully add
 	}
-	conn.Keys.AddAck(rn) // should ack it independent of conditions below
+	conn.keys.AddAck(rn) // should ack it independent of conditions below
 	if !changed {        // nothing new, save copy
 		return nil
 	}
@@ -137,7 +137,7 @@ func (hctx *HandshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment ha
 }
 
 // called when fully received message or when hctx.CanDeliveryMessages change
-func (hctx *HandshakeContext) DeliveryReceivedMessages(conn *ConnectionImpl) error {
+func (hctx *handshakeContext) DeliveryReceivedMessages(conn *ConnectionImpl) error {
 	for hctx.receivedMessages.Len() != 0 && hctx.CanDeliveryMessages { // check here because changes in receivedFullMessage
 		first := hctx.receivedMessages.FrontRef(hctx.receivedMessagesStorage[:])
 		if first.Msg.MsgType == handshake.MsgTypeZero || !first.FullyAcked() {
@@ -156,15 +156,15 @@ func (hctx *HandshakeContext) DeliveryReceivedMessages(conn *ConnectionImpl) err
 }
 
 // also acks (removes) all previous flights
-func (hctx *HandshakeContext) PushMessage(conn *ConnectionImpl, msg handshake.Message) error {
-	if conn.NextMessageSeqSend == math.MaxUint16 {
+func (hctx *handshakeContext) PushMessage(conn *ConnectionImpl, msg handshake.Message) error {
+	if conn.nextMessageSeqSend == math.MaxUint16 {
 		return dtlserrors.ErrSendMessageSeqOverflow
 	}
-	msg.MsgSeq = conn.NextMessageSeqSend
-	conn.NextMessageSeqSend++
+	msg.MsgSeq = conn.nextMessageSeqSend
+	conn.nextMessageSeqSend++
 
-	hctx.SendQueue.PushMessage(msg)
+	hctx.sendQueue.PushMessage(msg)
 
-	msg.AddToHash(hctx.TranscriptHasher)
+	msg.AddToHash(hctx.transcriptHasher)
 	return nil
 }

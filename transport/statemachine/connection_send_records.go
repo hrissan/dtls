@@ -88,11 +88,11 @@ func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg handshake.
 }
 
 func (conn *ConnectionImpl) checkSendLimit() error {
-	sendLimit := conn.Keys.SequenceNumberLimit()
-	if conn.Keys.SendNextSegmentSequence >= sendLimit {
+	sendLimit := conn.keys.SequenceNumberLimit()
+	if conn.keys.SendNextSegmentSequence >= sendLimit {
 		return dtlserrors.ErrSendRecordSeqOverflow
 	}
-	if conn.Keys.Send.Symmetric.Epoch < 3 || conn.Keys.SendNextSegmentSequence < sendLimit*3/4 { // simple heuristic
+	if conn.keys.Send.Symmetric.Epoch < 3 || conn.keys.SendNextSegmentSequence < sendLimit*3/4 { // simple heuristic
 		return nil
 	}
 	return conn.startKeyUpdate(false)
@@ -102,11 +102,11 @@ func (conn *ConnectionImpl) constructCiphertextRecord(recordData []byte, msg han
 	if err := conn.checkSendLimit(); err != nil {
 		return nil, record.Number{}, err
 	}
-	send := &conn.Keys.Send
+	send := &conn.keys.Send
 	epoch := send.Symmetric.Epoch
-	rn := record.NumberWith(epoch, conn.Keys.SendNextSegmentSequence)
-	seq := conn.Keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	conn.Keys.SendNextSegmentSequence++      // does not overflow due to checkSendLimit() above
+	rn := record.NumberWith(epoch, conn.keys.SendNextSegmentSequence)
+	seq := conn.keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
+	conn.keys.SendNextSegmentSequence++      // does not overflow due to checkSendLimit() above
 	log.Printf("constructing ciphertext handshake with rn={%d,%d}", rn.Epoch(), rn.SeqNum())
 
 	gcm := send.Symmetric.Write
@@ -140,7 +140,7 @@ func (conn *ConnectionImpl) constructCiphertextRecord(recordData []byte, msg han
 		panic("gcm.Seal length mismatch")
 	}
 
-	if !conn.Keys.DoNotEncryptSequenceNumbers {
+	if !conn.keys.DoNotEncryptSequenceNumbers {
 		if err := send.Symmetric.EncryptSequenceNumbers(recordData[startRecordOffset+1:startRecordOffset+3], recordData[startBodyOFfset:]); err != nil {
 			panic("cipher text too short when sending")
 		}
@@ -154,11 +154,11 @@ func (conn *ConnectionImpl) constructCiphertextAck(recordBody []byte, acks []rec
 	if err := conn.checkSendLimit(); err != nil {
 		return nil, err
 	}
-	send := &conn.Keys.Send
+	send := &conn.keys.Send
 	epoch := send.Symmetric.Epoch
-	rn := record.NumberWith(epoch, conn.Keys.SendNextSegmentSequence)
-	seq := conn.Keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	conn.Keys.SendNextSegmentSequence++      // does not overflow due to checkSendLimit() above
+	rn := record.NumberWith(epoch, conn.keys.SendNextSegmentSequence)
+	seq := conn.keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
+	conn.keys.SendNextSegmentSequence++      // does not overflow due to checkSendLimit() above
 	log.Printf("constructing ciphertext ack with rn={%d,%d}", rn.Epoch(), rn.SeqNum())
 
 	gcm := send.Symmetric.Write
@@ -196,7 +196,7 @@ func (conn *ConnectionImpl) constructCiphertextAck(recordBody []byte, acks []rec
 		panic("gcm.Seal length mismatch")
 	}
 
-	if !conn.Keys.DoNotEncryptSequenceNumbers {
+	if !conn.keys.DoNotEncryptSequenceNumbers {
 		if err := send.Symmetric.EncryptSequenceNumbers(recordBody[1:3], recordBody[startBodyOFfset:]); err != nil {
 			panic("cipher text too short when sending")
 		}
@@ -210,11 +210,11 @@ func (conn *ConnectionImpl) constructCiphertextApplication(recordBody []byte) ([
 	if err := conn.checkSendLimit(); err != nil {
 		return nil, err
 	}
-	send := &conn.Keys.Send
+	send := &conn.keys.Send
 	epoch := send.Symmetric.Epoch
-	rn := record.NumberWith(epoch, conn.Keys.SendNextSegmentSequence)
-	seq := conn.Keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	conn.Keys.SendNextSegmentSequence++      // does not overflow due to checkSendLimit() above
+	rn := record.NumberWith(epoch, conn.keys.SendNextSegmentSequence)
+	seq := conn.keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
+	conn.keys.SendNextSegmentSequence++      // does not overflow due to checkSendLimit() above
 	log.Printf("constructing ciphertext application with rn={%d,%d}", rn.Epoch(), rn.SeqNum())
 
 	gcm := send.Symmetric.Write
@@ -244,7 +244,7 @@ func (conn *ConnectionImpl) constructCiphertextApplication(recordBody []byte) ([
 		panic("gcm.Seal length mismatch")
 	}
 
-	if !conn.Keys.DoNotEncryptSequenceNumbers {
+	if !conn.keys.DoNotEncryptSequenceNumbers {
 		if err := send.Symmetric.EncryptSequenceNumbers(recordBody[1:3], recordBody[hdrSize:]); err != nil {
 			panic("cipher text too short when sending")
 		}

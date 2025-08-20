@@ -6,10 +6,13 @@ import (
 	"github.com/hrissan/tinydtls/dtlsrand"
 	"github.com/hrissan/tinydtls/transport"
 	"github.com/hrissan/tinydtls/transport/options"
+	"github.com/hrissan/tinydtls/transport/statemachine"
 	"github.com/hrissan/tinydtls/transport/stats"
 )
 
 func main() {
+	statemachine.PrintSizeofInfo()
+
 	socket := transport.OpenSocketMust("127.0.0.1:11111")
 
 	st := stats.NewStatsLogVerbose()

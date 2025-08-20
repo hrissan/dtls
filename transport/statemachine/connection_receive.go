@@ -19,11 +19,11 @@ func (conn *ConnectionImpl) ReceivedCiphertextRecord(opts *options.TransportOpti
 	}
 	decrypted, rn, contentType, err := conn.deprotectLocked(hdr)
 	if err != nil { // TODO - deprotectLocked should return dtlserror.Error
-		opts.Stats.Warning(conn.Addr, dtlserrors.WarnFailedToDeprotectRecord)
+		opts.Stats.Warning(conn.addr, dtlserrors.WarnFailedToDeprotectRecord)
 		// either garbage, attack or epoch wrapping
 		return nil
 	}
-	log.Printf("dtls: ciphertext deprotected with rn={%d,%d} cid(hex): %x from %v, body(hex): %x", rn.Epoch(), rn.SeqNum(), hdr.CID, conn.Addr, decrypted)
+	log.Printf("dtls: ciphertext deprotected with rn={%d,%d} cid(hex): %x from %v, body(hex): %x", rn.Epoch(), rn.SeqNum(), hdr.CID, conn.addr, decrypted)
 	// [rfc9147:4.1]
 	switch contentType {
 	case record.RecordTypeAlert:
@@ -40,15 +40,15 @@ func (conn *ConnectionImpl) ReceivedCiphertextRecord(opts *options.TransportOpti
 
 func (conn *ConnectionImpl) ReceivedAlert(encrypted bool, messageData []byte) error {
 	// TODO - beware of unencrypted alert!
-	log.Printf("dtls: got alert record (encrypted=%v) %d bytes from %v, message(hex): %x", encrypted, len(messageData), conn.Addr, messageData)
+	log.Printf("dtls: got alert record (encrypted=%v) %d bytes from %v, message(hex): %x", encrypted, len(messageData), conn.addr, messageData)
 	// messageData must be 2 bytes, TODO - parse and process alert
 	// record with an Alert type MUST contain exactly one message. [rfc8446:5.1]
 	return nil
 }
 
 func (conn *ConnectionImpl) ReceivedApplicationData(messageData []byte) error {
-	log.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q", len(messageData), conn.Addr, messageData)
-	if conn.RoleServer && conn.Handler != nil {
+	log.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q", len(messageData), conn.addr, messageData)
+	if conn.roleServer && conn.Handler != nil {
 		// TODO - controller to play with state. Remove!
 		if strings.HasPrefix(string(messageData), "upds") && conn.sendKeyUpdateMessageSeq == 0 {
 			if err := conn.startKeyUpdate(false); err != nil {
@@ -62,14 +62,14 @@ func (conn *ConnectionImpl) ReceivedApplicationData(messageData []byte) error {
 		}
 		if ha, ok := conn.Handler.(*exampleHandler); ok {
 			ha.toSend = string(messageData)
-			conn.HandlerHasMoreData = true
+			conn.handlerHasMoreData = true
 		}
 	}
 	return nil
 }
 
 func (conn *ConnectionImpl) ReceivedEncryptedHandshakeRecord(opts *options.TransportOptions, recordData []byte, rn record.Number) error {
-	log.Printf("dtls: got handshake record (encrypted) %d bytes from %v, message(hex): %x", len(recordData), conn.Addr, recordData)
+	log.Printf("dtls: got handshake record (encrypted) %d bytes from %v, message(hex): %x", len(recordData), conn.addr, recordData)
 	if len(recordData) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding
 		return dtlserrors.ErrHandshakeReecordEmpty
@@ -79,7 +79,7 @@ func (conn *ConnectionImpl) ReceivedEncryptedHandshakeRecord(opts *options.Trans
 		var fragment handshake.Fragment
 		n, err := fragment.Parse(recordData[messageOffset:])
 		if err != nil {
-			opts.Stats.BadMessageHeader("handshake(encrypted)", messageOffset, len(recordData), conn.Addr, err)
+			opts.Stats.BadMessageHeader("handshake(encrypted)", messageOffset, len(recordData), conn.addr, err)
 			return dtlserrors.ErrEncryptedHandshakeMessageHeaderParsing
 		}
 		messageOffset += n
@@ -87,15 +87,15 @@ func (conn *ConnectionImpl) ReceivedEncryptedHandshakeRecord(opts *options.Trans
 		if fragment.Header.MsgSeq < conn.FirstMessageSeqInReceiveQueue() {
 			// all messages before were processed by us in the state we already do not remember,
 			// so we must acknowledge unconditionally and do nothing.
-			conn.Keys.AddAck(rn)
+			conn.keys.AddAck(rn)
 			continue
 		}
 		switch fragment.Header.MsgType {
 		case handshake.MsgTypeClientHello:
-			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.MsgTypeToName(fragment.Header.MsgType), conn.Addr, fragment.Header)
+			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.MsgTypeToName(fragment.Header.MsgType), conn.addr, fragment.Header)
 			return dtlserrors.ErrClientHelloMustNotBeEncrypted
 		case handshake.MsgTypeServerHello:
-			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.MsgTypeToName(fragment.Header.MsgType), conn.Addr, fragment.Header)
+			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.MsgTypeToName(fragment.Header.MsgType), conn.addr, fragment.Header)
 			return dtlserrors.ErrServerHelloMustNotBeEncrypted
 		case handshake.MsgTypeNewSessionTicket:
 			if err := conn.receivedNewSessionTicket(opts, fragment, rn); err != nil {
@@ -106,8 +106,8 @@ func (conn *ConnectionImpl) ReceivedEncryptedHandshakeRecord(opts *options.Trans
 				return err
 			}
 		default:
-			if conn.Handshake == nil {
-				opts.Stats.Warning(conn.Addr, dtlserrors.ErrHandshakeMessagePostHandshake)
+			if conn.hctx == nil {
+				opts.Stats.Warning(conn.addr, dtlserrors.ErrHandshakeMessagePostHandshake)
 				continue
 			}
 			// we must never add post-handshake messages to received messages queue in Handshake,
@@ -115,7 +115,7 @@ func (conn *ConnectionImpl) ReceivedEncryptedHandshakeRecord(opts *options.Trans
 			// we will not be able to throw them out (peer will never send fragments again), and we will not
 			// be able to process them immediately.
 			// So all post-handshake messages muet be processed in switch statement above.
-			if err := conn.Handshake.ReceivedFragment(conn, fragment, rn); err != nil {
+			if err := conn.hctx.ReceivedFragment(conn, fragment, rn); err != nil {
 				return err
 			}
 		}
@@ -127,21 +127,21 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 	if fragment.Header.IsFragmented() {
 		// we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
-		opts.Stats.Warning(conn.Addr, dtlserrors.WarnNewSessionTicketFragmented)
+		opts.Stats.Warning(conn.addr, dtlserrors.WarnNewSessionTicketFragmented)
 		return nil
 	}
-	if conn.Handshake != nil {
-		opts.Stats.Warning(conn.Addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
+	if conn.hctx != nil {
+		opts.Stats.Warning(conn.addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
 		return nil
 	}
-	if fragment.Header.MsgSeq > conn.NextMessageSeqReceive {
+	if fragment.Header.MsgSeq > conn.nextMessageSeqReceive {
 		return nil
 	}
-	if conn.NextMessageSeqReceive == math.MaxUint16 {
+	if conn.nextMessageSeqReceive == math.MaxUint16 {
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}
-	conn.Keys.AddAck(rn)
-	conn.NextMessageSeqReceive++                        // never due to check above
+	conn.keys.AddAck(rn)
+	conn.nextMessageSeqReceive++                        // never due to check above
 	log.Printf("received and ignored NewSessionTicket") // TODO
 	return nil
 }
@@ -150,7 +150,7 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, fr
 	if fragment.Header.IsFragmented() {
 		// alert - we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
-		opts.Stats.Warning(conn.Addr, dtlserrors.WarnKeyUpdateFragmented)
+		opts.Stats.Warning(conn.addr, dtlserrors.WarnKeyUpdateFragmented)
 		return nil
 	}
 	var msgKeyUpdate handshake.MsgKeyUpdate
@@ -158,20 +158,20 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, fr
 		return dtlserrors.ErrKeyUpdateMessageParsing
 	}
 	log.Printf("KeyUpdate parsed: %+v", msgKeyUpdate)
-	if conn.Handshake != nil {
-		opts.Stats.Warning(conn.Addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
+	if conn.hctx != nil {
+		opts.Stats.Warning(conn.addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
 		return nil
 	}
-	if fragment.Header.MsgSeq > conn.NextMessageSeqReceive {
+	if fragment.Header.MsgSeq > conn.nextMessageSeqReceive {
 		return nil
 	}
-	if conn.NextMessageSeqReceive == math.MaxUint16 {
+	if conn.nextMessageSeqReceive == math.MaxUint16 {
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}
-	conn.Keys.AddAck(rn)
-	conn.NextMessageSeqReceive++ // never due to check above
+	conn.keys.AddAck(rn)
+	conn.nextMessageSeqReceive++ // never due to check above
 	log.Printf("received KeyUpdate (%+v), expecting to receive record with the next epoch", msgKeyUpdate)
-	conn.Keys.ExpectReceiveEpochUpdate = true // if this leads to epoch overflow, we'll generate error later in the function which actually increments epoch
+	conn.keys.ExpectReceiveEpochUpdate = true // if this leads to epoch overflow, we'll generate error later in the function which actually increments epoch
 	if msgKeyUpdate.UpdateRequested {
 		if err := conn.startKeyUpdate(false); err != nil { // do not request update, when responding to request
 			return err

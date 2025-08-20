@@ -22,19 +22,19 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
-	if conn.Handshake != nil {
+	if conn.hctx != nil {
 		// TODO - replace older handshakes with the new ones (by cookie age or other parameters)
 		// attacker cannot control age for addr, so will not be able to disrupt connection by sending
 		// rogue packets
 		return nil
 	}
-	hctx := NewHandshakeContext(sha256.New())
-	conn.Handshake = hctx
+	hctx := newHandshakeContext(sha256.New())
+	conn.hctx = hctx
 
-	conn.Handshake.SendNextSegmentSequenceEpoch0 = 1 // sequence 0 was HRR
+	conn.hctx.sendNextRecordSequenceEpoch0 = 1 // sequence 0 was HRR
 
-	conn.NextMessageSeqSend = 1    // message 0 was HRR
-	conn.NextMessageSeqReceive = 2 // message 0, 1 were initial client_hello, client_hello
+	conn.nextMessageSeqSend = 1    // message 0 was HRR
+	conn.nextMessageSeqReceive = 2 // message 0, 1 were initial client_hello, client_hello
 	// TODO - check if the same handshake by storing (age, initialHelloTranscriptHash, keyShareSet)
 	{
 		var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte
@@ -47,29 +47,29 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 
 		// [rfc8446:4.4.1] replace initial client hello message with its hash if HRR was used
 		syntheticHashData := []byte{byte(handshake.MsgTypeMessageHash), 0, 0, sha256.Size}
-		_, _ = hctx.TranscriptHasher.Write(syntheticHashData)
-		_, _ = hctx.TranscriptHasher.Write(initialHelloTranscriptHash[:sha256.Size])
-		debugPrintSum(hctx.TranscriptHasher)
+		_, _ = hctx.transcriptHasher.Write(syntheticHashData)
+		_, _ = hctx.transcriptHasher.Write(initialHelloTranscriptHash[:sha256.Size])
+		debugPrintSum(hctx.transcriptHasher)
 		// then add reconstructed HRR
-		addMessageDataTranscript(hctx.TranscriptHasher, hrrDatagram[13:]) // skip record header
-		debugPrintSum(hctx.TranscriptHasher)
+		addMessageDataTranscript(hctx.transcriptHasher, hrrDatagram[13:]) // skip record header
+		debugPrintSum(hctx.transcriptHasher)
 		// then add second client hello
-		msg.AddToHash(hctx.TranscriptHasher)
-		debugPrintSum(hctx.TranscriptHasher)
+		msg.AddToHash(hctx.transcriptHasher)
+		debugPrintSum(hctx.transcriptHasher)
 	}
 	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", keyShareSet, initialHelloTranscriptHash)
-	opts.Rnd.ReadMust(hctx.LocalRandom[:])
+	opts.Rnd.ReadMust(hctx.localRandom[:])
 	hctx.ComputeKeyShare(opts.Rnd)
 
 	serverHello := handshake.MsgServerHello{
-		Random:      hctx.LocalRandom,
+		Random:      hctx.localRandom,
 		CipherSuite: handshake.CypherSuite_TLS_AES_128_GCM_SHA256,
 	}
 	serverHello.Extensions.SupportedVersionsSet = true
 	serverHello.Extensions.SupportedVersions.SelectedVersion = handshake.DTLS_VERSION_13
 	serverHello.Extensions.KeyShareSet = true
 	serverHello.Extensions.KeyShare.X25519PublicKeySet = true
-	copy(serverHello.Extensions.KeyShare.X25519PublicKey[:], hctx.X25519Secret.PublicKey().Bytes())
+	copy(serverHello.Extensions.KeyShare.X25519PublicKey[:], hctx.x25519Secret.PublicKey().Bytes())
 	// TODO - get body from the rope
 	serverHelloBody := serverHello.Write(nil)
 	serverHelloMessage := handshake.Message{
@@ -83,19 +83,19 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 	}
 
 	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
-	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
+	handshakeTranscriptHash := hctx.transcriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
 	// TODO - move to calculator goroutine
 	remotePublic, err := ecdh.X25519().NewPublicKey(msgClientHello.Extensions.KeyShare.X25519PublicKey[:])
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	sharedSecret, err := hctx.X25519Secret.ECDH(remotePublic)
+	sharedSecret, err := hctx.x25519Secret.ECDH(remotePublic)
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	hctx.MasterSecret, hctx.HandshakeTrafficSecretSend, hctx.HandshakeTrafficSecretReceive = conn.Keys.ComputeHandshakeKeys(true, sharedSecret, handshakeTranscriptHash)
-	conn.Keys.SequenceNumberLimitExp = 5 // TODO - set for actual cipher suite. Small value is for testing.
+	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive = conn.keys.ComputeHandshakeKeys(true, sharedSecret, handshakeTranscriptHash)
+	conn.keys.SequenceNumberLimitExp = 5 // TODO - set for actual cipher suite. Small value is for testing.
 
 	if err := hctx.PushMessage(conn, generateEncryptedExtensions()); err != nil {
 		return err
@@ -118,8 +118,8 @@ func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 		return err
 	}
 
-	handshakeTranscriptHash = hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
-	conn.Keys.ComputeApplicationTrafficSecret(true, hctx.MasterSecret[:], handshakeTranscriptHash)
+	handshakeTranscriptHash = hctx.transcriptHasher.Sum(handshakeTranscriptHashStorage[:0])
+	conn.keys.ComputeApplicationTrafficSecret(true, hctx.masterSecret[:], handshakeTranscriptHash)
 	return nil
 }
 
@@ -205,14 +205,14 @@ func generateServerCertificate(opts *options.TransportOptions) handshake.Message
 	}
 }
 
-func generateServerCertificateVerify(opts *options.TransportOptions, hctx *HandshakeContext) (handshake.Message, error) {
+func generateServerCertificateVerify(opts *options.TransportOptions, hctx *handshakeContext) (handshake.Message, error) {
 	msg := handshake.MsgCertificateVerify{
 		SignatureScheme: handshake.SignatureAlgorithm_RSA_PSS_RSAE_SHA256,
 	}
 
 	// [rfc8446:4.4.3] - certificate verification
 	var certVerifyTranscriptHashStorage [constants.MaxHashLength]byte
-	certVerifyTranscriptHash := hctx.TranscriptHasher.Sum(certVerifyTranscriptHashStorage[:0])
+	certVerifyTranscriptHash := hctx.transcriptHasher.Sum(certVerifyTranscriptHashStorage[:0])
 
 	var sigMessageHashStorage [constants.MaxHashLength]byte
 	sigMessageHash := signature.CalculateCoveredContentHash(sha256.New(), certVerifyTranscriptHash, sigMessageHashStorage[:0])

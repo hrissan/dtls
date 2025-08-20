@@ -16,14 +16,14 @@ func (conn *ConnectionImpl) HasDataToSend() bool {
 }
 
 func (conn *ConnectionImpl) hasDataToSendLocked() bool {
-	hctx := conn.Handshake
-	if hctx != nil && hctx.SendQueue.HasDataToSend() {
+	hctx := conn.hctx
+	if hctx != nil && hctx.sendQueue.HasDataToSend() {
 		return true
 	}
-	if conn.Keys.SendAcks.GetBitCount() != 0 {
+	if conn.keys.SendAcks.GetBitCount() != 0 {
 		return true
 	}
-	return conn.HandlerHasMoreData ||
+	return conn.handlerHasMoreData ||
 		(conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == record.Number{})) ||
 		(conn.sendNewSessionTicketMessageSeq != 0 && (conn.sendNewSessionTicketRN == record.Number{}))
 }
@@ -42,11 +42,11 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 
 func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error) {
 	var datagramSize int
-	hctx := conn.Handshake
+	hctx := conn.hctx
 	if hctx != nil {
 		// we decided to first send our messages, then acks.
 		// because message has a chance to ack the whole flight
-		if recordSize, err := hctx.SendQueue.ConstructDatagram(conn, datagram[datagramSize:]); err != nil {
+		if recordSize, err := hctx.sendQueue.ConstructDatagram(conn, datagram[datagramSize:]); err != nil {
 			return 0, false, err
 		} else {
 			datagramSize += recordSize
@@ -121,7 +121,7 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 				datagramSize += len(da)
 			}
 			if !add {
-				conn.HandlerHasMoreData = false
+				conn.handlerHasMoreData = false
 			}
 		}
 	}
@@ -129,7 +129,7 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 }
 
 func (conn *ConnectionImpl) constructDatagramAcks(datagram []byte) (int, error) {
-	acks := &conn.Keys.SendAcks
+	acks := &conn.keys.SendAcks
 	acksSize := acks.GetBitCount()
 	if acksSize == 0 {
 		return 0, nil
@@ -150,8 +150,8 @@ func (conn *ConnectionImpl) constructDatagramAcks(datagram []byte) (int, error) 
 		}
 		seq := nextReceiveSeq + i - replay.Width
 		if acks.IsSetBit(seq) {
-			sendAcks = append(sendAcks, record.NumberWith(conn.Keys.SendAcksEpoch, seq))
-			//log.Printf("preparing to send ack={%d,%d}", conn.Keys.SendAcksEpoch, seq)
+			sendAcks = append(sendAcks, record.NumberWith(conn.keys.SendAcksEpoch, seq))
+			//log.Printf("preparing to send ack={%d,%d}", conn.keys.SendAcksEpoch, seq)
 			acks.ClearBit(seq)
 		}
 	}

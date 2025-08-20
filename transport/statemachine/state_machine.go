@@ -7,12 +7,12 @@ import (
 	"github.com/hrissan/tinydtls/handshake"
 )
 
-func (hctx *HandshakeContext) GenerateFinished(conn *ConnectionImpl) handshake.Message {
+func (hctx *handshakeContext) GenerateFinished(conn *ConnectionImpl) handshake.Message {
 	// [rfc8446:4.4.4] - finished
 	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
-	finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
+	finishedTranscriptHash := hctx.transcriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
-	mustBeFinished := conn.Keys.Send.ComputeFinished(sha256.New(), hctx.HandshakeTrafficSecretSend[:], finishedTranscriptHash)
+	mustBeFinished := conn.keys.Send.ComputeFinished(sha256.New(), hctx.handshakeTrafficSecretSend[:], finishedTranscriptHash)
 
 	msg := handshake.MsgFinished{
 		VerifyDataLength: len(mustBeFinished),

@@ -15,16 +15,16 @@ func (conn *ConnectionImpl) ReceivedEncryptedAck(opts *options.TransportOptions,
 	if err != nil {
 		return dtlserrors.ErrEncryptedAckMessageHeaderParsing
 	}
-	log.Printf("dtls: got ack record (encrypted) %d bytes from %v, message(hex): %x", len(messageData), conn.Addr, messageData)
+	log.Printf("dtls: got ack record (encrypted) %d bytes from %v, message(hex): %x", len(messageData), conn.addr, messageData)
 	conn.processAckBody(opts, insideBody)
 	// if all messages from epoch 2 acked, then switch sending epoch
-	if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Symmetric.Epoch == 2 {
-		conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
-		conn.Keys.Send.Symmetric.Epoch = 3
-		conn.Keys.SendNextSegmentSequence = 0
-		conn.Handshake = nil // TODO - reuse into pool
+	if conn.hctx != nil && conn.hctx.sendQueue.Len() == 0 && conn.keys.Send.Symmetric.Epoch == 2 {
+		conn.keys.Send.Symmetric.ComputeKeys(conn.keys.Send.ApplicationTrafficSecret[:])
+		conn.keys.Send.Symmetric.Epoch = 3
+		conn.keys.SendNextSegmentSequence = 0
+		conn.hctx = nil // TODO - reuse into pool
 		conn.Handler = &exampleHandler{toSend: "Hello from client\n"}
-		conn.HandlerHasMoreData = true
+		conn.handlerHasMoreData = true
 	}
 	return nil // ack occupies full record
 }
@@ -34,12 +34,12 @@ func (conn *ConnectionImpl) processAckBody(opts *options.TransportOptions, insid
 		epoch := binary.BigEndian.Uint64(insideBody)
 		seq := binary.BigEndian.Uint64(insideBody[8:])
 		if epoch > math.MaxUint16 {
-			opts.Stats.Warning(conn.Addr, dtlserrors.WarnAckEpochOverflow)
+			opts.Stats.Warning(conn.addr, dtlserrors.WarnAckEpochOverflow)
 			continue // prevent overflow below
 		}
 		rn := record.NumberWith(uint16(epoch), seq)
-		if conn.Handshake != nil {
-			conn.Handshake.SendQueue.Ack(conn, rn)
+		if conn.hctx != nil {
+			conn.hctx.sendQueue.Ack(conn, rn)
 		}
 		conn.processKeyUpdateAck(rn)
 		conn.processNewSessionTicketAck(rn)
@@ -64,8 +64,8 @@ func (conn *ConnectionImpl) processKeyUpdateAck(rn record.Number) {
 	conn.sendKeyUpdateRN = record.Number{}
 	conn.sendKeyUpdateUpdateRequested = false // must not be necessary
 	// now when we received ack for KeyUpdate, we must update our keys
-	conn.Keys.Send.ComputeNextApplicationTrafficSecret(conn.RoleServer) // next application traffic secret is calculated from the previous one
-	conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
-	conn.Keys.Send.Symmetric.Epoch++
-	conn.Keys.SendNextSegmentSequence = 0
+	conn.keys.Send.ComputeNextApplicationTrafficSecret(conn.roleServer) // next application traffic secret is calculated from the previous one
+	conn.keys.Send.Symmetric.ComputeKeys(conn.keys.Send.ApplicationTrafficSecret[:])
+	conn.keys.Send.Symmetric.Epoch++
+	conn.keys.SendNextSegmentSequence = 0
 }

@@ -12,10 +12,10 @@ import (
 )
 
 // change into PartialHandshakeMsg
-func (hctx *HandshakeContext) receivedFullMessage(conn *ConnectionImpl, msg handshake.Message) error {
+func (hctx *handshakeContext) receivedFullMessage(conn *ConnectionImpl, msg handshake.Message) error {
 	switch msg.MsgType {
 	case handshake.MsgTypeServerHello:
-		if conn.RoleServer {
+		if conn.roleServer {
 			return dtlserrors.ErrServerHelloReceivedByServer
 		}
 		var msgServerHello handshake.MsgServerHello
@@ -24,7 +24,7 @@ func (hctx *HandshakeContext) receivedFullMessage(conn *ConnectionImpl, msg hand
 		}
 		return hctx.onServerHello(conn, msg, msgServerHello)
 	case handshake.MsgTypeEncryptedExtensions:
-		if conn.RoleServer {
+		if conn.roleServer {
 			return dtlserrors.ErrEncryptedExtensionsReceivedByServer
 		}
 		var msgExtensions handshake.ExtensionsSet
@@ -32,7 +32,7 @@ func (hctx *HandshakeContext) receivedFullMessage(conn *ConnectionImpl, msg hand
 			return dtlserrors.ErrExtensionsMessageParsing
 		}
 		log.Printf("encrypted extensions parsed: %+v", msgExtensions)
-		msg.AddToHash(hctx.TranscriptHasher)
+		msg.AddToHash(hctx.transcriptHasher)
 		return nil
 	case handshake.MsgTypeCertificate:
 		var msgCertificate handshake.MsgCertificate
@@ -44,7 +44,7 @@ func (hctx *HandshakeContext) receivedFullMessage(conn *ConnectionImpl, msg hand
 		// then offload ECC to separate core and trigger state machine depending on result
 		log.Printf("certificate parsed: %+v", msgCertificate)
 		hctx.certificateChain = msgCertificate
-		msg.AddToHash(hctx.TranscriptHasher)
+		msg.AddToHash(hctx.transcriptHasher)
 		return nil
 	case handshake.MsgTypeCertificateVerify:
 		var msgCertificateVerify handshake.MsgCertificateVerify
@@ -64,7 +64,7 @@ func (hctx *HandshakeContext) receivedFullMessage(conn *ConnectionImpl, msg hand
 		}
 		// [rfc8446:4.4.3] - certificate verification
 		var certVerifyTranscriptHashStorage [constants.MaxHashLength]byte
-		certVerifyTranscriptHash := hctx.TranscriptHasher.Sum(certVerifyTranscriptHashStorage[:0])
+		certVerifyTranscriptHash := hctx.transcriptHasher.Sum(certVerifyTranscriptHashStorage[:0])
 
 		// TODO - offload to calc goroutine here
 		var sigMessageHashStorage [constants.MaxHashLength]byte
@@ -78,7 +78,7 @@ func (hctx *HandshakeContext) receivedFullMessage(conn *ConnectionImpl, msg hand
 			return dtlserrors.ErrCertificateSignatureInvalid
 		}
 		log.Printf("certificate verify ok: %+v", msgCertificateVerify)
-		msg.AddToHash(hctx.TranscriptHasher)
+		msg.AddToHash(hctx.transcriptHasher)
 		return nil
 	case handshake.MsgTypeFinished:
 		var msgFinished handshake.MsgFinished
@@ -87,36 +87,36 @@ func (hctx *HandshakeContext) receivedFullMessage(conn *ConnectionImpl, msg hand
 		}
 		// [rfc8446:4.4.4] - finished
 		var finishedTranscriptHashStorage [constants.MaxHashLength]byte
-		finishedTranscriptHash := hctx.TranscriptHasher.Sum(finishedTranscriptHashStorage[:0])
+		finishedTranscriptHash := hctx.transcriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
-		mustBeFinished := conn.Keys.Receive.ComputeFinished(sha256.New(), hctx.HandshakeTrafficSecretReceive[:], finishedTranscriptHash)
+		mustBeFinished := conn.keys.Receive.ComputeFinished(sha256.New(), hctx.handshakeTrafficSecretReceive[:], finishedTranscriptHash)
 		if string(msgFinished.VerifyData[:msgFinished.VerifyDataLength]) != string(mustBeFinished) {
 			return dtlserrors.ErrFinishedMessageVerificationFailed
 		}
 		log.Printf("finished message verify ok: %+v", msgFinished)
-		if conn.RoleServer {
-			if conn.Handshake != nil && conn.Handshake.SendQueue.Len() == 0 && conn.Keys.Send.Symmetric.Epoch == 2 {
-				conn.Keys.Send.Symmetric.ComputeKeys(conn.Keys.Send.ApplicationTrafficSecret[:])
-				conn.Keys.Send.Symmetric.Epoch = 3
-				conn.Keys.SendNextSegmentSequence = 0
-				conn.Handshake = nil
+		if conn.roleServer {
+			if conn.hctx != nil && conn.hctx.sendQueue.Len() == 0 && conn.keys.Send.Symmetric.Epoch == 2 {
+				conn.keys.Send.Symmetric.ComputeKeys(conn.keys.Send.ApplicationTrafficSecret[:])
+				conn.keys.Send.Symmetric.Epoch = 3
+				conn.keys.SendNextSegmentSequence = 0
+				conn.hctx = nil
 				// TODO - why wolf closes connection if we send application data immediately?
 				//conn.Handler = &exampleHandler{toSend: "Hello from server\n"}
 				conn.Handler = &exampleHandler{}
-				conn.HandlerHasMoreData = true
-				// we need conn.Handshake here to send acks for last client flight.
-				// we will set conn.Handshake to 0 when we switch to epoch 3
+				conn.handlerHasMoreData = true
+				// we need conn.hctx here to send acks for last client flight.
+				// we will set conn.hctx to 0 when we switch to epoch 3
 				// TODO - move acks to Connection?
 			}
 			return nil
 		}
 		// server finished is not part of traffic secret transcript
-		msg.AddToHash(hctx.TranscriptHasher)
+		msg.AddToHash(hctx.transcriptHasher)
 
 		var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
-		handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
+		handshakeTranscriptHash := hctx.transcriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
-		conn.Keys.ComputeApplicationTrafficSecret(false, hctx.MasterSecret[:], handshakeTranscriptHash)
+		conn.keys.ComputeApplicationTrafficSecret(false, hctx.masterSecret[:], handshakeTranscriptHash)
 
 		// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here
 		return hctx.PushMessage(conn, hctx.GenerateFinished(conn))

@@ -38,13 +38,13 @@ type ConnectionHandler interface {
 
 // Contains absolute minimum of what's mandatory for after handshake finished
 // keys, record replay buffer, ack queue for KeyUpdate and NewSessionTicket messages
-// all other information is in HandshakeContext structure and will be reused
+// all other information is in handshakeContext structure and will be reused
 // after handshake finish
 type ConnectionImpl struct {
 	// variables below mu are protected by mu, except where noted
 	mu   sync.Mutex     // TODO - check that mutex is alwasy taken
-	Addr netip.AddrPort // changes very rarely
-	Keys keys.Keys
+	addr netip.AddrPort // changes very rarely
+	keys keys.Keys
 
 	// We do not support received messages of this kind to be fragmented,
 	// because we do not want to allocate memory for reassembly,
@@ -53,19 +53,19 @@ type ConnectionImpl struct {
 	sendKeyUpdateRN        record.Number // if != 0, already sent, on resend overwrite rn
 	sendNewSessionTicketRN record.Number // if != 0, already sent, on resend overwrite rn
 
-	Handshake *HandshakeContext // content is also protected by mutex above
-	Handler   ConnectionHandler
+	hctx    *handshakeContext // content is also protected by mutex above
+	Handler ConnectionHandler
 
 	// this counter does not reset with a new epoch
-	NextMessageSeqSend    uint16
-	NextMessageSeqReceive uint16
+	nextMessageSeqSend    uint16
+	nextMessageSeqReceive uint16
 
 	sendNewSessionTicketMessageSeq uint16 // != 0 if set
 	sendKeyUpdateMessageSeq        uint16 // != 0 if set
 	sendKeyUpdateUpdateRequested   bool   // fully defines content of KeyUpdate we are sending
 
-	RoleServer         bool // changes very rarely
-	HandlerHasMoreData bool // set when user signals it has data, clears after OnWriteRecord returns false
+	roleServer         bool // changes very rarely
+	handlerHasMoreData bool // set when user signals it has data, clears after OnWriteRecord returns false
 
 	InSenderQueue    bool  // intrusive, must not be changed except by sender, protected by sender mutex
 	TimerHeapIndex   int   // intrusive, must not be changed except by clock, protected by clock mutex
@@ -74,15 +74,15 @@ type ConnectionImpl struct {
 
 func NewServerConnection(addr netip.AddrPort) *ConnectionImpl {
 	return &ConnectionImpl{
-		Addr:       addr,
-		RoleServer: true,
+		addr:       addr,
+		roleServer: true,
 	}
 }
 
 func NewClientConnection(addr netip.AddrPort, opts *options.TransportOptions) (*ConnectionImpl, error) {
 	// TODO - take from pool, limit # of outstanding handshakes
-	hctx := NewHandshakeContext(sha256.New())
-	opts.Rnd.ReadMust(hctx.LocalRandom[:])
+	hctx := newHandshakeContext(sha256.New())
+	opts.Rnd.ReadMust(hctx.localRandom[:])
 	// We'd like to postpone ECC until HRR, but wolfssl requires key_share in the first client_hello
 	// TODO - offload to separate goroutine
 	// TODO - contact wolfssl team?
@@ -90,9 +90,9 @@ func NewClientConnection(addr netip.AddrPort, opts *options.TransportOptions) (*
 
 	// TODO - take from pool, limit # of connections
 	conn := &ConnectionImpl{
-		Addr:       addr,
-		RoleServer: false,
-		Handshake:  hctx,
+		addr:       addr,
+		roleServer: false,
+		hctx:       hctx,
 	}
 	clientHelloMsg := hctx.GenerateClientHello(false, cookie.Cookie{})
 
@@ -103,27 +103,29 @@ func NewClientConnection(addr netip.AddrPort, opts *options.TransportOptions) (*
 	return conn, nil
 }
 
+func (conn *ConnectionImpl) Addr() netip.AddrPort { return conn.addr }
+
 func (conn *ConnectionImpl) FirstMessageSeqInReceiveQueue() uint16 {
-	if conn.Handshake == nil { // connection has no queue and processes full messages one by one
-		return conn.NextMessageSeqReceive
+	if conn.hctx == nil { // connection has no queue and processes full messages one by one
+		return conn.nextMessageSeqReceive
 	}
-	if conn.Handshake.receivedMessages.Len() > int(conn.NextMessageSeqReceive) {
+	if conn.hctx.receivedMessages.Len() > int(conn.nextMessageSeqReceive) {
 		panic("received messages queue invariant violated")
 	}
-	return conn.NextMessageSeqReceive - uint16(conn.Handshake.receivedMessages.Len())
+	return conn.nextMessageSeqReceive - uint16(conn.hctx.receivedMessages.Len())
 }
 
 func (conn *ConnectionImpl) startKeyUpdate(updateRequested bool) error {
 	if conn.sendKeyUpdateMessageSeq != 0 {
 		return nil // KeyUpdate in progress
 	}
-	if conn.NextMessageSeqSend == math.MaxUint16 {
+	if conn.nextMessageSeqSend == math.MaxUint16 {
 		return dtlserrors.ErrSendMessageSeqOverflow
 	}
-	conn.sendKeyUpdateMessageSeq = conn.NextMessageSeqSend
+	conn.sendKeyUpdateMessageSeq = conn.nextMessageSeqSend
 	conn.sendKeyUpdateRN = record.Number{}
 	conn.sendKeyUpdateUpdateRequested = updateRequested
-	conn.NextMessageSeqSend++ // never due to check above
+	conn.nextMessageSeqSend++ // never due to check above
 	log.Printf("KeyUpdate started (updateRequested=%v), messageSeq: %d", updateRequested, conn.sendKeyUpdateMessageSeq)
 	return nil
 }

@@ -82,8 +82,8 @@ func (sq *SendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 		}
 		var sendNextSegmentSequenceEpoch0 *uint16
 		if outgoing.Msg.MsgType == handshake.MsgTypeClientHello || outgoing.Msg.MsgType == handshake.MsgTypeServerHello {
-			if conn.Handshake != nil {
-				sendNextSegmentSequenceEpoch0 = &conn.Handshake.SendNextSegmentSequenceEpoch0
+			if conn.hctx != nil {
+				sendNextSegmentSequenceEpoch0 = &conn.hctx.sendNextRecordSequenceEpoch0
 			} else {
 				// We only can send that if we are still in handshake.
 				// If not, we simply pretend we sent it.
@@ -150,11 +150,11 @@ func (sq *SendQueue) Ack(conn *ConnectionImpl, rn record.Number) {
 	for sq.sentRecords.Len() != 0 && sq.sentRecords.Front(sq.sentRecordsStorage[:]).fragment == (handshake.FragmentInfo{}) {
 		sq.sentRecords.PopFront(sq.sentRecordsStorage[:]) // delete everything from the front
 	}
-	if sq.messages.Len() > int(conn.NextMessageSeqSend) {
+	if sq.messages.Len() > int(conn.nextMessageSeqSend) {
 		panic("invariant violation")
 	}
-	// sq.messages end() is aligned with conn.NextMessageSeqSend
-	index := int(rec.MsgSeq) + sq.messages.Len() - int(conn.NextMessageSeqSend)
+	// sq.messages end() is aligned with conn.nextMessageSeqSend
+	index := int(rec.MsgSeq) + sq.messages.Len() - int(conn.nextMessageSeqSend)
 	if index < 0 || index >= sq.messages.Len() {
 		return
 	}

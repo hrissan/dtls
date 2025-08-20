@@ -90,7 +90,7 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 				panic("ConstructDatagram invariant violation")
 			}
 			if datagramSize != 0 {
-				if !snd.sendDatagram(socket, datagram[:datagramSize], conn.Addr) {
+				if !snd.sendDatagram(socket, datagram[:datagramSize], conn.Addr()) {
 					// TODO - rare log
 				}
 			}

@@ -14,19 +14,19 @@ import (
 func (conn *ConnectionImpl) ReceivedServerHelloFragment(fragment handshake.Fragment, rn record.Number) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
-	if conn.Handshake == nil {
+	if conn.hctx == nil {
 		return nil // retransmission, while connection already established
 	}
 	if fragment.Header.MsgSeq < conn.FirstMessageSeqInReceiveQueue() {
 		// all messages before were processed by us in the state we already do not remember,
 		// so we must acknowledge unconditionally and do nothing.
-		conn.Keys.AddAck(rn)
+		conn.keys.AddAck(rn)
 		return nil
 	}
-	return conn.Handshake.ReceivedFragment(conn, fragment, rn)
+	return conn.hctx.ReceivedFragment(conn, fragment, rn)
 }
 
-func (hctx *HandshakeContext) onServerHello(conn *ConnectionImpl, msg handshake.Message, serverHello handshake.MsgServerHello) error {
+func (hctx *handshakeContext) onServerHello(conn *ConnectionImpl, msg handshake.Message, serverHello handshake.MsgServerHello) error {
 	if serverHello.Extensions.SupportedVersions.SelectedVersion != handshake.DTLS_VERSION_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
@@ -42,13 +42,13 @@ func (hctx *HandshakeContext) onServerHello(conn *ConnectionImpl, msg handshake.
 		}
 		// [rfc8446:4.4.1] replace initial hello message with its hash if HRR was used
 		var initialHelloTranscriptHashStorage [constants.MaxHashLength]byte
-		initialHelloTranscriptHash := hctx.TranscriptHasher.Sum(initialHelloTranscriptHashStorage[:0])
-		hctx.TranscriptHasher.Reset()
+		initialHelloTranscriptHash := hctx.transcriptHasher.Sum(initialHelloTranscriptHashStorage[:0])
+		hctx.transcriptHasher.Reset()
 		syntheticHashData := []byte{byte(handshake.MsgTypeMessageHash), 0, 0, byte(len(initialHelloTranscriptHash))}
-		_, _ = hctx.TranscriptHasher.Write(syntheticHashData)
-		_, _ = hctx.TranscriptHasher.Write(initialHelloTranscriptHash)
+		_, _ = hctx.transcriptHasher.Write(syntheticHashData)
+		_, _ = hctx.transcriptHasher.Write(initialHelloTranscriptHash)
 
-		msg.AddToHash(hctx.TranscriptHasher)
+		msg.AddToHash(hctx.transcriptHasher)
 
 		clientHelloMsg := hctx.GenerateClientHello(true, serverHello.Extensions.Cookie)
 		return hctx.PushMessage(conn, clientHelloMsg)
@@ -66,31 +66,31 @@ func (hctx *HandshakeContext) onServerHello(conn *ConnectionImpl, msg handshake.
 	if !hctx.ReceivedFlight(conn, MessagesFlightServerHello_Finished) {
 		return nil
 	}
-	msg.AddToHash(hctx.TranscriptHasher)
+	msg.AddToHash(hctx.transcriptHasher)
 
 	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
-	handshakeTranscriptHash := hctx.TranscriptHasher.Sum(handshakeTranscriptHashStorage[:0])
+	handshakeTranscriptHash := hctx.transcriptHasher.Sum(handshakeTranscriptHashStorage[:0])
 
 	// TODO - move to calculator goroutine
 	remotePublic, err := ecdh.X25519().NewPublicKey(serverHello.Extensions.KeyShare.X25519PublicKey[:])
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	sharedSecret, err := hctx.X25519Secret.ECDH(remotePublic)
+	sharedSecret, err := hctx.x25519Secret.ECDH(remotePublic)
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	hctx.MasterSecret, hctx.HandshakeTrafficSecretSend, hctx.HandshakeTrafficSecretReceive = conn.Keys.ComputeHandshakeKeys(false, sharedSecret, handshakeTranscriptHash)
-	conn.Keys.SequenceNumberLimitExp = 5 // TODO - set for actual cipher suite. Small value is for testing.
+	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive = conn.keys.ComputeHandshakeKeys(false, sharedSecret, handshakeTranscriptHash)
+	conn.keys.SequenceNumberLimitExp = 5 // TODO - set for actual cipher suite. Small value is for testing.
 
 	log.Printf("processed server hello")
 	return nil
 }
 
-func (hctx *HandshakeContext) GenerateClientHello(setCookie bool, ck cookie.Cookie) handshake.Message {
+func (hctx *handshakeContext) GenerateClientHello(setCookie bool, ck cookie.Cookie) handshake.Message {
 	// [rfc8446:4.1.2] the client MUST send the same ClientHello without modification, except as follows
 	clientHello := handshake.MsgClientHello{
-		Random: hctx.LocalRandom,
+		Random: hctx.localRandom,
 	}
 	clientHello.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 = true
 	clientHello.Extensions.SupportedVersionsSet = true
@@ -106,7 +106,7 @@ func (hctx *HandshakeContext) GenerateClientHello(setCookie bool, ck cookie.Cook
 	// TODO - contact wolfssl team?
 	clientHello.Extensions.KeyShareSet = true
 	clientHello.Extensions.KeyShare.X25519PublicKeySet = true
-	copy(clientHello.Extensions.KeyShare.X25519PublicKey[:], hctx.X25519Secret.PublicKey().Bytes())
+	copy(clientHello.Extensions.KeyShare.X25519PublicKey[:], hctx.x25519Secret.PublicKey().Bytes())
 
 	// We need signature algorithms to sign and check certificate_verify,
 	// so we need to support lots of them.

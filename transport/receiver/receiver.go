@@ -34,7 +34,7 @@ type Receiver struct {
 	connections map[netip.AddrPort]*statemachine.ConnectionImpl
 
 	// TODO - limit on max number of parallel handshakes, clear items by LRU
-	// handshakesPool circular.Buffer[*statemachine.HandshakeContext] - TODO
+	// handshakesPool circular.Buffer[*statemachine.handshakeContext] - TODO
 
 	// we move handshake here, once it is finished
 	//connections map[netip.AddrPort]*Connection

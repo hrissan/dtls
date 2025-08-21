@@ -46,6 +46,18 @@ func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int
 func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error) {
 	var datagramSize int
 	hctx := conn.hctx
+	// we send acks before messages, because peer with receive queue for the single message
+	// can only receive subsequent message if their current one is fully acked
+
+	if recordSize, err := conn.constructDatagramAcks(datagram[datagramSize:]); err != nil {
+		return 0, false, err
+	} else {
+		datagramSize += recordSize
+	}
+	//uncomment to separate datagram by record type
+	//if datagramSize != 0 {
+	//	return datagramSize, true, nil
+	//}
 	if hctx != nil {
 		// we decided to first send our messages, then acks.
 		// because message has a chance to ack the whole flight
@@ -59,15 +71,6 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 		//	return datagramSize, true, nil
 		//}
 	}
-	if recordSize, err := conn.constructDatagramAcks(datagram[datagramSize:]); err != nil {
-		return 0, false, err
-	} else {
-		datagramSize += recordSize
-	}
-	//uncomment to separate datagram by record type
-	//if datagramSize != 0 {
-	//	return datagramSize, true, nil
-	//}
 	if conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == record.Number{}) {
 		msgBody := make([]byte, 0, 1) // must be stack-allocated
 		msgKeyUpdate := handshake.MsgKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}

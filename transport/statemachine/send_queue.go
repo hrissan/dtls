@@ -67,8 +67,6 @@ func (sq *sendQueue) HasDataToSend() bool {
 
 func (sq *sendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (int, error) {
 	var datagramSize int
-	// we decided to first send our messages, then acks.
-	// because message has a chance to ack the whole flight
 	for {
 		if sq.messageOffset > sq.messages.Len() {
 			panic("invariant of send queue message offset violated")

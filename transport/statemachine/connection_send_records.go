@@ -254,10 +254,13 @@ func (conn *ConnectionImpl) constructCiphertextApplication(recordType byte, hdrS
 	}
 
 	recordBody[0] = firstByte
+	var seqNumData []byte
 	if hdrSize == record.OutgoingCiphertextRecordHeader8 {
+		seqNumData = recordBody[1:2]
 		recordBody[1] = byte(seq)
 		binary.BigEndian.PutUint16(recordBody[2:], uint16(len(recordBody)-hdrSize))
 	} else {
+		seqNumData = recordBody[1:3]
 		binary.BigEndian.PutUint16(recordBody[1:], uint16(seq))
 		binary.BigEndian.PutUint16(recordBody[3:], uint16(len(recordBody)-hdrSize))
 	}
@@ -271,7 +274,7 @@ func (conn *ConnectionImpl) constructCiphertextApplication(recordType byte, hdrS
 	}
 
 	if !conn.keys.DoNotEncryptSequenceNumbers {
-		if err := send.Symmetric.EncryptSequenceNumbers(recordBody[1:3], recordBody[hdrSize:]); err != nil {
+		if err := send.Symmetric.EncryptSequenceNumbers(seqNumData, recordBody[hdrSize:]); err != nil {
 			panic("cipher text too short when sending")
 		}
 	}

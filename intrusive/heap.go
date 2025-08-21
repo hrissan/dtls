@@ -35,28 +35,28 @@ type IntrusiveHeap[T any] struct {
 func NewIntrusiveHeap[T any](pred func(*T, *T) bool, size int) *IntrusiveHeap[T] {
 	return &IntrusiveHeap[T]{
 		pred:    pred,
-		storage: make([]pair[T], 1, 1+size),
+		storage: make([]pair[T], 0, size),
 	}
 }
 
 func (h *IntrusiveHeap[T]) Reserve(size int) {
-	if cap(h.storage) >= 1+size {
+	if cap(h.storage) >= size {
 		return
 	}
 	storage := h.storage
-	h.storage = make([]pair[T], len(storage), 1+size)
+	h.storage = make([]pair[T], len(storage), size)
 	copy(h.storage, storage)
 }
 
 func (h *IntrusiveHeap[T]) Len() int {
-	return len(h.storage) - 1
+	return len(h.storage)
 }
 
 func (h *IntrusiveHeap[T]) Front() *T {
-	if healthChecks && *h.storage[1].heap_index != 1 {
+	if healthChecks && *h.storage[0].heap_index != 1 {
 		panic("heap invariant violated")
 	}
-	return h.storage[1].ptr
+	return h.storage[0].ptr
 }
 
 func (h *IntrusiveHeap[T]) Insert(node *T, heap_index *int) bool {
@@ -70,10 +70,10 @@ func (h *IntrusiveHeap[T]) Insert(node *T, heap_index *int) bool {
 }
 
 func (h *IntrusiveHeap[T]) Erase(node *T, heap_index *int) bool {
-	ind := *heap_index
-	if ind == 0 {
+	if *heap_index == 0 {
 		return false
 	}
+	ind := *heap_index - 1
 	if healthChecks && ind >= len(h.storage) {
 		panic("heap invariant violated")
 	}
@@ -90,17 +90,14 @@ func (h *IntrusiveHeap[T]) Erase(node *T, heap_index *int) bool {
 }
 
 func (h *IntrusiveHeap[T]) PopFront() {
-	ind := *h.storage[1].heap_index
+	ind := *h.storage[0].heap_index
 	if healthChecks && ind != 1 {
 		panic("heap invariant violated")
 	}
-	if healthChecks && len(h.storage) <= 1 {
-		panic("heap invariant violated")
-	}
-	*h.storage[1].heap_index = 0
-	h.popBackToIndex(1)
-	if len(h.storage) > 1 {
-		h.moveDown(1)
+	*h.storage[0].heap_index = 0
+	h.popBackToIndex(0)
+	if len(h.storage) > 0 {
+		h.moveDown(0)
 	}
 	h.checkHeap()
 }
@@ -115,15 +112,12 @@ func (h *IntrusiveHeap[T]) checkHeap() {
 	if !healthChecks {
 		return
 	}
-	if h.storage[0] != (pair[T]{nil, nil}) {
-		panic("heap invariant violated")
-	}
-	for i := 1; i < len(h.storage); i++ {
-		if *h.storage[i].heap_index != i {
+	for i := 0; i < len(h.storage); i++ {
+		if *h.storage[i].heap_index != i+1 {
 			panic("heap invariant violated")
 		}
 	}
-	if h.isHeapUntil(h.storage[1:]) != len(h.storage)-1 {
+	if h.isHeapUntil(h.storage) != len(h.storage) {
 		panic("heap invariant violated")
 	}
 }
@@ -142,7 +136,7 @@ func (h *IntrusiveHeap[T]) isHeapUntil(storage []pair[T]) int {
 }
 
 func (h *IntrusiveHeap[T]) adjust(ind int) {
-	if ind > 1 && h.pred(h.storage[ind].ptr, h.storage[ind/2].ptr) {
+	if ind > 0 && h.pred(h.storage[ind].ptr, h.storage[(ind-1)/2].ptr) {
 		h.moveUp(ind)
 	} else {
 		h.moveDown(ind)
@@ -154,7 +148,7 @@ func (h *IntrusiveHeap[T]) moveDown(ind int) {
 	data := h.storage[ind]
 
 	for {
-		lc := ind * 2
+		lc := ind*2 + 1
 		if lc >= size {
 			break
 		}
@@ -167,27 +161,27 @@ func (h *IntrusiveHeap[T]) moveDown(ind int) {
 			break
 		}
 		h.storage[ind] = h.storage[lc]
-		*h.storage[ind].heap_index = ind
+		*h.storage[ind].heap_index = ind + 1
 
 		ind = lc
 	}
 	h.storage[ind] = data
-	*h.storage[ind].heap_index = ind
+	*h.storage[ind].heap_index = ind + 1
 }
 
 func (h *IntrusiveHeap[T]) moveUp(ind int) {
 	data := h.storage[ind]
 
-	for {
-		p := ind / 2
+	for ind > 0 {
+		p := (ind - 1) / 2
 
-		if p == 0 || !h.pred(data.ptr, h.storage[p].ptr) {
+		if !h.pred(data.ptr, h.storage[p].ptr) {
 			break
 		}
 		h.storage[ind] = h.storage[p]
-		*h.storage[ind].heap_index = ind
+		*h.storage[ind].heap_index = ind + 1
 		ind = p
 	}
 	h.storage[ind] = data
-	*h.storage[ind].heap_index = ind
+	*h.storage[ind].heap_index = ind + 1
 }

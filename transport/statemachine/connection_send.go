@@ -4,6 +4,7 @@
 package statemachine
 
 import (
+	"encoding/binary"
 	"log"
 
 	"github.com/hrissan/dtls/constants"
@@ -134,45 +135,43 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 	return datagramSize, conn.hasDataToSendLocked(), nil
 }
 
-func (conn *ConnectionImpl) constructDatagramAcks(datagram []byte) (int, error) {
+func (conn *ConnectionImpl) constructDatagramAcks(datagramLeft []byte) (int, error) {
 	acks := &conn.keys.SendAcks
 	acksSize := acks.GetBitCount()
 	if acksSize == 0 {
 		return 0, nil
 	}
 	hdrSize := record.OutgoingCiphertextRecordHeader16
-	overhead := hdrSize + 1 + record.MaxOutgoingCiphertextRecordPadding + constants.AEADSealSize
-
-	acksSpace := len(datagram) - record.AckHeaderSize - overhead // for body
-	if acksSpace < record.AckElementSize {                       // not a single one fits
+	insideBody, ok := conn.prepareInsideBody(datagramLeft, hdrSize)
+	if !ok || len(insideBody) < record.AckHeaderSize+record.AckElementSize { // not a single one fits
 		return 0, nil
 	}
-	acksCount := min(acksSize, acksSpace/record.AckElementSize)
-	if acksSpace < constants.MinFragmentBodySize && acksCount != acks.GetBitCount() {
+
+	acksCount := min(acksSize, (len(insideBody)-record.AckHeaderSize)/record.AckElementSize)
+	if len(insideBody) < constants.MinFragmentBodySize && acksCount != acks.GetBitCount() {
 		return 0, nil // do not send tiny records at the end of datagram
 	}
-	sendAcks := make([]record.Number, 0, replay.Width) // must be constant to allocate on stack
 	nextReceiveSeq := acks.GetNextReceivedSeq()
+	binary.BigEndian.PutUint16(insideBody, uint16(acksCount*record.AckElementSize))
+	offset := record.AckHeaderSize
 	for i := uint64(0); i < replay.Width; i++ {
 		if nextReceiveSeq+i < replay.Width { // anomaly around 0
 			continue
 		}
 		seq := nextReceiveSeq + i - replay.Width
 		if acks.IsSetBit(seq) {
-			sendAcks = append(sendAcks, record.NumberWith(conn.keys.SendAcksEpoch, seq))
-			//log.Printf("preparing to send ack={%d,%d}", conn.keys.SendAcksEpoch, seq)
+			binary.BigEndian.PutUint64(insideBody[offset:], uint64(conn.keys.SendAcksEpoch))
+			binary.BigEndian.PutUint64(insideBody[offset+8:], seq)
+			offset += record.AckElementSize
 			acks.ClearBit(seq)
 		}
 	}
-	if len(sendAcks) > acksSize {
-		panic("too many sendAcks")
+	if offset != record.AckHeaderSize+acksCount*record.AckElementSize {
+		panic("error calculating space for acks")
 	}
-	da, err := conn.constructCiphertextAck(datagram[:0], sendAcks)
+	recordSize, err := conn.protectRecord(record.RecordTypeAck, datagramLeft, hdrSize, offset)
 	if err != nil {
 		return 0, err
 	}
-	if len(da) > len(datagram) {
-		panic("ciphertext ack record construction length invariant failed")
-	}
-	return len(da), nil
+	return recordSize, nil
 }

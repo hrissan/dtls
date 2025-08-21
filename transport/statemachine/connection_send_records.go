@@ -10,7 +10,6 @@ import (
 
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
-	"github.com/hrissan/dtls/format"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
@@ -159,68 +158,6 @@ func (conn *ConnectionImpl) constructCiphertextRecord(recordBody []byte, msg han
 	}
 	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
 	return recordBody, rn, nil
-}
-
-func (conn *ConnectionImpl) constructCiphertextAck(recordBody []byte, acks []record.Number) ([]byte, error) {
-	if len(recordBody) != 0 {
-		panic("must pass empty allocated slice with enough length")
-	}
-
-	seq, err := conn.checkSendLimit()
-	if err != nil {
-		return nil, err
-	}
-	send := &conn.keys.Send
-	epoch := send.Symmetric.Epoch
-	rn := record.NumberWith(epoch, seq)
-	log.Printf("constructing ciphertext ack with rn={%d,%d}", rn.Epoch(), rn.SeqNum())
-
-	gcm := send.Symmetric.Write
-	iv := send.Symmetric.WriteIV
-	keys.FillIVSequence(iv[:], seq)
-
-	// format of our encrypted record is fixed.
-	// Saving 1 byte for the sequence number seems very niche.
-	// Saving on not including length of the last datagram is also very hard.
-	// At the point we know it is the last one, we cannot not change header,
-	// because it is "additional data" for AEAD
-	firstByte := record.CiphertextHeaderFirstByte(false, true, true, epoch)
-	recordBody = append(recordBody, firstByte)
-	recordBody = binary.BigEndian.AppendUint16(recordBody, uint16(seq))
-	recordBody = append(recordBody, 0, 0) // fill length later
-	startBodyOFfset := len(recordBody)
-	// serialization of ack message, TODO - move out?
-	recordBody, mark := format.MarkUint16Offset(recordBody)
-	for _, ack := range acks {
-		recordBody = binary.BigEndian.AppendUint64(recordBody, uint64(ack.Epoch()))
-		recordBody = binary.BigEndian.AppendUint64(recordBody, ack.SeqNum())
-	}
-	format.FillUint16Offset(recordBody, mark)
-	recordBody = append(recordBody, record.RecordTypeAck)
-
-	padding := len(recordBody) % 4 // test our code with different padding. TODO - remove later
-	// max padding max correspond to format.MaxOutgoingCiphertextRecordOverhead
-	for i := 0; i != padding+constants.AEADSealSize; i++ {
-		recordBody = append(recordBody, 0)
-	}
-
-	binary.BigEndian.PutUint16(recordBody[3:], uint16(len(recordBody)-startBodyOFfset))
-
-	encrypted := gcm.Seal(recordBody[startBodyOFfset:startBodyOFfset], iv[:], recordBody[startBodyOFfset:len(recordBody)-constants.AEADSealSize], recordBody[:startBodyOFfset])
-	if &encrypted[0] != &recordBody[startBodyOFfset] {
-		panic("gcm.Seal reallocated datagram storage")
-	}
-	if len(encrypted) != len(recordBody[startBodyOFfset:]) {
-		panic("gcm.Seal length mismatch")
-	}
-
-	if !conn.keys.DoNotEncryptSequenceNumbers {
-		if err := send.Symmetric.EncryptSequenceNumbers(recordBody[1:3], recordBody[startBodyOFfset:]); err != nil {
-			panic("cipher text too short when sending")
-		}
-	}
-	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
-	return recordBody, nil
 }
 
 // Writes header and returns body to write used data to.

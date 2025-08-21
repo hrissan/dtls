@@ -13,9 +13,10 @@ import (
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *ConnectionImpl) constructRecord(datagramLeft []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {
+func (conn *ConnectionImpl) constructRecord(opts *options.TransportOptions, datagramLeft []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
 	if fragmentOffset >= uint32(len(handshakeMsg.Body)) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
 		panic("invariant of send queue fragment offset violated")
@@ -54,7 +55,7 @@ func (conn *ConnectionImpl) constructRecord(datagramLeft []byte, handshakeMsg ha
 		return len(da), msg.Header.FragmentInfo, rn, nil
 	}
 	hdrSize := record.OutgoingCiphertextRecordHeader16
-	insideBody, ok := conn.prepareProtect(datagramLeft, hdrSize)
+	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq)
 	if !ok || len(insideBody) <= handshake.FragmentHeaderSize {
 		return
 	}
@@ -107,13 +108,17 @@ func (conn *ConnectionImpl) checkSendLimit() (uint64, error) {
 // Writes header and returns body to write used data to.
 // can return empty body, useful if the caller wants to write empty application data.
 // Pass datagramLeft, hdrSize and how many bytes pf insideBody filled to protectRecord
-func (conn *ConnectionImpl) prepareProtect(datagramLeft []byte, hdrSize int) (insideBody []byte, ok bool) {
+func (conn *ConnectionImpl) prepareProtect(datagramLeft []byte, use8BitSeq bool) (hdrSize int, insideBody []byte, ok bool) {
+	hdrSize = record.OutgoingCiphertextRecordHeader16
+	if use8BitSeq {
+		hdrSize = record.OutgoingCiphertextRecordHeader8
+	}
 	overhead := hdrSize + 1 + record.MaxOutgoingCiphertextRecordPadding + constants.AEADSealSize
 	userSpace := len(datagramLeft) - overhead
 	if userSpace < 0 {
-		return nil, false
+		return 0, nil, false
 	}
-	return datagramLeft[hdrSize : hdrSize+userSpace], true
+	return hdrSize, datagramLeft[hdrSize : hdrSize+userSpace], true
 }
 
 func (conn *ConnectionImpl) protectRecord(recordType byte, datagramLeft []byte, hdrSize int, insideSize int) (recordSize int, _ record.Number, _ error) {

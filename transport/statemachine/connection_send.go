@@ -11,6 +11,7 @@ import (
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/replay"
+	"github.com/hrissan/dtls/transport/options"
 )
 
 func (conn *ConnectionImpl) HasDataToSend() bool {
@@ -33,24 +34,24 @@ func (conn *ConnectionImpl) hasDataToSendLocked() bool {
 }
 
 // must not write over len(datagram), returns part of datagram filled
-func (conn *ConnectionImpl) ConstructDatagram(datagram []byte) (datagramSize int, addToSendQueue bool) {
+func (conn *ConnectionImpl) ConstructDatagram(opts *options.TransportOptions, datagram []byte) (datagramSize int, addToSendQueue bool) {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	var err error
-	datagramSize, addToSendQueue, err = conn.constructDatagram(datagram)
+	datagramSize, addToSendQueue, err = conn.constructDatagram(opts, datagram)
 	if err != nil {
 		log.Printf("TODO - close connection")
 	}
 	return
 }
 
-func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error) {
+func (conn *ConnectionImpl) constructDatagram(opts *options.TransportOptions, datagram []byte) (int, bool, error) {
 	var datagramSize int
 	hctx := conn.hctx
 	// we send acks before messages, because peer with receive queue for the single message
 	// can only receive subsequent message if their current one is fully acked
 
-	if recordSize, err := conn.constructDatagramAcks(datagram[datagramSize:]); err != nil {
+	if recordSize, err := conn.constructDatagramAcks(opts, datagram[datagramSize:]); err != nil {
 		return 0, false, err
 	} else {
 		datagramSize += recordSize
@@ -62,7 +63,7 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 	if hctx != nil {
 		// we decided to first send our messages, then acks.
 		// because message has a chance to ack the whole flight
-		if recordSize, err := hctx.sendQueue.ConstructDatagram(conn, datagram[datagramSize:]); err != nil {
+		if recordSize, err := hctx.sendQueue.ConstructDatagram(conn, opts, datagram[datagramSize:]); err != nil {
 			return 0, false, err
 		} else {
 			datagramSize += recordSize
@@ -82,7 +83,7 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 			MsgSeq:  conn.sendKeyUpdateMessageSeq,
 			Body:    msgBody,
 		}
-		recordSize, fragmentInfo, rn, err := conn.constructRecord(datagram[datagramSize:],
+		recordSize, fragmentInfo, rn, err := conn.constructRecord(opts, datagram[datagramSize:],
 			msg, 0, lenBody, nil)
 		if err != nil {
 			return 0, false, err
@@ -111,7 +112,7 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 			return datagramSize, true, nil
 		}
 		hdrSize := record.OutgoingCiphertextRecordHeader16
-		insideBody, ok := conn.prepareProtect(datagram[datagramSize:], hdrSize)
+		hdrSize, insideBody, ok := conn.prepareProtect(datagram[datagramSize:], opts.Use8BitSeq)
 		if ok && len(insideBody) >= constants.MinFragmentBodySize {
 			insideSize, send, add := conn.Handler.OnWriteApplicationRecord(insideBody)
 			if insideSize > len(insideBody) {
@@ -135,14 +136,14 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 	return datagramSize, conn.hasDataToSendLocked(), nil
 }
 
-func (conn *ConnectionImpl) constructDatagramAcks(datagramLeft []byte) (int, error) {
+func (conn *ConnectionImpl) constructDatagramAcks(opts *options.TransportOptions, datagramLeft []byte) (int, error) {
 	acks := &conn.keys.SendAcks
 	acksSize := acks.GetBitCount()
 	if acksSize == 0 {
 		return 0, nil
 	}
 	hdrSize := record.OutgoingCiphertextRecordHeader16
-	insideBody, ok := conn.prepareProtect(datagramLeft, hdrSize)
+	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq)
 	if !ok || len(insideBody) < record.AckHeaderSize+record.AckElementSize { // not a single one fits
 		return 0, nil
 	}

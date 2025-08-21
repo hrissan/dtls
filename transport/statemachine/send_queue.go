@@ -8,6 +8,7 @@ import (
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/transport/options"
 )
 
 type record2Fragment struct {
@@ -65,7 +66,7 @@ func (sq *sendQueue) HasDataToSend() bool {
 	return sq.messageOffset < sq.messages.Len() && sq.sentRecords.Len() < sq.sentRecords.Cap(sq.sentRecordsStorage[:])
 }
 
-func (sq *sendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (int, error) {
+func (sq *sendQueue) ConstructDatagram(conn *ConnectionImpl, opts *options.TransportOptions, datagram []byte) (int, error) {
 	var datagramSize int
 	for {
 		if sq.messageOffset > sq.messages.Len() {
@@ -95,7 +96,7 @@ func (sq *sendQueue) ConstructDatagram(conn *ConnectionImpl, datagram []byte) (i
 			if sq.fragmentOffset >= outgoing.SendEnd { // never due to combination of checks above
 				panic("invariant violation")
 			}
-			recordSize, fragmentInfo, rn, err := conn.constructRecord(datagram[datagramSize:],
+			recordSize, fragmentInfo, rn, err := conn.constructRecord(opts, datagram[datagramSize:],
 				outgoing.Msg,
 				sq.fragmentOffset, outgoing.SendEnd-sq.fragmentOffset, sendNextSegmentSequenceEpoch0)
 			if err != nil {

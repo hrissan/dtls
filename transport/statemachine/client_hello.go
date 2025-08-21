@@ -36,14 +36,9 @@ func debugPrintSum(hasher hash.Hash) {
 	log.Printf("%x\n", ha[:])
 }
 
-func addMessageDataTranscript(transcriptHasher hash.Hash, messageData []byte) {
-	_, _ = transcriptHasher.Write(messageData[:4])
-	_, _ = transcriptHasher.Write(messageData[12:])
-}
-
 // we must generate the same server hello, because we are stateless, but this message is in transcript
 // TODO - pass selected parameters here from receiver
-func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) []byte {
+func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) ([]byte, []byte) {
 	helloRetryRequest := handshake.MsgServerHello{
 		CipherSuite: handshake.CypherSuite_TLS_AES_128_GCM_SHA256,
 	}
@@ -63,23 +58,23 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) [
 	// first reserve space for headers by writing with not all variables set
 	datagram = append(datagram, make([]byte, record.PlaintextRecordHeaderSize+handshake.FragmentHeaderSize)...) // reserve space
 	datagram = helloRetryRequest.Write(datagram)
-	msgBodySize := len(datagram) - record.PlaintextRecordHeaderSize - handshake.FragmentHeaderSize
+	msgBody := datagram[record.PlaintextRecordHeaderSize+handshake.FragmentHeaderSize:]
 
 	// now overwrite reserved space
-	da := recordHdr.Write(datagram[:0], handshake.FragmentHeaderSize+msgBodySize)
+	da := recordHdr.Write(datagram[:0], handshake.FragmentHeaderSize+len(msgBody))
 
 	msgHeader := handshake.FragmentHeader{
 		MsgType: handshake.MsgTypeServerHello,
-		Length:  uint32(msgBodySize),
+		Length:  uint32(len(msgBody)),
 		FragmentInfo: handshake.FragmentInfo{
 			MsgSeq:         0,
 			FragmentOffset: 0,
-			FragmentLength: uint32(msgBodySize),
+			FragmentLength: uint32(len(msgBody)),
 		},
 	}
 
 	_ = msgHeader.Write(da)
-	return datagram
+	return datagram, msgBody
 }
 
 func generateEncryptedExtensions() handshake.Message {

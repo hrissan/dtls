@@ -34,7 +34,7 @@ func (*smHandshakeServerExpectClientHello2) OnClientHello2(conn *ConnectionImpl,
 	// TODO - check if the same handshake by storing (age, initialHelloTranscriptHash, keyShareSet)
 	{
 		var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte
-		hrrDatagram := GenerateStatelessHRR(hrrDatagramStorage[:0], msgClientHello.Extensions.Cookie, keyShareSet)
+		hrrDatagram, msgBody := GenerateStatelessHRR(hrrDatagramStorage[:0], msgClientHello.Extensions.Cookie, keyShareSet)
 		if len(hrrDatagram) > len(hrrDatagramStorage) {
 			panic("Large HRR datagram must not be generated")
 		}
@@ -49,9 +49,16 @@ func (*smHandshakeServerExpectClientHello2) OnClientHello2(conn *ConnectionImpl,
 		}
 		syntheticMessage.AddToHash(hctx.transcriptHasher)
 		debugPrintSum(hctx.transcriptHasher)
+
 		// then add reconstructed HRR
-		addMessageDataTranscript(hctx.transcriptHasher, hrrDatagram[13:]) // skip record header
+		hrrMessage := handshake.Message{
+			MsgType: handshake.MsgTypeServerHello,
+			MsgSeq:  0, // does not affect transcript hash
+			Body:    msgBody,
+		}
+		hrrMessage.AddToHash(hctx.transcriptHasher)
 		debugPrintSum(hctx.transcriptHasher)
+
 		// then add second client hello
 		msg.AddToHash(hctx.transcriptHasher)
 		debugPrintSum(hctx.transcriptHasher)

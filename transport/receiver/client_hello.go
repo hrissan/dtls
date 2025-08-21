@@ -51,7 +51,7 @@ func (rc *Receiver) receivedClientHello(conn *statemachine.ConnectionImpl, msg h
 		if hrrStorage == nil {
 			return conn, dtlserrors.ErrServerHelloRetryRequestQueueFull
 		}
-		hrrDatagram := statemachine.GenerateStatelessHRR((*hrrStorage)[:0], ck, keyShareSet)
+		hrrDatagram, _ := statemachine.GenerateStatelessHRR((*hrrStorage)[:0], ck, keyShareSet)
 		if len(hrrDatagram) > len(*hrrStorage) {
 			panic("Large HRR datagram must not be generated")
 		}

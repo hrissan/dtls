@@ -111,14 +111,14 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 			return datagramSize, true, nil
 		}
 		hdrSize := record.OutgoingCiphertextRecordHeader16
-		insideBody, ok := conn.prepareInsideBody(datagram[datagramSize:], hdrSize)
+		insideBody, ok := conn.prepareProtect(datagram[datagramSize:], hdrSize)
 		if ok && len(insideBody) >= constants.MinFragmentBodySize {
 			insideSize, send, add := conn.Handler.OnWriteApplicationRecord(insideBody)
 			if insideSize > len(insideBody) {
 				panic("ciphertext user handler overflows allowed record")
 			}
 			if send {
-				recordSize, err := conn.protectRecord(record.RecordTypeApplicationData, datagram[datagramSize:], hdrSize, insideSize)
+				recordSize, _, err := conn.protectRecord(record.RecordTypeApplicationData, datagram[datagramSize:], hdrSize, insideSize)
 				if err != nil {
 					return 0, false, err
 				}
@@ -142,7 +142,7 @@ func (conn *ConnectionImpl) constructDatagramAcks(datagramLeft []byte) (int, err
 		return 0, nil
 	}
 	hdrSize := record.OutgoingCiphertextRecordHeader16
-	insideBody, ok := conn.prepareInsideBody(datagramLeft, hdrSize)
+	insideBody, ok := conn.prepareProtect(datagramLeft, hdrSize)
 	if !ok || len(insideBody) < record.AckHeaderSize+record.AckElementSize { // not a single one fits
 		return 0, nil
 	}
@@ -169,7 +169,7 @@ func (conn *ConnectionImpl) constructDatagramAcks(datagramLeft []byte) (int, err
 	if offset != record.AckHeaderSize+acksCount*record.AckElementSize {
 		panic("error calculating space for acks")
 	}
-	recordSize, err := conn.protectRecord(record.RecordTypeAck, datagramLeft, hdrSize, offset)
+	recordSize, _, err := conn.protectRecord(record.RecordTypeAck, datagramLeft, hdrSize, offset)
 	if err != nil {
 		return 0, err
 	}

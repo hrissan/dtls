@@ -42,9 +42,12 @@ func (*smHandshakeServerExpectClientHello2) OnClientHello2(conn *ConnectionImpl,
 		log.Printf("serverHRRHash2: %x\n", hrrHash[:])
 
 		// [rfc8446:4.4.1] replace initial client hello message with its hash if HRR was used
-		syntheticHashData := []byte{byte(handshake.MsgTypeMessageHash), 0, 0, sha256.Size}
-		_, _ = hctx.transcriptHasher.Write(syntheticHashData)
-		_, _ = hctx.transcriptHasher.Write(initialHelloTranscriptHash[:sha256.Size])
+		syntheticMessage := handshake.Message{
+			MsgType: handshake.MsgTypeMessageHash,
+			MsgSeq:  0, // does not affect transcript hash
+			Body:    initialHelloTranscriptHash[:sha256.Size],
+		}
+		syntheticMessage.AddToHash(hctx.transcriptHasher)
 		debugPrintSum(hctx.transcriptHasher)
 		// then add reconstructed HRR
 		addMessageDataTranscript(hctx.transcriptHasher, hrrDatagram[13:]) // skip record header

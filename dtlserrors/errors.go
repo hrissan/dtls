@@ -101,7 +101,7 @@ var ErrReceiveRecordSeqOverflowNextEpoch = NewWarning(-521, "receiving ciphertex
 // records format
 var ErrAckRecordMustBeEncrypted = NewWarning(-600, "ack record must always be encrypted")
 var ErrUnknownInnerPlaintextRecordType = NewWarning(-602, "unknown inner plaintext record type")
-var ErrHandshakeReecordEmpty = NewWarning(-603, "handshake record must not be empty")
+var ErrHandshakeRecordEmpty = NewWarning(-603, "handshake record must not be empty")
 
 // encryption
 var WarnCannotDecryptInEpoch0 = NewWarning(-300, "cannot decrypt record at epoch 0")

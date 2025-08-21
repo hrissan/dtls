@@ -50,21 +50,21 @@ func (conn *ConnectionImpl) processAckBody(opts *options.TransportOptions, insid
 }
 
 func (conn *ConnectionImpl) processNewSessionTicketAck(rn record.Number) {
-	if conn.sendNewSessionTicketMessageSeq != 0 && conn.sendNewSessionTicketRN == (record.Number{}) || conn.sendNewSessionTicketRN != rn {
+	if conn.sendNewSessionTicketMessageSeq != 0 && conn.sentNewSessionTicketRN == (record.Number{}) || conn.sentNewSessionTicketRN != rn {
 		return
 	}
 	log.Printf("NewSessionTicket ack received")
 	conn.sendNewSessionTicketMessageSeq = 0
-	conn.sendNewSessionTicketRN = record.Number{}
+	conn.sentNewSessionTicketRN = record.Number{}
 }
 
 func (conn *ConnectionImpl) processKeyUpdateAck(rn record.Number) {
-	if conn.sendKeyUpdateMessageSeq != 0 && conn.sendKeyUpdateRN == (record.Number{}) || conn.sendKeyUpdateRN != rn {
+	if conn.sendKeyUpdateMessageSeq != 0 && conn.sentKeyUpdateRN == (record.Number{}) || conn.sentKeyUpdateRN != rn {
 		return
 	}
 	log.Printf("KeyUpdate ack received")
 	conn.sendKeyUpdateMessageSeq = 0
-	conn.sendKeyUpdateRN = record.Number{}
+	conn.sentKeyUpdateRN = record.Number{}
 	conn.sendKeyUpdateUpdateRequested = false // must not be necessary
 	// now when we received ack for KeyUpdate, we must update our keys
 	conn.keys.Send.ComputeNextApplicationTrafficSecret(conn.roleServer)

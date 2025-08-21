@@ -75,7 +75,7 @@ func (conn *ConnectionImpl) receivedEncryptedHandshakeRecord(opts *options.Trans
 	log.Printf("dtls: got handshake record (encrypted) %d bytes from %v, message(hex): %x", len(recordData), conn.addr, recordData)
 	if len(recordData) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding
-		return dtlserrors.ErrHandshakeReecordEmpty
+		return dtlserrors.ErrHandshakeRecordEmpty
 	}
 	messageOffset := 0
 	// there are two acceptable ways to pack two DTLS handshake messages into the same datagram: in the same record or in separate records [rfc9147:5.5]

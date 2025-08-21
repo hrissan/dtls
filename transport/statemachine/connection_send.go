@@ -27,8 +27,8 @@ func (conn *ConnectionImpl) hasDataToSendLocked() bool {
 		return true
 	}
 	return conn.handlerHasMoreData ||
-		(conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == record.Number{})) ||
-		(conn.sendNewSessionTicketMessageSeq != 0 && (conn.sendNewSessionTicketRN == record.Number{}))
+		(conn.sendKeyUpdateMessageSeq != 0 && (conn.sentKeyUpdateRN == record.Number{})) ||
+		(conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN == record.Number{}))
 }
 
 // must not write over len(datagram), returns part of datagram filled
@@ -71,7 +71,7 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 		//	return datagramSize, true, nil
 		//}
 	}
-	if conn.sendKeyUpdateMessageSeq != 0 && (conn.sendKeyUpdateRN == record.Number{}) {
+	if conn.sendKeyUpdateMessageSeq != 0 && (conn.sentKeyUpdateRN == record.Number{}) {
 		msgBody := make([]byte, 0, 1) // must be stack-allocated
 		msgKeyUpdate := handshake.MsgKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
 		msgBody = msgKeyUpdate.Write(msgBody)
@@ -91,14 +91,14 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 				panic("outgoing KeyUpdate must not be fragmented")
 			}
 			datagramSize += recordSize
-			conn.sendKeyUpdateRN = rn
+			conn.sentKeyUpdateRN = rn
 		}
 		//uncomment to separate datagram by record type
 		//if datagramSize != 0 {
 		//	return datagramSize, true, nil
 		//}
 	}
-	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sendNewSessionTicketRN != record.Number{}) {
+	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN != record.Number{}) {
 		// TODO
 	}
 	if conn.Handler != nil { // application data

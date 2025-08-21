@@ -33,7 +33,7 @@ func (rc *Receiver) receivedPlaintextHandshake(conn *statemachine.ConnectionImpl
 	// log.Printf("dtls: got handshake record (plaintext) %d bytes from %v, message(hex): %x", len(recordData), addr, recordData)
 	if len(hdr.Body) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding
-		return conn, dtlserrors.ErrHandshakeReecordEmpty
+		return conn, dtlserrors.ErrHandshakeRecordEmpty
 	}
 	messageOffset := 0
 	// there are two acceptable ways to pack two DTLS handshake messages into the same datagram:

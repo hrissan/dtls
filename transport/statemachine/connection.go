@@ -53,13 +53,14 @@ type ConnectionImpl struct {
 	// because we do not want to allocate memory for reassembly,
 	// Also we do not want to support sending them fragmented, because we do not want to track
 	// rn -> fragment relations. We simply track 1 rn per message type instead.
-	sendKeyUpdateRN        record.Number // if != 0, already sent, on resend overwrite rn
-	sendNewSessionTicketRN record.Number // if != 0, already sent, on resend overwrite rn
+	sentKeyUpdateRN        record.Number // if != 0, already sent, on resend overwrite rn
+	sentNewSessionTicketRN record.Number // if != 0, already sent, on resend overwrite rn
 
-	hctx    *handshakeContext // content is also protected by mutex above
+	hctx    *handshakeContext // handshakeContext content is also protected by mutex above
 	Handler ConnectionHandler
 
-	// this counter does not reset with a new epoch
+	// Messages are protocol above records, these counters do not reset for connection lifetime.
+	// If any reaches 2^16, connection will be closed by both peers.
 	nextMessageSeqSend    uint16
 	nextMessageSeqReceive uint16
 
@@ -130,7 +131,7 @@ func (conn *ConnectionImpl) startKeyUpdate(updateRequested bool) error {
 		return dtlserrors.ErrSendMessageSeqOverflow
 	}
 	conn.sendKeyUpdateMessageSeq = conn.nextMessageSeqSend
-	conn.sendKeyUpdateRN = record.Number{}
+	conn.sentKeyUpdateRN = record.Number{}
 	conn.sendKeyUpdateUpdateRequested = updateRequested
 	conn.nextMessageSeqSend++ // never due to check above
 	log.Printf("KeyUpdate started (updateRequested=%v), messageSeq: %d", updateRequested, conn.sendKeyUpdateMessageSeq)

@@ -44,7 +44,7 @@ func (h *IntrusiveHeap[T]) Reserve(size int) {
 		return
 	}
 	storage := h.storage
-	h.storage = make([]pair[T], 1, 1+size)
+	h.storage = make([]pair[T], len(storage), 1+size)
 	copy(h.storage, storage)
 }
 

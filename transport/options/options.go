@@ -49,6 +49,7 @@ func DefaultTransportOptions(roleServer bool, rnd dtlsrand.Rand, stats stats.Sta
 		MaxHandshakes:          1000,
 		MaxConnections:         100_000,
 		CIDLength:              0,
+		Use8BitSeq:             false,
 	}
 }
 

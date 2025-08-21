@@ -21,7 +21,7 @@ type Keys struct {
 
 	SendNextSegmentSequence uint64
 
-	// We need no replay protection for Epoch 0
+	// It seems, we need no replay protection for Epoch 0. TODO - investigate..
 	ReceiveNextSegmentSequence replay.Window // for Epoch > 0
 
 	SendAcks      replay.Window

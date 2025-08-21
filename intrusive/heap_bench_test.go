@@ -83,6 +83,21 @@ func BenchmarkEraseDesc(b *testing.B) {
 }
 
 /*
+func BenchmarkEraseRandom(b *testing.B) {
+	b.ReportAllocs()
+	objects, heap := prepareHeap(b.N)
+	for n := 0; n < b.N; n++ {
+		heap.Insert(&objects[n], &objects[n].HeapIndex)
+	}
+	rand.Shuffle(len(objects), func(i, j int) { objects[i], objects[j] = objects[j], objects[i] })
+	b.ResetTimer()
+	for n := b.N - 1; n >= 0; n-- {
+		heap.Erase(&objects[n], &objects[n].HeapIndex)
+	}
+}
+*/
+
+/*
 func prepareBTree(size int) *btree.BTreeG[*testObject] {
 	b := btree.NewG[*testObject](10, func(a, b *testObject) bool {
 		return a.Value < b.Value

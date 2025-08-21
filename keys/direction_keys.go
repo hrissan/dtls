@@ -25,13 +25,13 @@ type DirectionKeys struct {
 	// so without unsafe tricks our direction keys total size is ~100 plus 480 (no seq encryption) or 960 (seq encryption)
 }
 
-func (keys *DirectionKeys) ComputeHandshakeKeys(serverKeys bool, handshakeSecret []byte, trHash []byte) (handshakeTrafficSecret [32]byte) {
+func (keys *DirectionKeys) ComputeHandshakeKeys(roleServer bool, handshakeSecret []byte, trHash []byte) (handshakeTrafficSecret [32]byte) {
 	if keys.Symmetric.Epoch != 0 {
 		panic("handshake keys state machine violation")
 	}
 
 	hasher := sha256.New()
-	if serverKeys {
+	if roleServer {
 		copy(handshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "s hs traffic", trHash[:]))
 		log.Printf("server2 handshake traffic secret: %x\n", handshakeTrafficSecret)
 	} else {
@@ -51,9 +51,9 @@ func (keys *DirectionKeys) ComputeFinished(hasher hash.Hash, HandshakeTrafficSec
 	return hkdf.HMAC(finishedKey, transcriptHash[:], hasher)
 }
 
-func (keys *DirectionKeys) ComputeApplicationTrafficSecret(serverKeys bool, masterSecret []byte, trHash []byte) {
+func (keys *DirectionKeys) ComputeApplicationTrafficSecret(roleServer bool, masterSecret []byte, trHash []byte) {
 	hasher := sha256.New()
-	if serverKeys {
+	if roleServer {
 		copy(keys.ApplicationTrafficSecret[:], deriveSecret(hasher, masterSecret[:], "s ap traffic", trHash[:]))
 		log.Printf("server2 application traffic secret: %x\n", keys.ApplicationTrafficSecret)
 	} else {
@@ -68,10 +68,11 @@ func (keys *DirectionKeys) ComputeApplicationTrafficSecret(serverKeys bool, mast
 	//		"traffic upd", "", Hash.length)
 }
 
-func (keys *DirectionKeys) ComputeNextApplicationTrafficSecret(serverKeys bool) {
+func (keys *DirectionKeys) ComputeNextApplicationTrafficSecret(roleServer bool) {
+	// the next application traffic secret is calculated from the previous one
 	hasher := sha256.New()
 	copy(keys.ApplicationTrafficSecret[:], hkdf.ExpandLabel(hasher, keys.ApplicationTrafficSecret[:], "traffic upd", []byte{}, len(keys.ApplicationTrafficSecret)))
-	if serverKeys {
+	if roleServer {
 		log.Printf("server next application traffic secret: %x\n", keys.ApplicationTrafficSecret)
 	} else {
 		log.Printf("client next application traffic secret: %x\n", keys.ApplicationTrafficSecret)

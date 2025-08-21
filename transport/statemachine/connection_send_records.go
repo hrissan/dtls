@@ -90,33 +90,39 @@ func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg handshake.
 	return data, rn, nil
 }
 
-func (conn *ConnectionImpl) checkSendLimit() error {
+// returns seq number to use
+func (conn *ConnectionImpl) checkSendLimit() (uint64, error) {
 	sendLimit := conn.keys.SequenceNumberLimit()
 	if conn.keys.SendNextSegmentSequence >= sendLimit {
-		return dtlserrors.ErrSendRecordSeqOverflow
+		return 0, dtlserrors.ErrSendRecordSeqOverflow
 	}
+	seq := conn.keys.SendNextSegmentSequence                                                     // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
+	conn.keys.SendNextSegmentSequence++                                                          // does not overflow due to checkSendLimit() above
 	if conn.keys.Send.Symmetric.Epoch < 3 || conn.keys.SendNextSegmentSequence < sendLimit*3/4 { // simple heuristic
-		return nil
+		return seq, nil
 	}
-	return conn.startKeyUpdate(false)
+	return seq, conn.startKeyUpdate(false)
 }
 
 func (conn *ConnectionImpl) constructCiphertextRecord(recordData []byte, msg handshake.Fragment) ([]byte, record.Number, error) {
-	if err := conn.checkSendLimit(); err != nil {
+	seq, err := conn.checkSendLimit()
+	if err != nil {
 		return nil, record.Number{}, err
 	}
 	send := &conn.keys.Send
 	epoch := send.Symmetric.Epoch
-	rn := record.NumberWith(epoch, conn.keys.SendNextSegmentSequence)
-	seq := conn.keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	conn.keys.SendNextSegmentSequence++      // does not overflow due to checkSendLimit() above
+	rn := record.NumberWith(epoch, seq)
 	log.Printf("constructing ciphertext handshake with rn={%d,%d}", rn.Epoch(), rn.SeqNum())
 
 	gcm := send.Symmetric.Write
 	iv := send.Symmetric.WriteIV
 	keys.FillIVSequence(iv[:], seq)
 
-	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
+	// format of our encrypted record is fixed.
+	// Saving 1 byte for the sequence number seems very niche.
+	// Saving on not including length of the last datagram is also very hard.
+	// At the point we know it is the last one, we cannot not change header,
+	// because it is "additional data" for AEAD
 	firstByte := record.CiphertextHeaderFirstByte(false, true, true, epoch)
 	startRecordOffset := len(recordData)
 	recordData = append(recordData, firstByte)
@@ -153,22 +159,24 @@ func (conn *ConnectionImpl) constructCiphertextRecord(recordData []byte, msg han
 }
 
 func (conn *ConnectionImpl) constructCiphertextAck(recordBody []byte, acks []record.Number) ([]byte, error) {
-	// TODO - harmonize with code above
-	if err := conn.checkSendLimit(); err != nil {
+	seq, err := conn.checkSendLimit()
+	if err != nil {
 		return nil, err
 	}
 	send := &conn.keys.Send
 	epoch := send.Symmetric.Epoch
-	rn := record.NumberWith(epoch, conn.keys.SendNextSegmentSequence)
-	seq := conn.keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	conn.keys.SendNextSegmentSequence++      // does not overflow due to checkSendLimit() above
+	rn := record.NumberWith(epoch, seq)
 	log.Printf("constructing ciphertext ack with rn={%d,%d}", rn.Epoch(), rn.SeqNum())
 
 	gcm := send.Symmetric.Write
 	iv := send.Symmetric.WriteIV
 	keys.FillIVSequence(iv[:], seq)
 
-	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
+	// format of our encrypted record is fixed.
+	// Saving 1 byte for the sequence number seems very niche.
+	// Saving on not including length of the last datagram is also very hard.
+	// At the point we know it is the last one, we cannot not change header,
+	// because it is "additional data" for AEAD
 	firstByte := record.CiphertextHeaderFirstByte(false, true, true, epoch)
 	recordBody = append(recordBody, firstByte)
 	recordBody = binary.BigEndian.AppendUint16(recordBody, uint16(seq))
@@ -209,22 +217,24 @@ func (conn *ConnectionImpl) constructCiphertextAck(recordBody []byte, acks []rec
 }
 
 func (conn *ConnectionImpl) constructCiphertextApplication(recordBody []byte) ([]byte, error) {
-	// TODO - harmonize with code above
-	if err := conn.checkSendLimit(); err != nil {
+	seq, err := conn.checkSendLimit()
+	if err != nil {
 		return nil, err
 	}
 	send := &conn.keys.Send
 	epoch := send.Symmetric.Epoch
-	rn := record.NumberWith(epoch, conn.keys.SendNextSegmentSequence)
-	seq := conn.keys.SendNextSegmentSequence // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	conn.keys.SendNextSegmentSequence++      // does not overflow due to checkSendLimit() above
+	rn := record.NumberWith(epoch, seq)
 	log.Printf("constructing ciphertext application with rn={%d,%d}", rn.Epoch(), rn.SeqNum())
 
 	gcm := send.Symmetric.Write
 	iv := send.Symmetric.WriteIV
 	keys.FillIVSequence(iv[:], seq)
 
-	// format of our encrypted record is fixed. TODO - save on length if last record in datagram
+	// format of our encrypted record is fixed.
+	// Saving 1 byte for the sequence number seems very niche.
+	// Saving on not including length of the last datagram is also very hard.
+	// At the point we know it is the last one, we cannot not change header,
+	// because it is "additional data" for AEAD
 	firstByte := record.CiphertextHeaderFirstByte(false, true, true, epoch)
 	const hdrSize = record.OutgoingCiphertextRecordHeader
 	recordBody = append(recordBody, record.RecordApplicationData)

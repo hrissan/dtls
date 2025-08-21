@@ -14,9 +14,9 @@ const PlaintextRecordHeaderSize = 13
 const MaxPlaintextRecordLength = 16384 // [rfc8446:5.1]
 
 const (
-	RecordTypeAlert       = 21
-	RecordTypeHandshake   = 22
-	RecordApplicationData = 23
+	RecordTypeAlert           = 21
+	RecordTypeHandshake       = 22
+	RecordTypeApplicationData = 23
 	// PlaintextContentTypeHeartbeat       = 24 // [rfc6520] should not be received without negotiating extension. We choose to error on it.
 	RecordTypeAck = 26
 )

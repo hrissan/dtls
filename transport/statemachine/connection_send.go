@@ -109,15 +109,17 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 		if datagramSize > 0 {
 			return datagramSize, true, nil
 		}
-		userSpace := len(datagram) - datagramSize - 1 - record.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
+		hdrSize := record.OutgoingCiphertextRecordHeader16
+		overhead := hdrSize + 1 + record.MaxOutgoingCiphertextRecordPadding + constants.AEADSealSize
+		userSpace := len(datagram) - datagramSize - overhead
 		if userSpace >= constants.MinFragmentBodySize {
-			recordData := datagram[datagramSize+record.OutgoingCiphertextRecordHeader : datagramSize+record.OutgoingCiphertextRecordHeader+userSpace]
+			recordData := datagram[datagramSize+hdrSize : datagramSize+hdrSize+userSpace]
 			recordSize, send, add := conn.Handler.OnWriteApplicationRecord(recordData)
 			if recordSize > len(recordData) {
 				panic("ciphertext user handler overflows allowed record")
 			}
 			if send {
-				da, err := conn.constructCiphertextApplication(datagram[datagramSize : datagramSize+record.OutgoingCiphertextRecordHeader+recordSize])
+				da, err := conn.constructCiphertextApplication(record.RecordTypeApplicationData, hdrSize, datagram[datagramSize:datagramSize+hdrSize+recordSize])
 				if err != nil {
 					return 0, false, err
 				}

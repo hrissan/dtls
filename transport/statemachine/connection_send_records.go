@@ -104,7 +104,10 @@ func (conn *ConnectionImpl) checkSendLimit() (uint64, error) {
 	return seq, conn.startKeyUpdate(false)
 }
 
-func (conn *ConnectionImpl) constructCiphertextRecord(recordData []byte, msg handshake.Fragment) ([]byte, record.Number, error) {
+func (conn *ConnectionImpl) constructCiphertextRecord(recordBody []byte, msg handshake.Fragment) ([]byte, record.Number, error) {
+	if len(recordBody) != 0 {
+		panic("must pass empty allocated slice with enough length")
+	}
 	seq, err := conn.checkSendLimit()
 	if err != nil {
 		return nil, record.Number{}, err
@@ -124,41 +127,44 @@ func (conn *ConnectionImpl) constructCiphertextRecord(recordData []byte, msg han
 	// At the point we know it is the last one, we cannot not change header,
 	// because it is "additional data" for AEAD
 	firstByte := record.CiphertextHeaderFirstByte(false, true, true, epoch)
-	startRecordOffset := len(recordData)
-	recordData = append(recordData, firstByte)
-	recordData = binary.BigEndian.AppendUint16(recordData, uint16(seq))
-	recordData = append(recordData, 0, 0) // fill length later
-	startBodyOFfset := len(recordData)
-	recordData = msg.Header.Write(recordData)
-	recordData = append(recordData, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
-	recordData = append(recordData, record.RecordTypeHandshake)
+	startRecordOffset := len(recordBody)
+	recordBody = append(recordBody, firstByte)
+	recordBody = binary.BigEndian.AppendUint16(recordBody, uint16(seq))
+	recordBody = append(recordBody, 0, 0) // fill length later
+	startBodyOFfset := len(recordBody)
+	recordBody = msg.Header.Write(recordBody)
+	recordBody = append(recordBody, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
+	recordBody = append(recordBody, record.RecordTypeHandshake)
 
-	padding := len(recordData) % 4 // test our code with different padding. TODO - remove later
+	padding := len(recordBody) % 4 // test our code with different padding. TODO - remove later
 	// max padding max correspond to format.MaxOutgoingCiphertextRecordOverhead
 	for i := 0; i != padding+constants.AEADSealSize; i++ {
-		recordData = append(recordData, 0)
+		recordBody = append(recordBody, 0)
 	}
 
-	binary.BigEndian.PutUint16(recordData[startRecordOffset+3:], uint16(len(recordData)-startBodyOFfset))
+	binary.BigEndian.PutUint16(recordBody[startRecordOffset+3:], uint16(len(recordBody)-startBodyOFfset))
 
-	encrypted := gcm.Seal(recordData[startBodyOFfset:startBodyOFfset], iv[:], recordData[startBodyOFfset:len(recordData)-constants.AEADSealSize], recordData[startRecordOffset:startBodyOFfset])
-	if &encrypted[0] != &recordData[startBodyOFfset] {
+	encrypted := gcm.Seal(recordBody[startBodyOFfset:startBodyOFfset], iv[:], recordBody[startBodyOFfset:len(recordBody)-constants.AEADSealSize], recordBody[startRecordOffset:startBodyOFfset])
+	if &encrypted[0] != &recordBody[startBodyOFfset] {
 		panic("gcm.Seal reallocated datagram storage")
 	}
-	if len(encrypted) != len(recordData[startBodyOFfset:]) {
+	if len(encrypted) != len(recordBody[startBodyOFfset:]) {
 		panic("gcm.Seal length mismatch")
 	}
 
 	if !conn.keys.DoNotEncryptSequenceNumbers {
-		if err := send.Symmetric.EncryptSequenceNumbers(recordData[startRecordOffset+1:startRecordOffset+3], recordData[startBodyOFfset:]); err != nil {
+		if err := send.Symmetric.EncryptSequenceNumbers(recordBody[startRecordOffset+1:startRecordOffset+3], recordBody[startBodyOFfset:]); err != nil {
 			panic("cipher text too short when sending")
 		}
 	}
 	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
-	return recordData, rn, nil
+	return recordBody, rn, nil
 }
 
 func (conn *ConnectionImpl) constructCiphertextAck(recordBody []byte, acks []record.Number) ([]byte, error) {
+	if len(recordBody) != 0 {
+		panic("must pass empty allocated slice with enough length")
+	}
 	seq, err := conn.checkSendLimit()
 	if err != nil {
 		return nil, err
@@ -216,7 +222,10 @@ func (conn *ConnectionImpl) constructCiphertextAck(recordBody []byte, acks []rec
 	return recordBody, nil
 }
 
-func (conn *ConnectionImpl) constructCiphertextApplication(recordBody []byte) ([]byte, error) {
+func (conn *ConnectionImpl) constructCiphertextApplication(recordType byte, hdrSize int, recordBody []byte) ([]byte, error) {
+	if hdrSize != record.OutgoingCiphertextRecordHeader8 && hdrSize != record.OutgoingCiphertextRecordHeader16 {
+		panic("outgoing record size must be 4 or 5 bytes")
+	}
 	seq, err := conn.checkSendLimit()
 	if err != nil {
 		return nil, err
@@ -224,7 +233,7 @@ func (conn *ConnectionImpl) constructCiphertextApplication(recordBody []byte) ([
 	send := &conn.keys.Send
 	epoch := send.Symmetric.Epoch
 	rn := record.NumberWith(epoch, seq)
-	log.Printf("constructing ciphertext application with rn={%d,%d}", rn.Epoch(), rn.SeqNum())
+	log.Printf("constructing ciphertext application with rn={%d,%d} hdrSize = %d", rn.Epoch(), rn.SeqNum(), hdrSize)
 
 	gcm := send.Symmetric.Write
 	iv := send.Symmetric.WriteIV
@@ -235,9 +244,8 @@ func (conn *ConnectionImpl) constructCiphertextApplication(recordBody []byte) ([
 	// Saving on not including length of the last datagram is also very hard.
 	// At the point we know it is the last one, we cannot not change header,
 	// because it is "additional data" for AEAD
-	firstByte := record.CiphertextHeaderFirstByte(false, true, true, epoch)
-	const hdrSize = record.OutgoingCiphertextRecordHeader
-	recordBody = append(recordBody, record.RecordApplicationData)
+	firstByte := record.CiphertextHeaderFirstByte(false, hdrSize == record.OutgoingCiphertextRecordHeader16, true, epoch)
+	recordBody = append(recordBody, recordType)
 
 	padding := len(recordBody) % 4 // test our code with different padding. TODO - remove later
 	// max padding max correspond to format.MaxOutgoingCiphertextRecordOverhead
@@ -246,8 +254,13 @@ func (conn *ConnectionImpl) constructCiphertextApplication(recordBody []byte) ([
 	}
 
 	recordBody[0] = firstByte
-	binary.BigEndian.PutUint16(recordBody[1:], uint16(seq))
-	binary.BigEndian.PutUint16(recordBody[3:], uint16(len(recordBody)-hdrSize))
+	if hdrSize == record.OutgoingCiphertextRecordHeader8 {
+		recordBody[1] = byte(seq)
+		binary.BigEndian.PutUint16(recordBody[2:], uint16(len(recordBody)-hdrSize))
+	} else {
+		binary.BigEndian.PutUint16(recordBody[1:], uint16(seq))
+		binary.BigEndian.PutUint16(recordBody[3:], uint16(len(recordBody)-hdrSize))
+	}
 
 	encrypted := gcm.Seal(recordBody[hdrSize:hdrSize], iv[:], recordBody[hdrSize:len(recordBody)-constants.AEADSealSize], recordBody[:hdrSize])
 	if &encrypted[0] != &recordBody[hdrSize] {

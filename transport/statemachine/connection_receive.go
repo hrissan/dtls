@@ -32,7 +32,7 @@ func (conn *ConnectionImpl) ReceivedCiphertextRecord(opts *options.TransportOpti
 		return conn.ReceivedAlert(true, decrypted)
 	case record.RecordTypeAck:
 		return conn.receivedEncryptedAck(opts, decrypted)
-	case record.RecordApplicationData:
+	case record.RecordTypeApplicationData:
 		return conn.receivedApplicationData(decrypted)
 	case record.RecordTypeHandshake:
 		return conn.receivedEncryptedHandshakeRecord(opts, decrypted, rn)

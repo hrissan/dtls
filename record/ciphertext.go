@@ -14,8 +14,10 @@ const MaxCiphertextRecordLength = MaxPlaintextRecordLength + 256 // [rfc8446:5.2
 // 5 is first byte plus 16-bit seqnum plus 16-bit length
 // 1 is content type size
 // 4 is max padding
-const OutgoingCiphertextRecordHeader = 5
-const MaxOutgoingCiphertextRecordOverhead = OutgoingCiphertextRecordHeader + 1 + 4
+const OutgoingCiphertextRecordHeader8 = 4
+const OutgoingCiphertextRecordHeader16 = 5
+const MaxOutgoingCiphertextRecordOverhead = OutgoingCiphertextRecordHeader16 + 1 + 4 // TODO - dynamic
+const MaxOutgoingCiphertextRecordPadding = 4
 
 func IsCiphertextRecord(fb byte) bool {
 	return fb&0b11100000 == 0b00100000

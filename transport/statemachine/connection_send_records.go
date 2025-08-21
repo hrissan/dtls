@@ -165,6 +165,7 @@ func (conn *ConnectionImpl) constructCiphertextAck(recordBody []byte, acks []rec
 	if len(recordBody) != 0 {
 		panic("must pass empty allocated slice with enough length")
 	}
+
 	seq, err := conn.checkSendLimit()
 	if err != nil {
 		return nil, err
@@ -222,13 +223,25 @@ func (conn *ConnectionImpl) constructCiphertextAck(recordBody []byte, acks []rec
 	return recordBody, nil
 }
 
-func (conn *ConnectionImpl) constructCiphertextApplication(recordType byte, hdrSize int, recordBody []byte) ([]byte, error) {
+// Writes header and returns body to write used data to.
+// can return empty body, useful if the caller wants to write empty application data.
+// Pass datagramLeft, hdrSize and how many bytes pf insideBody filled to protectRecord
+func (conn *ConnectionImpl) prepareInsideBody(datagramLeft []byte, hdrSize int) (insideBody []byte, ok bool) {
+	overhead := hdrSize + 1 + record.MaxOutgoingCiphertextRecordPadding + constants.AEADSealSize
+	userSpace := len(datagramLeft) - overhead
+	if userSpace < 0 {
+		return nil, false
+	}
+	return datagramLeft[hdrSize : hdrSize+userSpace], true
+}
+
+func (conn *ConnectionImpl) protectRecord(recordType byte, datagramLeft []byte, hdrSize int, insideSize int) (recordSize int, _ error) {
 	if hdrSize != record.OutgoingCiphertextRecordHeader8 && hdrSize != record.OutgoingCiphertextRecordHeader16 {
 		panic("outgoing record size must be 4 or 5 bytes")
 	}
 	seq, err := conn.checkSendLimit()
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 	send := &conn.keys.Send
 	epoch := send.Symmetric.Epoch
@@ -245,39 +258,42 @@ func (conn *ConnectionImpl) constructCiphertextApplication(recordType byte, hdrS
 	// At the point we know it is the last one, we cannot not change header,
 	// because it is "additional data" for AEAD
 	firstByte := record.CiphertextHeaderFirstByte(false, hdrSize == record.OutgoingCiphertextRecordHeader16, true, epoch)
-	recordBody = append(recordBody, recordType)
+	// panic below would mean, caller violated invariant of using datagram space
+	datagramLeft[0] = firstByte
+	datagramLeft[hdrSize+insideSize] = recordType
+	insideSize++
 
-	padding := len(recordBody) % 4 // test our code with different padding. TODO - remove later
+	padding := (insideSize + 1) % 4 // test our code with different padding. TODO - remove later
 	// max padding max correspond to format.MaxOutgoingCiphertextRecordOverhead
-	for i := 0; i != padding+constants.AEADSealSize; i++ {
-		recordBody = append(recordBody, 0)
+	for i := 0; i != padding; i++ {
+		datagramLeft[hdrSize+insideSize] = 0
+		insideSize++
 	}
 
-	recordBody[0] = firstByte
 	var seqNumData []byte
 	if hdrSize == record.OutgoingCiphertextRecordHeader8 {
-		seqNumData = recordBody[1:2]
-		recordBody[1] = byte(seq)
-		binary.BigEndian.PutUint16(recordBody[2:], uint16(len(recordBody)-hdrSize))
+		seqNumData = datagramLeft[1:2]
+		seqNumData[0] = byte(seq)
+		binary.BigEndian.PutUint16(datagramLeft[2:], uint16(insideSize+constants.AEADSealSize))
 	} else {
-		seqNumData = recordBody[1:3]
-		binary.BigEndian.PutUint16(recordBody[1:], uint16(seq))
-		binary.BigEndian.PutUint16(recordBody[3:], uint16(len(recordBody)-hdrSize))
+		seqNumData = datagramLeft[1:3]
+		binary.BigEndian.PutUint16(seqNumData, uint16(seq))
+		binary.BigEndian.PutUint16(datagramLeft[3:], uint16(insideSize+constants.AEADSealSize))
 	}
 
-	encrypted := gcm.Seal(recordBody[hdrSize:hdrSize], iv[:], recordBody[hdrSize:len(recordBody)-constants.AEADSealSize], recordBody[:hdrSize])
-	if &encrypted[0] != &recordBody[hdrSize] {
+	encrypted := gcm.Seal(datagramLeft[hdrSize:hdrSize], iv[:], datagramLeft[hdrSize:hdrSize+insideSize], datagramLeft[:hdrSize])
+	if &encrypted[0] != &datagramLeft[hdrSize] {
 		panic("gcm.Seal reallocated datagram storage")
 	}
-	if len(encrypted) != len(recordBody[hdrSize:]) {
+	if len(encrypted) != len(datagramLeft[hdrSize:hdrSize+insideSize+constants.AEADSealSize]) {
 		panic("gcm.Seal length mismatch")
 	}
 
 	if !conn.keys.DoNotEncryptSequenceNumbers {
-		if err := send.Symmetric.EncryptSequenceNumbers(seqNumData, recordBody[hdrSize:]); err != nil {
+		if err := send.Symmetric.EncryptSequenceNumbers(seqNumData, datagramLeft[hdrSize:]); err != nil {
 			panic("cipher text too short when sending")
 		}
 	}
 	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
-	return recordBody, nil
+	return hdrSize + insideSize + constants.AEADSealSize, nil
 }

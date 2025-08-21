@@ -110,23 +110,21 @@ func (conn *ConnectionImpl) constructDatagram(datagram []byte) (int, bool, error
 			return datagramSize, true, nil
 		}
 		hdrSize := record.OutgoingCiphertextRecordHeader16
-		overhead := hdrSize + 1 + record.MaxOutgoingCiphertextRecordPadding + constants.AEADSealSize
-		userSpace := len(datagram) - datagramSize - overhead
-		if userSpace >= constants.MinFragmentBodySize {
-			recordData := datagram[datagramSize+hdrSize : datagramSize+hdrSize+userSpace]
-			recordSize, send, add := conn.Handler.OnWriteApplicationRecord(recordData)
-			if recordSize > len(recordData) {
+		insideBody, ok := conn.prepareInsideBody(datagram[datagramSize:], hdrSize)
+		if ok && len(insideBody) >= constants.MinFragmentBodySize {
+			insideSize, send, add := conn.Handler.OnWriteApplicationRecord(insideBody)
+			if insideSize > len(insideBody) {
 				panic("ciphertext user handler overflows allowed record")
 			}
 			if send {
-				da, err := conn.constructCiphertextApplication(record.RecordTypeApplicationData, hdrSize, datagram[datagramSize:datagramSize+hdrSize+recordSize])
+				recordSize, err := conn.protectRecord(record.RecordTypeApplicationData, datagram[datagramSize:], hdrSize, insideSize)
 				if err != nil {
 					return 0, false, err
 				}
-				if len(da) > len(datagram[datagramSize:]) {
-					panic("ciphertext application record construction length invariant failed")
-				}
-				datagramSize += len(da)
+				//if len(da) > len(datagram[datagramSize:]) {
+				//	panic("ciphertext application record construction length invariant failed")
+				//}
+				datagramSize += recordSize
 			}
 			if !add {
 				conn.handlerHasMoreData = false
@@ -142,8 +140,11 @@ func (conn *ConnectionImpl) constructDatagramAcks(datagram []byte) (int, error) 
 	if acksSize == 0 {
 		return 0, nil
 	}
-	acksSpace := len(datagram) - record.AckHeaderSize - record.MaxOutgoingCiphertextRecordOverhead - constants.AEADSealSize
-	if acksSpace < record.AckElementSize { // not a single one fits
+	hdrSize := record.OutgoingCiphertextRecordHeader16
+	overhead := hdrSize + 1 + record.MaxOutgoingCiphertextRecordPadding + constants.AEADSealSize
+
+	acksSpace := len(datagram) - record.AckHeaderSize - overhead // for body
+	if acksSpace < record.AckElementSize {                       // not a single one fits
 		return 0, nil
 	}
 	acksCount := min(acksSize, acksSpace/record.AckElementSize)

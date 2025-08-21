@@ -10,6 +10,7 @@ import (
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/keys"
 )
 
 type smHandshakeClientExpectFinished struct {
@@ -22,7 +23,7 @@ func (*smHandshakeClientExpectFinished) OnFinished(conn *ConnectionImpl, msg han
 	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
 	finishedTranscriptHash := hctx.transcriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
-	mustBeFinished := conn.keys.Receive.ComputeFinished(sha256.New(), hctx.handshakeTrafficSecretReceive[:], finishedTranscriptHash)
+	mustBeFinished := keys.ComputeFinished(sha256.New(), hctx.handshakeTrafficSecretReceive[:], finishedTranscriptHash)
 	if string(msgParsed.VerifyData[:msgParsed.VerifyDataLength]) != string(mustBeFinished) {
 		return dtlserrors.ErrFinishedMessageVerificationFailed
 	}

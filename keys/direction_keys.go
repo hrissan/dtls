@@ -15,7 +15,6 @@ import (
 )
 
 type DirectionKeys struct {
-	// fields sorted to minimize padding
 	ApplicationTrafficSecret [32]byte // we need to keep this for key update
 
 	Symmetric SymmetricKeys
@@ -45,7 +44,7 @@ func (keys *DirectionKeys) ComputeHandshakeKeys(roleServer bool, handshakeSecret
 }
 
 // TODO - remove allocations
-func (keys *DirectionKeys) ComputeFinished(hasher hash.Hash, HandshakeTrafficSecret []byte, transcriptHash []byte) []byte {
+func ComputeFinished(hasher hash.Hash, HandshakeTrafficSecret []byte, transcriptHash []byte) []byte {
 	finishedKey := hkdf.ExpandLabel(hasher, HandshakeTrafficSecret, "finished", []byte{}, hasher.Size())
 	//transcriptHash := sha256.Sum256(conn.transcript)
 	return hkdf.HMAC(finishedKey, transcriptHash[:], hasher)

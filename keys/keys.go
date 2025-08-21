@@ -41,13 +41,16 @@ type Keys struct {
 	RequestedReceiveEpochUpdate bool
 	// calculate NewReceiveKeys only once
 	NewReceiveKeysSet bool
-	// when we protect or deprotect 2^(exp-1) packets, we ask for KeyUpdate
-	// if peer does not respond quickly and we reach 2^exp, we close connection for good
+	// when we protect or deprotect 3/4 of 2^exp packets, we ask for KeyUpdate
+	// if peer does not respond quickly. and we reach 2^exp, we close connection for good
 	SequenceNumberLimitExp byte
 }
 
 func (keys *Keys) AddAck(rn record.Number) {
-	if rn.Epoch() != keys.SendAcksEpoch {
+	if rn.Epoch() < keys.SendAcksEpoch { // peer will resend in a new epoch
+		return
+	}
+	if rn.Epoch() > keys.SendAcksEpoch {
 		keys.SendAcksEpoch = rn.Epoch()
 		keys.SendAcks.Reset()
 	}

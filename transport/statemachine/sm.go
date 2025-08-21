@@ -8,6 +8,7 @@ import (
 
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/transport/options"
 )
@@ -18,7 +19,7 @@ func (hctx *handshakeContext) generateFinished(conn *ConnectionImpl) handshake.M
 	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
 	finishedTranscriptHash := hctx.transcriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
-	mustBeFinished := conn.keys.Send.ComputeFinished(sha256.New(), hctx.handshakeTrafficSecretSend[:], finishedTranscriptHash)
+	mustBeFinished := keys.ComputeFinished(sha256.New(), hctx.handshakeTrafficSecretSend[:], finishedTranscriptHash)
 
 	msg := handshake.MsgFinished{
 		VerifyDataLength: len(mustBeFinished),

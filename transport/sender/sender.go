@@ -82,8 +82,9 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 		if sendShutdown {
 			return
 		}
-		if hrr.data != nil && !snd.sendDatagram(socket, (*hrr.data)[:hrr.size], hrr.addr) {
-			return
+		if hrr.data != nil {
+			_ = snd.sendDatagram(socket, (*hrr.data)[:hrr.size], hrr.addr)
+			// do not add stateless packet back to queue on error, we'll generate it again on next ClientHello
 		}
 		datagramSize := 0
 		addToSendQueue := false
@@ -94,7 +95,7 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 			}
 			if datagramSize != 0 {
 				if !snd.sendDatagram(socket, datagram[:datagramSize], conn.Addr()) {
-					// TODO - rare log
+					addToSendQueue = true // otherwise state machine deadlock
 				}
 			}
 		}

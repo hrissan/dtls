@@ -7,7 +7,9 @@ import "errors"
 
 type MsgType byte
 
-var ErrHandshakeMsgTooShort = errors.New("handshake message too short")
+var ErrHandshakeFragmentTooShort = errors.New("handshake message fragment too short")
+var ErrHandshakeFragmentEmpty = errors.New("handshake message fragment empty")
+var ErrHandshakeFragmentInvalid = errors.New("handshake message fragment offset or length mismatch")
 
 const (
 	MsgTypeZero                = 0 // hello_request_RESERVED - we use it as "message not set" flag

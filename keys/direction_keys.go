@@ -67,15 +67,11 @@ func (keys *DirectionKeys) ComputeApplicationTrafficSecret(roleServer bool, mast
 	//		"traffic upd", "", Hash.length)
 }
 
-func (keys *DirectionKeys) ComputeNextApplicationTrafficSecret(roleServer bool) {
+func (keys *DirectionKeys) ComputeNextApplicationTrafficSecret(direction string) {
 	// the next application traffic secret is calculated from the previous one
 	hasher := sha256.New()
 	copy(keys.ApplicationTrafficSecret[:], hkdf.ExpandLabel(hasher, keys.ApplicationTrafficSecret[:], "traffic upd", []byte{}, len(keys.ApplicationTrafficSecret)))
-	if roleServer {
-		log.Printf("server next application traffic secret: %x\n", keys.ApplicationTrafficSecret)
-	} else {
-		log.Printf("client next application traffic secret: %x\n", keys.ApplicationTrafficSecret)
-	}
+	log.Printf("next %s application traffic secret: %x\n", direction, keys.ApplicationTrafficSecret)
 }
 
 // contentType is the first non-zero byte from the end

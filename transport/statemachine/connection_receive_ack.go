@@ -68,7 +68,7 @@ func (conn *ConnectionImpl) processKeyUpdateAck(rn record.Number) {
 	conn.sentKeyUpdateRN = record.Number{}
 	conn.sendKeyUpdateUpdateRequested = false // must not be necessary
 	// now when we received ack for KeyUpdate, we must update our keys
-	conn.keys.Send.ComputeNextApplicationTrafficSecret(conn.roleServer)
+	conn.keys.Send.ComputeNextApplicationTrafficSecret("send")
 	conn.keys.Send.Symmetric.ComputeKeys(conn.keys.Send.ApplicationTrafficSecret[:])
 	conn.keys.Send.Symmetric.Epoch++
 	conn.keys.SendNextSegmentSequence = 0

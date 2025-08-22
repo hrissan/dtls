@@ -68,13 +68,18 @@ type ConnectionImpl struct {
 	sendKeyUpdateMessageSeq        uint16 // != 0 if set
 	sendKeyUpdateUpdateRequested   bool   // fully defines content of KeyUpdate we are sending
 
-	roleServer         bool                // changes very rarely
-	stateID            stateMachineStateID // index in global table
-	handlerHasMoreData bool                // set when user signals it has data, clears after OnWriteRecord returns false
+	roleServer bool                // changes very rarely
+	stateID    stateMachineStateID // index in global table
+	// set when user signals it has data, clears after OnWriteRecord returns false
+	handlerHasMoreData bool
 
-	InSenderQueue    bool  // intrusive, must not be changed except by sender, protected by sender mutex
-	TimerHeapIndex   int   // intrusive, must not be changed except by clock, protected by clock mutex
-	FireTimeUnixNano int64 // time.Time object is larger and might be invalid as a heap predicate
+	// intrusive, must not be changed except by sender, protected by sender mutex
+	InSenderQueue bool
+	// intrusive, must not be changed except by clock, protected by clock mutex
+	TimerHeapIndex int
+	// time.Time object is larger and also has complicated comparison,
+	// which might be invalid as a heap predicate
+	FireTimeUnixNano int64
 }
 
 func NewServerConnection(addr netip.AddrPort) *ConnectionImpl {

@@ -25,7 +25,7 @@ func (conn *ConnectionImpl) hasDataToSendLocked() bool {
 	if hctx != nil && hctx.sendQueue.HasDataToSend() {
 		return true
 	}
-	if conn.keys.SendAcks.GetBitCount() != 0 {
+	if conn.keys.Send.Symmetric.Epoch != 0 && conn.keys.SendAcks.GetBitCount() != 0 {
 		return true
 	}
 	return conn.handlerHasMoreData ||
@@ -137,6 +137,9 @@ func (conn *ConnectionImpl) constructDatagram(opts *options.TransportOptions, da
 }
 
 func (conn *ConnectionImpl) constructDatagramAcks(opts *options.TransportOptions, datagramLeft []byte) (int, error) {
+	if conn.keys.Send.Symmetric.Epoch == 0 {
+		return 0, nil // no one should believe unencrypted acks, so we never send them
+	}
 	acks := &conn.keys.SendAcks
 	acksSize := acks.GetBitCount()
 	if acksSize == 0 {

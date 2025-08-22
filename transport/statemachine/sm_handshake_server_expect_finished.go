@@ -26,6 +26,7 @@ func (*smHandshakeServerExpectFinished) OnClientHello2(conn *ConnectionImpl, opt
 
 func (*smHandshakeServerExpectFinished) OnFinished(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgFinished) error {
 	hctx := conn.hctx
+	hctx.receivedNextFlight(conn)
 	// [rfc8446:4.4.4] - finished
 	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
 	finishedTranscriptHash := hctx.transcriptHasher.Sum(finishedTranscriptHashStorage[:0])

@@ -27,6 +27,9 @@ func (*smHandshakeServerExpectClientHello2) OnClientHello2(conn *ConnectionImpl,
 	hctx := newHandshakeContext(sha256.New())
 	conn.hctx = hctx
 
+	// formally this is the next flight, but as there were no state, do not call it
+	// hctx.receivedNextFlight(conn)
+
 	conn.hctx.sendNextRecordSequenceEpoch0 = 1 // sequence 0 was HRR
 
 	conn.nextMessageSeqSend = 1    // message 0 was HRR
@@ -82,7 +85,6 @@ func (*smHandshakeServerExpectClientHello2) OnClientHello2(conn *ConnectionImpl,
 		MsgType: handshake.MsgTypeServerHello,
 		Body:    serverHelloBody,
 	}
-	_ = hctx.ReceivedFlight(conn, MessagesFlightClientHello2)
 
 	if err := hctx.PushMessage(conn, serverHelloMessage); err != nil {
 		return err

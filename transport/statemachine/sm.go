@@ -39,6 +39,7 @@ const (
 	smIDClientSentHello                       stateMachineStateID = 1
 	smIDHandshakeServerExpectClientHello2     stateMachineStateID = 2
 	smIDHandshakeServerExpectFinished         stateMachineStateID = 3
+	smIDHandshakeClientExpectServerHRR        stateMachineStateID = 4
 	smIDHandshakeClientExpectServerHello      stateMachineStateID = 5
 	smIDHandshakeClientExpectServerEE         stateMachineStateID = 6
 	smIDHandshakeClientExpectServerCert       stateMachineStateID = 7
@@ -52,6 +53,7 @@ var stateMachineStates = [...]StateMachine{
 	smIDClientSentHello:                       &smClientSentHello1{},
 	smIDHandshakeServerExpectClientHello2:     &smHandshakeServerExpectClientHello2{},
 	smIDHandshakeServerExpectFinished:         &smHandshakeServerExpectFinished{},
+	smIDHandshakeClientExpectServerHRR:        &smHandshakeClientExpectServerHRR{},
 	smIDHandshakeClientExpectServerHello:      &smHandshakeClientExpectServerHello{},
 	smIDHandshakeClientExpectServerEE:         &smHandshakeClientExpectEE{},
 	smIDHandshakeClientExpectServerCert:       &smHandshakeClientExpectCert{},

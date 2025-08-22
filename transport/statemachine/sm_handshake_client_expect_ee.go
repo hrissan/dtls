@@ -12,6 +12,8 @@ type smHandshakeClientExpectEE struct {
 }
 
 func (*smHandshakeClientExpectEE) OnEncryptedExtensions(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.ExtensionsSet) error {
+	hctx := conn.hctx
+	hctx.receivedNextFlight(conn)
 	conn.stateID = smIDHandshakeClientExpectServerCert
 	return nil
 }

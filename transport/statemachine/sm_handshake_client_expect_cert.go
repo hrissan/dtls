@@ -12,7 +12,9 @@ type smHandshakeClientExpectCert struct {
 }
 
 func (*smHandshakeClientExpectCert) OnCertificate(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgCertificate) error {
-	conn.hctx.certificateChain = msgParsed
+	hctx := conn.hctx
+	hctx.receivedNextFlight(conn)
+	hctx.certificateChain = msgParsed
 	conn.stateID = smIDHandshakeClientExpectServerCertVerify
 	return nil
 }

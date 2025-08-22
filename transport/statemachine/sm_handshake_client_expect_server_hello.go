@@ -18,47 +18,24 @@ type smHandshakeClientExpectServerHello struct {
 
 func (*smHandshakeClientExpectServerHello) OnServerHello(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgServerHello) error {
 	hctx := conn.hctx
-	if msgParsed.Extensions.SupportedVersions.SelectedVersion != handshake.DTLS_VERSION_13 {
-		return dtlserrors.ErrParamsSupportOnlyDTLS13
-	}
-	if msgParsed.CipherSuite != handshake.CypherSuite_TLS_AES_128_GCM_SHA256 {
-		return dtlserrors.ErrParamsSupportCiphersuites
+	hctx.receivedNextFlight(conn)
+	if err := IsSupportedServerHello(&msgParsed); err != nil {
+		return err
 	}
 	if msgParsed.IsHelloRetryRequest() {
-		if !msgParsed.Extensions.CookieSet {
-			return dtlserrors.ErrServerHRRMustContainCookie
-		}
-		if msg.MsgSeq != 0 {
-			return dtlserrors.ErrServerHRRMustHaveMsgSeq0
-		}
-		if !hctx.ReceivedFlight(conn, MessagesFlightServerHRR) { // TODO - remove "flight" from code, leave nly in state machine
-			return nil
-		}
-		// [rfc8446:4.4.1] replace initial hello message with its hash if HRR was used
-		var initialHelloTranscriptHashStorage [constants.MaxHashLength]byte
-		initialHelloTranscriptHash := hctx.transcriptHasher.Sum(initialHelloTranscriptHashStorage[:0])
-		hctx.transcriptHasher.Reset()
-		syntheticHashData := []byte{byte(handshake.MsgTypeMessageHash), 0, 0, byte(len(initialHelloTranscriptHash))}
-		_, _ = hctx.transcriptHasher.Write(syntheticHashData)
-		_, _ = hctx.transcriptHasher.Write(initialHelloTranscriptHash)
-
-		msg.AddToHash(hctx.transcriptHasher)
-
-		clientHelloMsg := hctx.generateClientHello(true, msgParsed.Extensions.Cookie)
-		return hctx.PushMessage(conn, clientHelloMsg)
+		return nil // garbage or attack, ignore. TODO - return some error?s
 	}
 	// ServerHello can have messageSeq 0 or 1, depending on whether server used HRR
-	if msg.MsgSeq >= 2 {
-		// TODO - fatal alert. Looks dangerous for state machine
-		log.Printf("ServerHello has MsgSeq >= 2, ignoring")
+	if !hctx.serverUsedHRR && msg.MsgSeq != 0 {
+		log.Printf("ServerHello after ServerHelloRetryRequest has msgSeq != 1")
 		return dtlserrors.ErrClientHelloUnsupportedParams
 	}
-
+	if hctx.serverUsedHRR && msg.MsgSeq != 1 {
+		log.Printf("ServerHello after ServerHelloRetryRequest has msgSeq != 1")
+		return dtlserrors.ErrClientHelloUnsupportedParams
+	}
 	if !msgParsed.Extensions.KeyShare.X25519PublicKeySet {
 		return dtlserrors.ErrParamsSupportKeyShare
-	}
-	if !hctx.ReceivedFlight(conn, MessagesFlightServerHello_Finished) {
-		return nil
 	}
 	msg.AddToHash(hctx.transcriptHasher)
 

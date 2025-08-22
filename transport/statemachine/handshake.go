@@ -37,6 +37,7 @@ type handshakeContext struct {
 	// state machine sets this to true or false depending on state.
 	CanDeliveryMessages bool
 
+	serverUsedHRR bool // we must store this to validate state transition
 	currentFlight byte // both send and receive
 
 	// We need more than 1 message, otherwise we will lose them, while
@@ -96,18 +97,14 @@ func (hctx *handshakeContext) receivedNextFlight(conn *ConnectionImpl) {
 	// implicit ack of all previous flights
 	hctx.sendQueue.Clear()
 
-	conn.keys.SendAcks.Reset()
+	// we do not want to keep track of which records corresponded to which flight,
+	// so we always send acks for all records.
 }
 
 func (hctx *handshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment handshake.Fragment, rn record.Number) error {
 	if fragment.Header.MsgType == handshake.MsgTypeZero { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}
-	// Receiving any fragment of any message from the next flight will remove all acks for previous flights.
-	// We must do it before we generate ack for this fragment.
-	flight := MsgTypeToFlight(fragment.Header.MsgType, conn.roleServer) // zero if unknown
-	conn.hctx.ReceivedFlight(conn, flight)
-
 	messageOffset := int(fragment.Header.MsgSeq) + hctx.receivedMessages.Len() - int(conn.nextMessageSeqReceive)
 	if messageOffset < 0 {
 		panic("checked before calling handshakeContext.ReceivedFragment")

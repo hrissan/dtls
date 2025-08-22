@@ -91,15 +91,15 @@ func (rc *Receiver) receivedClientHello(conn *statemachine.ConnectionImpl, msg h
 	return conn, nil
 }
 
-func IsSupportedClientHello(msg *handshake.MsgClientHello) error {
-	if !msg.Extensions.SupportedVersions.DTLS_13 {
+func IsSupportedClientHello(msgParsed *handshake.MsgClientHello) error {
+	if !msgParsed.Extensions.SupportedVersions.DTLS_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
-	if !msg.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 {
+	if !msgParsed.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 {
 
 		return dtlserrors.ErrParamsSupportCiphersuites
 	}
-	if !msg.Extensions.SupportedGroups.X25519 {
+	if !msgParsed.Extensions.SupportedGroups.X25519 {
 		return dtlserrors.ErrParamsSupportKeyShare
 	}
 	return nil

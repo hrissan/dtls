@@ -27,8 +27,7 @@ func (*smPostHandshake) OnHandshakeMsgFragment(conn *ConnectionImpl, opts *optio
 	if fragment.Header.IsFragmented() {
 		// we do not support fragmented post handshake messages, because we do not want to allocate storage for them.
 		// They are short though, so we do not ack them, there is chance peer will resend them in full
-		opts.Stats.Warning(conn.addr, dtlserrors.WarnPostHandshakeMessageFragmented)
-		return nil
+		return dtlserrors.WarnPostHandshakeMessageFragmented
 	}
 	switch fragment.Header.MsgType {
 	case handshake.MsgTypeClientHello:

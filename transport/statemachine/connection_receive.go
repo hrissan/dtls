@@ -101,27 +101,35 @@ func (conn *ConnectionImpl) receivedEncryptedHandshakeRecord(opts *options.Trans
 		case handshake.MsgTypeServerHello:
 			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.MsgTypeToName(fragment.Header.MsgType), conn.addr, fragment.Header)
 			return dtlserrors.ErrServerHelloMustNotBeEncrypted
-		case handshake.MsgTypeNewSessionTicket:
-			if err := conn.receivedNewSessionTicket(opts, fragment, rn); err != nil {
-				return err
-			}
-		case handshake.MsgTypeKeyUpdate:
-			if err := conn.receivedKeyUpdate(opts, fragment, rn); err != nil {
-				return err
-			}
-		default:
-			if conn.hctx == nil {
-				opts.Stats.Warning(conn.addr, dtlserrors.ErrHandshakeMessagePostHandshake)
-				continue
-			}
-			// we must never add post-handshake messages to received messages queue in Handshake,
-			// because we could partially acknowledge them, so later when we need to destroy conn.Handshake,
-			// we will not be able to throw them out (peer will never send fragments again), and we will not
-			// be able to process them immediately.
-			// So all post-handshake messages muet be processed in switch statement above.
-			if err := conn.hctx.ReceivedFragment(conn, fragment, rn); err != nil {
-				return err
-			}
+		}
+		/*
+			case handshake.MsgTypeNewSessionTicket:
+				if err := conn.receivedNewSessionTicket(opts, fragment, rn); err != nil {
+					return err
+				}
+			case handshake.MsgTypeKeyUpdate:
+				if err := conn.receivedKeyUpdate(opts, fragment, rn); err != nil {
+					return err
+				}
+			default:
+				if conn.hctx == nil {
+					opts.Stats.Warning(conn.addr, dtlserrors.ErrHandshakeMessagePostHandshake)
+					continue
+				}
+				// we must never add post-handshake messages to received messages queue in Handshake,
+				// because we could partially acknowledge them, so later when we need to destroy conn.Handshake,
+				// we will not be able to throw them out (peer will never send fragments again), and we will not
+				// be able to process them immediately.
+				// So all post-handshake messages muet be processed in switch statement above.
+				if err := conn.hctx.ReceivedFragment(conn, fragment, rn); err != nil {
+					return err
+				}
+		*/
+		err = conn.State().OnHandshakeMsgFragment(conn, opts, fragment, rn)
+		if dtlserrors.IsFatal(err) { // manual check in the loop, otherwise simply return
+			return err
+		} else if err != nil {
+			opts.Stats.Warning(conn.addr, err)
 		}
 	}
 	return nil

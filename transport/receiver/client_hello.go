@@ -9,20 +9,20 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/transport/statemachine"
 )
 
 func (rc *Receiver) receivedClientHello(conn *statemachine.ConnectionImpl, msg handshake.Message, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
-	if !rc.opts.RoleServer {
-		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
-		return conn, dtlserrors.ErrClientHelloReceivedByClient
-	}
 	var msgClientHello handshake.MsgClientHello
 	if err := msgClientHello.Parse(msg.Body); err != nil {
 		return conn, dtlserrors.WarnPlaintextClientHelloParsing
+	}
+	if !rc.opts.RoleServer {
+		rc.opts.Stats.ErrorClientReceivedClientHello(addr)
+		return conn, dtlserrors.ErrClientHelloReceivedByClient
 	}
 	// rc.opts.Stats.ClientHelloMessage(msg.Header, msgClientHello, addr)
 
@@ -40,18 +40,20 @@ func (rc *Receiver) receivedClientHello(conn *statemachine.ConnectionImpl, msg h
 		transcriptHasher := sha256.New()
 		msg.AddToHash(transcriptHasher)
 
-		var initialHelloTranscriptHash [constants.MaxHashLength]byte
-		transcriptHasher.Sum(initialHelloTranscriptHash[:0])
+		params := cookie.Params{
+			TimestampUnixNano: time.Now().UnixNano(),
+			KeyShareSet:       !msgClientHello.Extensions.KeyShare.X25519PublicKeySet,
+		}
+		transcriptHasher.Sum(params.TranscriptHash[:0])
 
-		keyShareSet := !msgClientHello.Extensions.KeyShare.X25519PublicKeySet
-		ck := rc.cookieState.CreateCookie(initialHelloTranscriptHash, keyShareSet, addr, time.Now())
+		ck := rc.cookieState.CreateCookie(params, addr)
 		rc.opts.Stats.CookieCreated(addr)
 
 		hrrStorage := rc.snd.PopHelloRetryDatagramStorage()
 		if hrrStorage == nil {
 			return conn, dtlserrors.ErrServerHelloRetryRequestQueueFull
 		}
-		hrrDatagram, _ := statemachine.GenerateStatelessHRR((*hrrStorage)[:0], ck, keyShareSet)
+		hrrDatagram, _ := statemachine.GenerateStatelessHRR((*hrrStorage)[:0], ck, params.KeyShareSet)
 		if len(hrrDatagram) > len(*hrrStorage) {
 			panic("Large HRR datagram must not be generated")
 		}
@@ -67,16 +69,17 @@ func (rc *Receiver) receivedClientHello(conn *statemachine.ConnectionImpl, msg h
 		// we asked for this key_share above, but client disrespected our demand
 		return conn, dtlserrors.ErrParamsSupportKeyShare
 	}
-	valid, age, initialHelloTranscriptHash, keyShareSet := rc.cookieState.IsCookieValid(addr, msgClientHello.Extensions.Cookie, time.Now())
+	params, valid := rc.cookieState.IsCookieValid(addr, msgClientHello.Extensions.Cookie)
 	if !valid {
-		rc.opts.Stats.CookieChecked(false, age, addr)
 		return conn, dtlserrors.ErrClientHelloCookieInvalid
 	}
-	if age > rc.opts.CookieValidDuration {
-		rc.opts.Stats.CookieChecked(false, age, addr)
+	if _, ok := params.IsValidTimestamp(time.Now(), rc.opts.CookieValidDuration); !ok {
 		return conn, dtlserrors.ErrClientHelloCookieAge
 	}
 	// we should check all parameters above, so that we do not create connection for unsupported params
+	if conn != nil {
+		// TODO - check age, replace
+	}
 	if conn == nil {
 		rc.connectionsMu.Lock()
 		// TODO - get from pool
@@ -84,7 +87,7 @@ func (rc *Receiver) receivedClientHello(conn *statemachine.ConnectionImpl, msg h
 		rc.connections[addr] = conn
 		rc.connectionsMu.Unlock()
 	}
-	if err := conn.ReceivedClientHello2(rc.opts, msg, msgClientHello, initialHelloTranscriptHash, keyShareSet); err != nil {
+	if err := conn.ReceivedClientHello2(rc.opts, msg, msgClientHello, params); err != nil {
 		return conn, err // TODO - close connection here
 	}
 	rc.snd.RegisterConnectionForSend(conn)

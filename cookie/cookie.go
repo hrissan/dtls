@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
-	"math"
 	"net/netip"
 	"time"
 
@@ -20,8 +19,8 @@ const cookieHashLength = sha256.Size
 const saltLength = 16 // arguably, this is enough
 
 type CookieState struct {
-	cookieSecret [32]byte // [rfc9147:5.1]
-	rnd          dtlsrand.Rand
+	cookieSecret [32]byte      // [rfc9147:5.1]
+	rnd          dtlsrand.Rand // for salt
 }
 
 const MaxCookieSize = 256
@@ -29,6 +28,23 @@ const MaxCookieSize = 256
 type Cookie struct {
 	data [MaxCookieSize]byte // maximum supported size
 	size int
+}
+
+type Params struct {
+	// those values are signed, so server can trust them after validation
+	TranscriptHash    [constants.MaxHashLength]byte
+	TimestampUnixNano int64
+	KeyShareSet       bool
+}
+
+func (p *Params) IsValidTimestamp(now time.Time, cookieValidDuration time.Duration) (time.Duration, bool) {
+	unixNanoNow := now.UnixNano()
+	if p.TimestampUnixNano > unixNanoNow { // cookie from the future
+		return 0, false
+	}
+	age := time.Duration(unixNanoNow - p.TimestampUnixNano)
+	return age, age <= cookieValidDuration
+
 }
 
 var ErrCookieDataTooLong = errors.New("cookie data is too long")
@@ -67,8 +83,7 @@ func (c *CookieState) SetRand(rnd dtlsrand.Rand) {
 	rnd.ReadMust(c.cookieSecret[:])
 }
 
-// TODO - do not copy excess data from transcript hash storage
-func (c *CookieState) CreateCookie(transcriptHash [constants.MaxHashLength]byte, keyShareSet bool, addr netip.AddrPort, now time.Time) Cookie {
+func (c *CookieState) CreateCookie(params Params, addr netip.AddrPort) Cookie {
 	var cookie Cookie
 	{
 		var salt [saltLength]byte
@@ -77,16 +92,15 @@ func (c *CookieState) CreateCookie(transcriptHash [constants.MaxHashLength]byte,
 	}
 	{
 		var unixNanoBytes [8]byte
-		unixNano := uint64(now.UnixNano())
-		binary.BigEndian.PutUint64(unixNanoBytes[:], unixNano)
+		binary.BigEndian.PutUint64(unixNanoBytes[:], uint64(params.TimestampUnixNano))
 		cookie.AppendMust(unixNanoBytes[:])
 	}
-	if keyShareSet { // to reconstruct stateless HRR, we must remember if we asked for alternative key_share
+	if params.KeyShareSet { // to reconstruct stateless HRR, we must remember if we asked for alternative key_share
 		cookie.AppendByteMust(1)
 	} else {
 		cookie.AppendByteMust(0)
 	}
-	cookie.AppendMust(transcriptHash[:])
+	cookie.AppendMust(params.TranscriptHash[:])
 
 	hash := c.getScratchHash(cookie.GetValue(), addr)
 	cookie.AppendMust(hash[:])
@@ -94,29 +108,24 @@ func (c *CookieState) CreateCookie(transcriptHash [constants.MaxHashLength]byte,
 	return cookie
 }
 
-func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time.Time) (ok bool, age time.Duration, transcriptHash [constants.MaxHashLength]byte, keyShareSet bool) {
+func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie) (_ Params, ok bool) {
+	var params Params
 	data := cookie.GetValue()
 	if len(data) != saltLength+8+1+constants.MaxHashLength+cookieHashLength {
 		return
 	}
-	unixNanoNow := uint64(now.UnixNano())
-	unixNano := binary.BigEndian.Uint64(data[saltLength:])
-	if unixNano > unixNanoNow { // cookie from the future
-		return
-	}
-	if unixNanoNow-unixNano > math.MaxInt64 { // time.Duration overflow
-		return
-	}
-	age = time.Duration(unixNanoNow - unixNano)
-	keyShareSet = data[saltLength+8] != 0
-	copy(transcriptHash[:], data[saltLength+8+1:])
+	params.TimestampUnixNano = int64(binary.BigEndian.Uint64(data[saltLength:]))
+	params.KeyShareSet = data[saltLength+8] != 0
+	copy(params.TranscriptHash[:], data[saltLength+8+1:])
 
 	var mustBeHash [cookieHashLength]byte
 	copy(mustBeHash[:], data[saltLength+8+1+constants.MaxHashLength:])
 
 	hash := c.getScratchHash(data[:saltLength+8+1+constants.MaxHashLength], addr)
-	ok = hash == mustBeHash
-	return
+	if hash != mustBeHash {
+		return Params{}, false
+	}
+	return params, true
 }
 
 func (c *CookieState) getScratchHash(cookieHashedBytes []byte, addr netip.AddrPort) [cookieHashLength]byte {

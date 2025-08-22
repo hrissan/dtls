@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 
 	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
@@ -76,7 +77,7 @@ type StateMachine interface {
 
 	OnClientHello2(conn *ConnectionImpl, opts *options.TransportOptions,
 		msg handshake.Message, msgClientHello handshake.MsgClientHello,
-		initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error
+		params cookie.Params) error
 
 	OnServerHello(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgServerHello) error
 	OnEncryptedExtensions(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.ExtensionsSet) error

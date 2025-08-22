@@ -9,6 +9,7 @@ import (
 	"log"
 
 	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/transport/options"
 )
@@ -19,7 +20,7 @@ type smHandshakeServerExpectClientHello2 struct {
 
 func (*smHandshakeServerExpectClientHello2) OnClientHello2(conn *ConnectionImpl, opts *options.TransportOptions,
 	msg handshake.Message, msgClientHello handshake.MsgClientHello,
-	initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error {
+	params cookie.Params) error {
 
 	// TODO - replace older handshakes with the new ones (by cookie age or other parameters)
 	// attacker cannot control age for addr, so will not be able to disrupt connection by sending
@@ -34,10 +35,9 @@ func (*smHandshakeServerExpectClientHello2) OnClientHello2(conn *ConnectionImpl,
 
 	conn.nextMessageSeqSend = 1    // message 0 was HRR
 	conn.nextMessageSeqReceive = 2 // message 0, 1 were initial client_hello, client_hello
-	// TODO - check if the same handshake by storing (age, initialHelloTranscriptHash, keyShareSet)
 	{
 		var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte
-		hrrDatagram, msgBody := GenerateStatelessHRR(hrrDatagramStorage[:0], msgClientHello.Extensions.Cookie, keyShareSet)
+		hrrDatagram, msgBody := GenerateStatelessHRR(hrrDatagramStorage[:0], msgClientHello.Extensions.Cookie, params.KeyShareSet)
 		if len(hrrDatagram) > len(hrrDatagramStorage) {
 			panic("Large HRR datagram must not be generated")
 		}
@@ -48,7 +48,7 @@ func (*smHandshakeServerExpectClientHello2) OnClientHello2(conn *ConnectionImpl,
 		syntheticMessage := handshake.Message{
 			MsgType: handshake.MsgTypeMessageHash,
 			MsgSeq:  0, // does not affect transcript hash
-			Body:    initialHelloTranscriptHash[:sha256.Size],
+			Body:    params.TranscriptHash[:sha256.Size],
 		}
 		syntheticMessage.AddToHash(hctx.transcriptHasher)
 		debugPrintSum(hctx.transcriptHasher)
@@ -66,7 +66,7 @@ func (*smHandshakeServerExpectClientHello2) OnClientHello2(conn *ConnectionImpl,
 		msg.AddToHash(hctx.transcriptHasher)
 		debugPrintSum(hctx.transcriptHasher)
 	}
-	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", keyShareSet, initialHelloTranscriptHash)
+	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", params.KeyShareSet, params.TranscriptHash)
 	opts.Rnd.ReadMust(hctx.localRandom[:])
 	hctx.ComputeKeyShare(opts.Rnd)
 

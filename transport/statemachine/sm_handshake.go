@@ -4,7 +4,7 @@
 package statemachine
 
 import (
-	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
@@ -42,7 +42,7 @@ func (*smHandshake) OnHandshakeMsgFragment(conn *ConnectionImpl, opts *options.T
 
 func (*smHandshake) OnClientHello2(conn *ConnectionImpl, opts *options.TransportOptions,
 	msg handshake.Message, msgClientHello handshake.MsgClientHello,
-	initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error {
+	params cookie.Params) error {
 	return dtlserrors.ErrUnexpectedMessage
 }
 

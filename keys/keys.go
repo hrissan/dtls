@@ -8,7 +8,6 @@ import (
 	"crypto/cipher"
 	"crypto/sha256"
 	"hash"
-	"log"
 
 	"github.com/hrissan/dtls/hkdf"
 	"github.com/hrissan/dtls/record"
@@ -56,9 +55,6 @@ func (keys *Keys) AddAck(rn record.Number) {
 		keys.SendAcks.Reset()
 	}
 	// in epoch 0, we send ack for ServerHello, but not for ClientHello,
-	if keys.SendAcksEpoch == 0 {
-		log.Printf("would send ack for epoch 0 message")
-	}
 	// log.Printf("adding ack={%d,%d}", rn.Epoch(), rn.SeqNum())
 	keys.SendAcks.SetNextReceived(rn.SeqNum() + 1)
 	keys.SendAcks.SetBit(rn.SeqNum())

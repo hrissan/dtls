@@ -8,6 +8,7 @@ import (
 	"log"
 
 	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/keys"
@@ -20,7 +21,7 @@ type smHandshakeServerExpectFinished struct {
 
 func (*smHandshakeServerExpectFinished) OnClientHello2(conn *ConnectionImpl, opts *options.TransportOptions,
 	msg handshake.Message, msgClientHello handshake.MsgClientHello,
-	initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error {
+	params cookie.Params) error {
 	return nil // retransmission. If not, we'll reset our handshake soon if unsuccessful, and process it
 }
 

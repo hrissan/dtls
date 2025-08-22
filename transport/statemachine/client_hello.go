@@ -20,11 +20,11 @@ import (
 
 func (conn *ConnectionImpl) ReceivedClientHello2(opts *options.TransportOptions,
 	msg handshake.Message, msgClientHello handshake.MsgClientHello,
-	initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error {
+	params cookie.Params) error {
 
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
-	if err := conn.State().OnClientHello2(conn, opts, msg, msgClientHello, initialHelloTranscriptHash, keyShareSet); err != nil {
+	if err := conn.State().OnClientHello2(conn, opts, msg, msgClientHello, params); err != nil {
 		return err // TODO - close connection here
 	}
 	return nil

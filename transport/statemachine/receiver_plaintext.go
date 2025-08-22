@@ -1,7 +1,7 @@
 // Copyright (c) 2025, Grigory Buteyko aka Hrissan
 // Licensed under the MIT License. See LICENSE for details.
 
-package transport
+package statemachine
 
 import (
 	"log"
@@ -10,10 +10,9 @@ import (
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
-	"github.com/hrissan/dtls/transport/statemachine"
 )
 
-func (t *Transport) receivedPlaintextRecord(conn *statemachine.ConnectionImpl, hdr record.Plaintext, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (t *Transport) receivedPlaintextRecord(conn *Connection, hdr record.Plaintext, addr netip.AddrPort) (*Connection, error) {
 	switch hdr.ContentType {
 	case record.RecordTypeAlert:
 		if conn == nil { // Will not respond with alert, otherwise endless cycle
@@ -29,7 +28,7 @@ func (t *Transport) receivedPlaintextRecord(conn *statemachine.ConnectionImpl, h
 	panic("unreacheable due to check in caller")
 }
 
-func (t *Transport) receivedPlaintextHandshake(conn *statemachine.ConnectionImpl, hdr record.Plaintext, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (t *Transport) receivedPlaintextHandshake(conn *Connection, hdr record.Plaintext, addr netip.AddrPort) (*Connection, error) {
 	// log.Printf("dtls: got handshake record (plaintext) %d bytes from %v, message(hex): %x", len(recordData), addr, recordData)
 	if len(hdr.Body) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding

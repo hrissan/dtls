@@ -11,7 +11,7 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *ConnectionImpl) receivedEncryptedAck(opts *options.TransportOptions, recordData []byte) error {
+func (conn *Connection) receivedEncryptedAck(opts *options.TransportOptions, recordData []byte) error {
 	parser, err := record.NewAckParser(recordData)
 	if err != nil {
 		return dtlserrors.ErrEncryptedAckMessageHeaderParsing
@@ -44,7 +44,7 @@ func (conn *ConnectionImpl) receivedEncryptedAck(opts *options.TransportOptions,
 	return nil // ack occupies full record
 }
 
-func (conn *ConnectionImpl) processNewSessionTicketAck(rn record.Number) {
+func (conn *Connection) processNewSessionTicketAck(rn record.Number) {
 	if conn.sendNewSessionTicketMessageSeq == 0 {
 		return
 	}
@@ -56,7 +56,7 @@ func (conn *ConnectionImpl) processNewSessionTicketAck(rn record.Number) {
 	conn.sentNewSessionTicketRN = record.Number{}
 }
 
-func (conn *ConnectionImpl) processKeyUpdateAck(rn record.Number) {
+func (conn *Connection) processKeyUpdateAck(rn record.Number) {
 	if !conn.keyUpdateInProgress() {
 		return
 	}

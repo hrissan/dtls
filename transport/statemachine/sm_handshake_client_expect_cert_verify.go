@@ -18,7 +18,7 @@ type smHandshakeClientExpectCertVerify struct {
 	smHandshake
 }
 
-func (*smHandshakeClientExpectCertVerify) OnCertificateVerify(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgCertificateVerify) error {
+func (*smHandshakeClientExpectCertVerify) OnCertificateVerify(conn *Connection, msg handshake.Message, msgParsed handshake.MsgCertificateVerify) error {
 	hctx := conn.hctx
 	hctx.receivedNextFlight(conn)
 	// TODO - We do not want checks here, because receiving goroutine should not be blocked for long

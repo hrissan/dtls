@@ -1,7 +1,7 @@
 // Copyright (c) 2025, Grigory Buteyko aka Hrissan
 // Licensed under the MIT License. See LICENSE for details.
 
-package transport
+package statemachine
 
 import (
 	"errors"
@@ -13,7 +13,6 @@ import (
 	"github.com/hrissan/dtls/circular"
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/transport/options"
-	"github.com/hrissan/dtls/transport/statemachine"
 )
 
 // [rfc9147:4.4]
@@ -38,7 +37,7 @@ type sender struct {
 	helloRetryQueue circular.Buffer[outgoingHRR]
 	helloRetryPool  []*[constants.MaxOutgoingHRRDatagramLength]byte // stack, not circular buffer
 
-	wantToWriteQueue circular.Buffer[*statemachine.ConnectionImpl]
+	wantToWriteQueue circular.Buffer[*Connection]
 }
 
 func newSender(opts *options.TransportOptions) *sender {
@@ -75,7 +74,7 @@ func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 		hrr, _ := snd.helloRetryQueue.TryPopFront()
 		conn, _ := snd.wantToWriteQueue.TryPopFront()
 		if conn != nil {
-			conn.InSenderQueue = false
+			conn.inSenderQueue = false
 		}
 		sendShutdown := snd.shutdown
 		snd.mu.Unlock()
@@ -105,8 +104,8 @@ func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 			snd.helloRetryPool = append(snd.helloRetryPool, hrr.data)
 		}
 		if addToSendQueue {
-			if !conn.InSenderQueue {
-				conn.InSenderQueue = true
+			if !conn.inSenderQueue {
+				conn.inSenderQueue = true
 				snd.wantToWriteQueue.PushBack(conn)
 			}
 		}
@@ -156,13 +155,13 @@ func (snd *sender) SendHelloRetryDatagram(data *[constants.MaxOutgoingHRRDatagra
 	snd.cond.Signal()
 }
 
-func (snd *sender) RegisterConnectionForSend(conn *statemachine.ConnectionImpl) {
+func (snd *sender) RegisterConnectionForSend(conn *Connection) {
 	snd.mu.Lock()
 	defer snd.mu.Unlock()
-	if conn.InSenderQueue {
+	if conn.inSenderQueue {
 		return
 	}
-	conn.InSenderQueue = true
+	conn.inSenderQueue = true
 	snd.wantToWriteQueue.PushBack(conn)
 	snd.cond.Signal()
 }

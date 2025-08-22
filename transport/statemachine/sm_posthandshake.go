@@ -12,7 +12,7 @@ import (
 
 type smPostHandshake struct{}
 
-func (*smPostHandshake) OnHandshakeMsgFragment(conn *ConnectionImpl, opts *options.TransportOptions,
+func (*smPostHandshake) OnHandshakeMsgFragment(conn *Connection, opts *options.TransportOptions,
 	fragment handshake.Fragment, rn record.Number) error {
 	if fragment.Header.MsgSeq < conn.nextMessageSeqReceive {
 		// all messages before were processed by us in the state we already do not remember,
@@ -43,22 +43,22 @@ func (*smPostHandshake) OnHandshakeMsgFragment(conn *ConnectionImpl, opts *optio
 	return dtlserrors.ErrHandshakeMessagePostHandshake
 }
 
-func (*smPostHandshake) OnServerHello(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgServerHello) error {
+func (*smPostHandshake) OnServerHello(conn *Connection, msg handshake.Message, msgParsed handshake.MsgServerHello) error {
 	panic("implement or remove")
 }
 
-func (*smPostHandshake) OnEncryptedExtensions(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.ExtensionsSet) error {
+func (*smPostHandshake) OnEncryptedExtensions(conn *Connection, msg handshake.Message, msgParsed handshake.ExtensionsSet) error {
 	panic("unreachable due to check in OnHandshakeMsgFragment")
 }
 
-func (*smPostHandshake) OnCertificate(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgCertificate) error {
+func (*smPostHandshake) OnCertificate(conn *Connection, msg handshake.Message, msgParsed handshake.MsgCertificate) error {
 	panic("unreachable due to check in OnHandshakeMsgFragment")
 }
 
-func (*smPostHandshake) OnCertificateVerify(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgCertificateVerify) error {
+func (*smPostHandshake) OnCertificateVerify(conn *Connection, msg handshake.Message, msgParsed handshake.MsgCertificateVerify) error {
 	panic("unreachable due to check in OnHandshakeMsgFragment")
 }
 
-func (*smPostHandshake) OnFinished(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgFinished) error {
+func (*smPostHandshake) OnFinished(conn *Connection, msg handshake.Message, msgParsed handshake.MsgFinished) error {
 	panic("unreachable due to check in OnHandshakeMsgFragment")
 }

@@ -63,7 +63,7 @@ func newHandshakeContext(hasher hash.Hash) *handshakeContext {
 	return hctx
 }
 
-func (hctx *handshakeContext) firstMessageSeqInReceiveQueue(conn *ConnectionImpl) uint16 {
+func (hctx *handshakeContext) firstMessageSeqInReceiveQueue(conn *Connection) uint16 {
 	if hctx.receivedMessages.Len() > int(conn.nextMessageSeqReceive) {
 		panic("received messages queue invariant violated")
 	}
@@ -80,7 +80,7 @@ func (hctx *handshakeContext) ComputeKeyShare(rnd dtlsrand.Rand) {
 	hctx.x25519Secret = priv
 }
 
-func (hctx *handshakeContext) ReceivedFlight(conn *ConnectionImpl, flight byte) (newFlight bool) {
+func (hctx *handshakeContext) ReceivedFlight(conn *Connection, flight byte) (newFlight bool) {
 	if flight <= hctx.currentFlight {
 		return false
 	}
@@ -93,7 +93,7 @@ func (hctx *handshakeContext) ReceivedFlight(conn *ConnectionImpl, flight byte) 
 	return true
 }
 
-func (hctx *handshakeContext) receivedNextFlight(conn *ConnectionImpl) {
+func (hctx *handshakeContext) receivedNextFlight(conn *Connection) {
 	// implicit ack of all previous flights
 	hctx.sendQueue.Clear()
 
@@ -101,7 +101,7 @@ func (hctx *handshakeContext) receivedNextFlight(conn *ConnectionImpl) {
 	// so we always send acks for all records.
 }
 
-func (hctx *handshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment handshake.Fragment, rn record.Number) error {
+func (hctx *handshakeContext) ReceivedFragment(conn *Connection, fragment handshake.Fragment, rn record.Number) error {
 	if fragment.Header.MsgType == handshake.MsgTypeZero { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}
@@ -155,7 +155,7 @@ func (hctx *handshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment ha
 }
 
 // called when fully received message or when hctx.CanDeliveryMessages change
-func (hctx *handshakeContext) DeliverReceivedMessages(conn *ConnectionImpl) error {
+func (hctx *handshakeContext) DeliverReceivedMessages(conn *Connection) error {
 	for hctx.receivedMessages.Len() != 0 && hctx.CanDeliveryMessages { // check here because changes in receivedFullMessage
 		first := hctx.receivedMessages.FrontRef(hctx.receivedMessagesStorage[:])
 		if first.Msg.MsgType == handshake.MsgTypeZero || first.Ass.FragmentsCount() != 0 {
@@ -174,7 +174,7 @@ func (hctx *handshakeContext) DeliverReceivedMessages(conn *ConnectionImpl) erro
 }
 
 // also acks (removes) all previous flights
-func (hctx *handshakeContext) PushMessage(conn *ConnectionImpl, msg handshake.Message) error {
+func (hctx *handshakeContext) PushMessage(conn *Connection, msg handshake.Message) error {
 	if conn.nextMessageSeqSend == math.MaxUint16 {
 		return dtlserrors.ErrSendMessageSeqOverflow
 	}

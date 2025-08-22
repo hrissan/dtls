@@ -11,7 +11,7 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *ConnectionImpl) ReceivedServerHelloFragment(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
+func (conn *Connection) ReceivedServerHelloFragment(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 

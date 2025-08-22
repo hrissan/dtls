@@ -1,7 +1,7 @@
 // Copyright (c) 2025, Grigory Buteyko aka Hrissan
 // Licensed under the MIT License. See LICENSE for details.
 
-package transport
+package statemachine
 
 import (
 	"errors"
@@ -12,7 +12,6 @@ import (
 
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/record"
-	"github.com/hrissan/dtls/transport/statemachine"
 )
 
 var ErrServerCannotStartConnection = errors.New("server can not start connection")
@@ -23,20 +22,26 @@ func (t *Transport) goRunReceiverUDP(socket *net.UDPConn) {
 	for {
 		n, addr, err := socket.ReadFromUDPAddrPort(datagram)
 		if n != 0 { // do not check for an error here
-			t.opts.Stats.SocketReadDatagram(datagram[:n], addr)
-			t.processDatagram(datagram[:n], addr)
+			t.ProcessDatagram(datagram[:n], addr, err)
 		}
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
 				return
 			}
-			t.opts.Stats.SocketReadError(n, addr, err)
 			time.Sleep(t.opts.SocketReadErrorDelay)
 		}
 	}
 }
 
-func (t *Transport) processDatagram(datagram []byte, addr netip.AddrPort) {
+func (t *Transport) ProcessDatagram(datagram []byte, addr netip.AddrPort, err error) {
+	t.opts.Stats.SocketReadDatagram(datagram, addr)
+	if err != nil {
+		t.opts.Stats.SocketReadError(len(datagram), addr, err)
+	}
+	if len(datagram) == 0 {
+		return
+	}
+
 	conn, err := t.processDatagramImpl(datagram, addr)
 	if conn != nil {
 		if err != nil {
@@ -59,7 +64,7 @@ func (t *Transport) processDatagram(datagram []byte, addr netip.AddrPort) {
 	}
 }
 
-func (t *Transport) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (t *Transport) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*Connection, error) {
 	// receiving goroutine owns rc.connections
 	t.connPoolMu.Lock()
 	conn := t.connections[addr]
@@ -127,7 +132,7 @@ func (t *Transport) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 
 var ErrConnectionInProgress = errors.New("connection is in progress")
 
-func (t *Transport) StartConnection(addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (t *Transport) StartConnection(addr netip.AddrPort) (*Connection, error) {
 	t.connPoolMu.Lock()
 	defer t.connPoolMu.Unlock()
 	conn := t.connections[addr]
@@ -135,7 +140,7 @@ func (t *Transport) StartConnection(addr netip.AddrPort) (*statemachine.Connecti
 		return nil, ErrConnectionInProgress // for now will wait for previous handshake timeout first
 	} // TODO - if this is long going handshake, clear and start again?
 
-	conn, err := statemachine.NewClientConnection(addr, t.opts)
+	conn, err := NewClientConnection(t, addr)
 	if err != nil {
 		return nil, err
 	}

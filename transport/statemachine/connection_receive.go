@@ -14,7 +14,7 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *ConnectionImpl) ReceivedCiphertextRecord(opts *options.TransportOptions, hdr record.Ciphertext) error {
+func (conn *Connection) ReceivedCiphertextRecord(opts *options.TransportOptions, hdr record.Ciphertext) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if err := conn.checkReceiveLimits(); err != nil {
@@ -42,7 +42,7 @@ func (conn *ConnectionImpl) ReceivedCiphertextRecord(opts *options.TransportOpti
 	return dtlserrors.ErrUnknownInnerPlaintextRecordType
 }
 
-func (conn *ConnectionImpl) ReceivedAlert(encrypted bool, recordBody []byte) error {
+func (conn *Connection) ReceivedAlert(encrypted bool, recordBody []byte) error {
 	// record with an Alert type MUST contain exactly one message. [rfc8446:5.1]
 	var alert record.Alert
 	if err := alert.Parse(recordBody); err != nil {
@@ -53,7 +53,7 @@ func (conn *ConnectionImpl) ReceivedAlert(encrypted bool, recordBody []byte) err
 	return nil
 }
 
-func (conn *ConnectionImpl) receivedApplicationData(recordBody []byte) error {
+func (conn *Connection) receivedApplicationData(recordBody []byte) error {
 	log.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q", len(recordBody), conn.addr, recordBody)
 	if conn.roleServer && conn.Handler != nil {
 		// TODO - controller to play with state. Remove after testing!
@@ -75,7 +75,7 @@ func (conn *ConnectionImpl) receivedApplicationData(recordBody []byte) error {
 	return nil
 }
 
-func (conn *ConnectionImpl) receivedEncryptedHandshakeRecord(opts *options.TransportOptions, recordBody []byte, rn record.Number) error {
+func (conn *Connection) receivedEncryptedHandshakeRecord(opts *options.TransportOptions, recordBody []byte, rn record.Number) error {
 	log.Printf("dtls: got handshake record (encrypted) %d bytes from %v, message(hex): %x", len(recordBody), conn.addr, recordBody)
 	if len(recordBody) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding
@@ -110,7 +110,7 @@ func (conn *ConnectionImpl) receivedEncryptedHandshakeRecord(opts *options.Trans
 	return nil
 }
 
-func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
+func (conn *Connection) receivedNewSessionTicket(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
 	if conn.nextMessageSeqReceive == math.MaxUint16 {
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}
@@ -120,7 +120,7 @@ func (conn *ConnectionImpl) receivedNewSessionTicket(opts *options.TransportOpti
 	return nil
 }
 
-func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
+func (conn *Connection) receivedKeyUpdate(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
 	var msgKeyUpdate handshake.MsgKeyUpdate
 	if err := msgKeyUpdate.Parse(fragment.Body); err != nil {
 		return dtlserrors.ErrKeyUpdateMessageParsing

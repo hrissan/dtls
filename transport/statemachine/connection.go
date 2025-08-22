@@ -15,36 +15,14 @@ import (
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
-	"github.com/hrissan/dtls/transport/options"
 )
-
-type ConnectionHandler interface {
-	// application must remove connection from all data structures
-	// connection will be reused and become invalid immediately after method returns
-	OnDisconnect(err error)
-
-	// if connection was register for send with transport, this method will be called
-	// in the near future. record is allocated and resized to maximum size application
-	// is allowed to write.
-	// Application sets send = true, if it filled record. recordSize is # of bytes filled
-	// (recordSize can be 0 to send 0-size record, if recordSize > len(record), then panic)
-	// Application sets moreData if it still has more data to send.
-	// Application can set send = false, and moreData = true only in case it did not want
-	// to send short record (application may prefer to send longer record on the next call).
-	OnWriteApplicationRecord(record []byte) (recordSize int, send bool, moreData bool)
-
-	// every record sent will be delivered as is. Sent empty records are delivered as empty records.
-	// record points to buffer inside transport and must not be retained.
-	// bytes are guaranteed to be valid only during the call.
-	// if application returns error, connection close will be initiated, expect OnDisconnect in the near future.
-	OnReadApplicationRecord(record []byte) error
-}
 
 // Contains absolute minimum of what's mandatory for after handshake finished
 // keys, record replay buffer, ack queue for KeyUpdate and NewSessionTicket messages
 // all other information is in handshakeContext structure and will be reused
 // after handshake finish
-type ConnectionImpl struct {
+type Connection struct {
+	transport *Transport
 	// variables below mu are protected by mu, except where noted
 	mu        sync.Mutex     // TODO - check that mutex is alwasy taken
 	addr      netip.AddrPort // changes very rarely
@@ -76,9 +54,9 @@ type ConnectionImpl struct {
 	handlerHasMoreData bool
 
 	// intrusive, must not be changed except by sender, protected by sender mutex
-	InSenderQueue bool
+	inSenderQueue bool
 	// intrusive, must not be changed except by receiver, protected by receiver mutex
-	InReceiverClosingQueue bool
+	inReceiverClosingQueue bool
 	// intrusive, must not be changed except by clock, protected by clock mutex
 	TimerHeapIndex int
 	// time.Time object is larger and also has complicated comparison,
@@ -86,25 +64,27 @@ type ConnectionImpl struct {
 	FireTimeUnixNano int64
 }
 
-func NewServerConnection(addr netip.AddrPort) *ConnectionImpl {
-	return &ConnectionImpl{
+func NewServerConnection(tr *Transport, addr netip.AddrPort) *Connection {
+	return &Connection{
+		transport:  tr,
 		addr:       addr,
 		roleServer: true,
 		stateID:    smIDClosed, // explicit 0
 	}
 }
 
-func NewClientConnection(addr netip.AddrPort, opts *options.TransportOptions) (*ConnectionImpl, error) {
+func NewClientConnection(tr *Transport, addr netip.AddrPort) (*Connection, error) {
 	// TODO - take from pool, limit # of outstanding handshakes
 	hctx := newHandshakeContext(sha256.New())
-	opts.Rnd.ReadMust(hctx.localRandom[:])
+	tr.opts.Rnd.ReadMust(hctx.localRandom[:])
 	// We'd like to postpone ECC until HRR, but wolfssl requires key_share in the first client_hello
 	// TODO - offload to separate goroutine
 	// TODO - contact wolfssl team?
-	hctx.ComputeKeyShare(opts.Rnd)
+	hctx.ComputeKeyShare(tr.opts.Rnd)
 
 	// TODO - take from pool, limit # of connections
-	conn := &ConnectionImpl{
+	conn := &Connection{
+		transport:  tr,
 		addr:       addr,
 		roleServer: false,
 		stateID:    smIDHandshakeClientExpectServerHRR,
@@ -119,10 +99,10 @@ func NewClientConnection(addr netip.AddrPort, opts *options.TransportOptions) (*
 	return conn, nil
 }
 
-func (conn *ConnectionImpl) Addr() netip.AddrPort { return conn.addr }
-func (conn *ConnectionImpl) State() StateMachine  { return stateMachineStates[conn.stateID] }
+func (conn *Connection) Addr() netip.AddrPort { return conn.addr }
+func (conn *Connection) State() StateMachine  { return stateMachineStates[conn.stateID] }
 
-func (conn *ConnectionImpl) OnReceiverClose() netip.AddrPort {
+func (conn *Connection) OnReceiverClose() netip.AddrPort {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	// TODO - call user code if needed
@@ -131,11 +111,15 @@ func (conn *ConnectionImpl) OnReceiverClose() netip.AddrPort {
 	return addr
 }
 
-func (conn *ConnectionImpl) keyUpdateInProgress() bool {
+func (conn *Connection) SetHandler(handler ConnectionHandler) {
+	conn.Handler = handler
+}
+
+func (conn *Connection) keyUpdateInProgress() bool {
 	return conn.sendKeyUpdateMessageSeq != 0
 }
 
-func (conn *ConnectionImpl) keyUpdateStart(updateRequested bool) error {
+func (conn *Connection) keyUpdateStart(updateRequested bool) error {
 	if conn.keyUpdateInProgress() {
 		return nil
 	}
@@ -150,7 +134,7 @@ func (conn *ConnectionImpl) keyUpdateStart(updateRequested bool) error {
 	return nil
 }
 
-func (conn *ConnectionImpl) OnTimer() {
+func (conn *Connection) OnTimer() {
 }
 
 type exampleHandler struct {

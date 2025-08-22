@@ -11,7 +11,7 @@ type smHandshakeClientExpectCert struct {
 	smHandshake
 }
 
-func (*smHandshakeClientExpectCert) OnCertificate(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgCertificate) error {
+func (*smHandshakeClientExpectCert) OnCertificate(conn *Connection, msg handshake.Message, msgParsed handshake.MsgCertificate) error {
 	hctx := conn.hctx
 	hctx.receivedNextFlight(conn)
 	hctx.certificateChain = msgParsed

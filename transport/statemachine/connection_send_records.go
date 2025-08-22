@@ -16,7 +16,7 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *ConnectionImpl) constructRecord(opts *options.TransportOptions, datagramLeft []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {
+func (conn *Connection) constructRecord(opts *options.TransportOptions, datagramLeft []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
 	if fragmentOffset >= uint32(len(handshakeMsg.Body)) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
 		panic("invariant of send queue fragment offset violated")
@@ -73,7 +73,7 @@ func (conn *ConnectionImpl) constructRecord(opts *options.TransportOptions, data
 	return recordSize, msg.Header.FragmentInfo, rn, nil
 }
 
-func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg handshake.Fragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, record.Number, error) {
+func (conn *Connection) constructPlaintextRecord(data []byte, msg handshake.Fragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, record.Number, error) {
 	if *sendNextSegmentSequenceEpoch0 >= math.MaxUint16 {
 		// We arbitrarily decided that we do not need more outgoing sequence numbers for epoch 0
 		// We needed code to prevent overflow below anyway
@@ -92,7 +92,7 @@ func (conn *ConnectionImpl) constructPlaintextRecord(data []byte, msg handshake.
 }
 
 // returns seq number to use
-func (conn *ConnectionImpl) checkSendLimit() (uint64, error) {
+func (conn *Connection) checkSendLimit() (uint64, error) {
 	sendLimit := conn.keys.SequenceNumberLimit()
 	if conn.keys.SendNextSegmentSequence >= sendLimit {
 		return 0, dtlserrors.ErrSendRecordSeqOverflow
@@ -108,7 +108,7 @@ func (conn *ConnectionImpl) checkSendLimit() (uint64, error) {
 // Writes header and returns body to write used data to.
 // can return empty body, useful if the caller wants to write empty application data.
 // Pass datagramLeft, hdrSize and how many bytes pf insideBody filled to protectRecord
-func (conn *ConnectionImpl) prepareProtect(datagramLeft []byte, use8BitSeq bool) (hdrSize int, insideBody []byte, ok bool) {
+func (conn *Connection) prepareProtect(datagramLeft []byte, use8BitSeq bool) (hdrSize int, insideBody []byte, ok bool) {
 	hdrSize = record.OutgoingCiphertextRecordHeader16
 	if use8BitSeq {
 		hdrSize = record.OutgoingCiphertextRecordHeader8
@@ -121,7 +121,7 @@ func (conn *ConnectionImpl) prepareProtect(datagramLeft []byte, use8BitSeq bool)
 	return hdrSize, datagramLeft[hdrSize : hdrSize+userSpace], true
 }
 
-func (conn *ConnectionImpl) protectRecord(recordType byte, datagramLeft []byte, hdrSize int, insideSize int) (recordSize int, _ record.Number, _ error) {
+func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, hdrSize int, insideSize int) (recordSize int, _ record.Number, _ error) {
 	if hdrSize != record.OutgoingCiphertextRecordHeader8 && hdrSize != record.OutgoingCiphertextRecordHeader16 {
 		panic("outgoing record size must be 4 or 5 bytes")
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/hrissan/dtls/handshake"
 )
 
-func (hctx *handshakeContext) receivedFullMessage(conn *ConnectionImpl, msg handshake.Message) error {
+func (hctx *handshakeContext) receivedFullMessage(conn *Connection, msg handshake.Message) error {
 	switch msg.MsgType {
 	case handshake.MsgTypeServerHello:
 		var msgParsed handshake.MsgServerHello

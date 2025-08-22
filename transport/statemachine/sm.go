@@ -14,7 +14,7 @@ import (
 )
 
 // TODO - move out
-func (hctx *handshakeContext) generateFinished(conn *ConnectionImpl) handshake.Message {
+func (hctx *handshakeContext) generateFinished(conn *Connection) handshake.Message {
 	// [rfc8446:4.4.4] - finished
 	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
 	finishedTranscriptHash := hctx.transcriptHasher.Sum(finishedTranscriptHashStorage[:0])
@@ -65,24 +65,24 @@ var stateMachineStates = [...]StateMachine{
 type StateMachine interface {
 	// this is not in state machine and always ignored
 	// TODO - contact standard authors to clarify [rfc9147:4.1]
-	// OnPlaintextAck(conn *ConnectionImpl)
+	// OnPlaintextAck(conn *Connection)
 
-	//OnPlaintextAlert(conn *ConnectionImpl)
-	//OnPlaintextClientHello(conn *ConnectionImpl)
-	//OnPlaintextServerHello(conn *ConnectionImpl)
+	//OnPlaintextAlert(conn *Connection)
+	//OnPlaintextClientHello(conn *Connection)
+	//OnPlaintextServerHello(conn *Connection)
 
-	OnHandshakeMsgFragment(conn *ConnectionImpl, opts *options.TransportOptions,
+	OnHandshakeMsgFragment(conn *Connection, opts *options.TransportOptions,
 		fragment handshake.Fragment, rn record.Number) error
 
-	OnServerHello(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgServerHello) error
-	OnEncryptedExtensions(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.ExtensionsSet) error
-	OnCertificate(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgCertificate) error
-	OnCertificateVerify(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgCertificateVerify) error
-	OnFinished(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgFinished) error
+	OnServerHello(conn *Connection, msg handshake.Message, msgParsed handshake.MsgServerHello) error
+	OnEncryptedExtensions(conn *Connection, msg handshake.Message, msgParsed handshake.ExtensionsSet) error
+	OnCertificate(conn *Connection, msg handshake.Message, msgParsed handshake.MsgCertificate) error
+	OnCertificateVerify(conn *Connection, msg handshake.Message, msgParsed handshake.MsgCertificateVerify) error
+	OnFinished(conn *Connection, msg handshake.Message, msgParsed handshake.MsgFinished) error
 
-	//OnEncryptedApplicationData(conn *ConnectionImpl)
-	//OnEncryptedAlert(conn *ConnectionImpl)
-	//OnEncryptedKeyUpdate(conn *ConnectionImpl)
+	//OnEncryptedApplicationData(conn *Connection)
+	//OnEncryptedAlert(conn *Connection)
+	//OnEncryptedKeyUpdate(conn *Connection)
 }
 
 type smClientSentHello1 struct {

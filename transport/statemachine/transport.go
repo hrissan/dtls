@@ -1,10 +1,9 @@
 // Copyright (c) 2025, Grigory Buteyko aka Hrissan
 // Licensed under the MIT License. See LICENSE for details.
 
-package transport
+package statemachine
 
 import (
-	"log"
 	"net"
 	"net/netip"
 	"sync"
@@ -12,7 +11,6 @@ import (
 	"github.com/hrissan/dtls/circular"
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/transport/options"
-	"github.com/hrissan/dtls/transport/statemachine"
 )
 
 type Transport struct {
@@ -25,12 +23,12 @@ type Transport struct {
 	// closing connections are at the front,
 	// so we can close connections 1 by 1, by looking at the front,
 	// closing, and putting to the back
-	connPool circular.Buffer[*statemachine.ConnectionImpl]
+	connPool circular.Buffer[*Connection]
 
 	// owned by receiving goroutine
 	// only ClientHello with correct cookie and larger timestamp replaces
 	// previous handshake or connection here [rfc9147:5.11]
-	connections map[netip.AddrPort]*statemachine.ConnectionImpl
+	connections map[netip.AddrPort]*Connection
 
 	// TODO - limit on max number of parallel handshakes, clear items by LRU
 }
@@ -43,12 +41,17 @@ func NewTransport(opts *options.TransportOptions) *Transport {
 	}
 	t.cookieState.SetRand(opts.Rnd)
 	if opts.Preallocate {
-		t.connections = make(map[netip.AddrPort]*statemachine.ConnectionImpl, opts.MaxConnections)
+		t.connections = make(map[netip.AddrPort]*Connection, opts.MaxConnections)
 		t.connPool.Reserve(opts.MaxConnections)
 	} else {
-		t.connections = map[netip.AddrPort]*statemachine.ConnectionImpl{}
+		t.connections = map[netip.AddrPort]*Connection{}
 	}
 	return t
+}
+
+// socket must be closed by socket owner (externally)
+func (t *Transport) Options() *options.TransportOptions {
+	return t.opts
 }
 
 // socket must be closed by socket owner (externally)
@@ -65,18 +68,4 @@ func (t *Transport) GoRunUDP(socket *net.UDPConn) {
 	}()
 	t.goRunReceiverUDP(socket)
 	<-ch
-}
-
-// for tests and tools
-func OpenSocketMust(addressPort string) *net.UDPConn {
-	udpAddr, err := net.ResolveUDPAddr("udp", addressPort)
-	if err != nil {
-		log.Fatalf("dtls: cannot resolve local udp address %s: %v", addressPort, err)
-	}
-	socket, err := net.ListenUDP("udp", udpAddr)
-	if err != nil {
-		log.Fatalf("dtls: cannot listen to udp address %s: %v", addressPort, err)
-	}
-	log.Printf("dtls: opened socket for address %s localAddr %s\n", addressPort, socket.LocalAddr().String())
-	return socket
 }

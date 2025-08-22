@@ -123,7 +123,7 @@ func generateServerCertificateVerify(opts *options.TransportOptions, hctx *hands
 	}, nil
 }
 
-func (conn *ConnectionImpl) OnClientHello2(opts *options.TransportOptions,
+func (conn *Connection) OnClientHello2(opts *options.TransportOptions,
 	msg handshake.Message, msgClientHello handshake.MsgClientHello,
 	params cookie.Params) error {
 

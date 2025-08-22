@@ -13,7 +13,7 @@ type smHandshakeClientExpectServerHRR struct {
 	smHandshake
 }
 
-func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgServerHello) error {
+func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg handshake.Message, msgParsed handshake.MsgServerHello) error {
 	hctx := conn.hctx
 	hctx.receivedNextFlight(conn)
 	if err := IsSupportedServerHello(&msgParsed); err != nil {

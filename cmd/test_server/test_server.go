@@ -7,8 +7,8 @@ import (
 	"log"
 
 	"github.com/hrissan/dtls/dtlsrand"
-	"github.com/hrissan/dtls/transport"
 	"github.com/hrissan/dtls/transport/options"
+	"github.com/hrissan/dtls/transport/sockets"
 	"github.com/hrissan/dtls/transport/statemachine"
 	"github.com/hrissan/dtls/transport/stats"
 )
@@ -16,7 +16,7 @@ import (
 func main() {
 	statemachine.PrintSizeofInfo()
 
-	socket := transport.OpenSocketMust("127.0.0.1:11111")
+	socket := sockets.OpenSocketMust("127.0.0.1:11111")
 
 	st := stats.NewStatsLogVerbose()
 	rnd := dtlsrand.CryptoRand()
@@ -27,7 +27,7 @@ func main() {
 		"../../wolfssl-examples/certs/server-key.pem"); err != nil {
 		log.Fatal(err)
 	}
-	t := transport.NewTransport(opts)
+	t := statemachine.NewTransport(opts)
 
 	t.GoRunUDP(socket)
 }

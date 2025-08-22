@@ -13,7 +13,7 @@ import (
 
 // [rfc9147:4.5.3] we check against AEAD limit, initiate key update well before
 // reaching limit, and close connection if limit reached
-func (conn *ConnectionImpl) checkReceiveLimits() error {
+func (conn *Connection) checkReceiveLimits() error {
 	receiveLimit := conn.keys.SequenceNumberLimit()
 	if conn.keys.FailedDeprotectionCounterNewReceiveKeys >= receiveLimit {
 		return dtlserrors.ErrReceiveRecordSeqOverflowNextEpoch
@@ -39,7 +39,7 @@ func (conn *ConnectionImpl) checkReceiveLimits() error {
 }
 
 // returns contentType == 0 (which is impossible due to padding format) with err == nil when replay detected
-func (conn *ConnectionImpl) deprotectLocked(hdr record.Ciphertext) ([]byte, record.Number, byte, error) {
+func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.Number, byte, error) {
 	receiver := &conn.keys.Receive
 	if receiver.Symmetric.Epoch == 0 {
 		return nil, record.Number{}, 0, dtlserrors.WarnCannotDecryptInEpoch0

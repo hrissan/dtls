@@ -15,13 +15,13 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *ConnectionImpl) HasDataToSend() bool {
+func (conn *Connection) HasDataToSend() bool {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	return conn.hasDataToSendLocked()
 }
 
-func (conn *ConnectionImpl) hasDataToSendLocked() bool {
+func (conn *Connection) hasDataToSendLocked() bool {
 	hctx := conn.hctx
 	if hctx != nil && hctx.sendQueue.HasDataToSend() {
 		return true
@@ -35,7 +35,7 @@ func (conn *ConnectionImpl) hasDataToSendLocked() bool {
 }
 
 // must not write over len(datagram), returns part of datagram filled
-func (conn *ConnectionImpl) ConstructDatagram(opts *options.TransportOptions, datagram []byte) (addr netip.AddrPort, datagramSize int, addToSendQueue bool) {
+func (conn *Connection) ConstructDatagram(opts *options.TransportOptions, datagram []byte) (addr netip.AddrPort, datagramSize int, addToSendQueue bool) {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	addr = conn.addr
@@ -47,7 +47,7 @@ func (conn *ConnectionImpl) ConstructDatagram(opts *options.TransportOptions, da
 	return
 }
 
-func (conn *ConnectionImpl) constructDatagram(opts *options.TransportOptions, datagram []byte) (int, bool, error) {
+func (conn *Connection) constructDatagram(opts *options.TransportOptions, datagram []byte) (int, bool, error) {
 	var datagramSize int
 	hctx := conn.hctx
 	// we send acks before messages, because peer with receive queue for the single message
@@ -138,7 +138,7 @@ func (conn *ConnectionImpl) constructDatagram(opts *options.TransportOptions, da
 	return datagramSize, conn.hasDataToSendLocked(), nil
 }
 
-func (conn *ConnectionImpl) constructDatagramAcks(opts *options.TransportOptions, datagramLeft []byte) (int, error) {
+func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, datagramLeft []byte) (int, error) {
 	if conn.keys.Send.Symmetric.Epoch == 0 {
 		return 0, nil // no one should believe unencrypted acks, so we never send them
 	}

@@ -1,7 +1,7 @@
 // Copyright (c) 2025, Grigory Buteyko aka Hrissan
 // Licensed under the MIT License. See LICENSE for details.
 
-package transport
+package statemachine
 
 import (
 	"crypto/sha256"
@@ -12,10 +12,9 @@ import (
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
-	"github.com/hrissan/dtls/transport/statemachine"
 )
 
-func (t *Transport) receivedClientHello(conn *statemachine.ConnectionImpl, msg handshake.Message, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
+func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message, addr netip.AddrPort) (*Connection, error) {
 	var msgClientHello handshake.MsgClientHello
 	if err := msgClientHello.Parse(msg.Body); err != nil {
 		return conn, dtlserrors.WarnPlaintextClientHelloParsing
@@ -53,7 +52,7 @@ func (t *Transport) receivedClientHello(conn *statemachine.ConnectionImpl, msg h
 		if hrrStorage == nil {
 			return conn, dtlserrors.ErrServerHelloRetryRequestQueueFull
 		}
-		hrrDatagram, _ := statemachine.GenerateStatelessHRR((*hrrStorage)[:0], ck, params.KeyShareSet)
+		hrrDatagram, _ := GenerateStatelessHRR((*hrrStorage)[:0], ck, params.KeyShareSet)
 		if len(hrrDatagram) > len(*hrrStorage) {
 			panic("Large HRR datagram must not be generated")
 		}
@@ -75,7 +74,7 @@ func (t *Transport) receivedClientHello(conn *statemachine.ConnectionImpl, msg h
 	}
 	// we should check all parameters above, so that we do not create connection for unsupported params
 	if conn == nil {
-		conn = statemachine.NewServerConnection(addr)
+		conn = NewServerConnection(t, addr)
 		t.connections[addr] = conn
 	}
 	if err := conn.OnClientHello2(t.opts, msg, msgClientHello, params); err != nil {

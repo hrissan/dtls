@@ -22,7 +22,7 @@ Directional Keys: %d (Contain Symmetric Keys + Secrets for key update)
 Symmetric Keys:   %d (For TLS_AES_128_GCM_SHA256)
 `,
 		unsafe.Sizeof(handshakeContext{}),
-		unsafe.Sizeof(ConnectionImpl{}),
+		unsafe.Sizeof(Connection{}),
 		unsafe.Sizeof(keys.Keys{}),
 		unsafe.Sizeof(keys.DirectionKeys{}),
 		unsafe.Sizeof(keys.SymmetricKeys{}))

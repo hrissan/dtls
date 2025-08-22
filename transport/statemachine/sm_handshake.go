@@ -14,7 +14,7 @@ type smHandshake struct {
 	smClosed
 }
 
-func (*smHandshake) OnHandshakeMsgFragment(conn *ConnectionImpl, opts *options.TransportOptions,
+func (*smHandshake) OnHandshakeMsgFragment(conn *Connection, opts *options.TransportOptions,
 	fragment handshake.Fragment, rn record.Number) error {
 
 	if fragment.Header.MsgSeq < conn.hctx.firstMessageSeqInReceiveQueue(conn) {

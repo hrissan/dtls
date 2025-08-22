@@ -62,7 +62,7 @@ func (sq *sendQueue) HasDataToSend() bool {
 	return sq.messageOffset < sq.messages.Len() && sq.sentRecords.Len() < sq.sentRecords.Cap(sq.sentRecordsStorage[:])
 }
 
-func (sq *sendQueue) ConstructDatagram(conn *ConnectionImpl, opts *options.TransportOptions, datagram []byte) (int, error) {
+func (sq *sendQueue) ConstructDatagram(conn *Connection, opts *options.TransportOptions, datagram []byte) (int, error) {
 	var datagramSize int
 	for {
 		if sq.messageOffset > sq.messages.Len() {
@@ -131,7 +131,7 @@ func findSentRecordIndexExt(elements []record2Fragment, sentRecords *circular.Bu
 	return nil
 }
 
-func (sq *sendQueue) Ack(conn *ConnectionImpl, rn record.Number) {
+func (sq *sendQueue) Ack(conn *Connection, rn record.Number) {
 	fragmentPtr := findSentRecordIndexExt(sq.sentRecordsStorage[:], &sq.sentRecords, rn)
 	if fragmentPtr == nil {
 		return

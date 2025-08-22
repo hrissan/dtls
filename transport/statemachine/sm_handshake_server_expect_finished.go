@@ -17,7 +17,7 @@ type smHandshakeServerExpectFinished struct {
 	smHandshake
 }
 
-func (*smHandshakeServerExpectFinished) OnFinished(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgFinished) error {
+func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handshake.Message, msgParsed handshake.MsgFinished) error {
 	hctx := conn.hctx
 	hctx.receivedNextFlight(conn)
 	// [rfc8446:4.4.4] - finished

@@ -1,7 +1,7 @@
 // Copyright (c) 2025, Grigory Buteyko aka Hrissan
 // Licensed under the MIT License. See LICENSE for details.
 
-package sender
+package transport
 
 import (
 	"errors"
@@ -20,13 +20,13 @@ import (
 const MinimumPMTUv4 = 576 - 8 - 20  // minus UDP header, minus IPv4 header
 const MinimumPMTUv6 = 1280 - 8 - 40 // minus UDP header, minus IPv6 header
 
-type OutgoingHRR struct {
+type outgoingHRR struct {
 	data *[constants.MaxOutgoingHRRDatagramLength]byte
 	size int
 	addr netip.AddrPort
 }
 
-type Sender struct {
+type sender struct {
 	opts *options.TransportOptions
 
 	mu       sync.Mutex
@@ -35,14 +35,14 @@ type Sender struct {
 
 	// hello retry request is stateless.
 	// we limit (options.HelloRetryQueueSize) how many such datagrams we wish to store
-	helloRetryQueue circular.Buffer[OutgoingHRR]
+	helloRetryQueue circular.Buffer[outgoingHRR]
 	helloRetryPool  []*[constants.MaxOutgoingHRRDatagramLength]byte // stack, not circular buffer
 
 	wantToWriteQueue circular.Buffer[*statemachine.ConnectionImpl]
 }
 
-func NewSender(opts *options.TransportOptions) *Sender {
-	snd := &Sender{
+func newSender(opts *options.TransportOptions) *sender {
+	snd := &sender{
 		opts: opts,
 	}
 	snd.cond = sync.NewCond(&snd.mu)
@@ -56,7 +56,7 @@ func NewSender(opts *options.TransportOptions) *Sender {
 }
 
 // socket must be closed by socket owner (externally)
-func (snd *Sender) Close() {
+func (snd *sender) Close() {
 	snd.mu.Lock()
 	defer snd.mu.Unlock()
 	snd.shutdown = true
@@ -64,7 +64,7 @@ func (snd *Sender) Close() {
 }
 
 // blocks until socket is closed (externally)
-func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
+func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 	datagram := make([]byte, 65536)
 	snd.mu.Lock()
 	for {
@@ -114,7 +114,7 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 }
 
 // returns false if socket closed
-func (snd *Sender) sendDatagram(socket *net.UDPConn, data []byte, addr netip.AddrPort) bool {
+func (snd *sender) sendDatagram(socket *net.UDPConn, data []byte, addr netip.AddrPort) bool {
 	snd.opts.Stats.SocketWriteDatagram(data, addr)
 	n, err := socket.WriteToUDPAddrPort(data, addr)
 	if err != nil {
@@ -128,7 +128,7 @@ func (snd *Sender) sendDatagram(socket *net.UDPConn, data []byte, addr netip.Add
 }
 
 // returns nil if hello retry queue is at max capacity
-func (t *Sender) PopHelloRetryDatagramStorage() *[constants.MaxOutgoingHRRDatagramLength]byte {
+func (t *sender) PopHelloRetryDatagramStorage() *[constants.MaxOutgoingHRRDatagramLength]byte {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.helloRetryQueue.Len() >= t.opts.MaxHelloRetryQueueSize {
@@ -143,7 +143,7 @@ func (t *Sender) PopHelloRetryDatagramStorage() *[constants.MaxOutgoingHRRDatagr
 	return &[constants.MaxOutgoingHRRDatagramLength]byte{}
 }
 
-func (snd *Sender) SendHelloRetryDatagram(data *[constants.MaxOutgoingHRRDatagramLength]byte, size int, addr netip.AddrPort) {
+func (snd *sender) SendHelloRetryDatagram(data *[constants.MaxOutgoingHRRDatagramLength]byte, size int, addr netip.AddrPort) {
 	if data == nil {
 		panic("must be chunk previously allocated by PopHelloRetryDatagramStorage")
 	}
@@ -152,11 +152,11 @@ func (snd *Sender) SendHelloRetryDatagram(data *[constants.MaxOutgoingHRRDatagra
 	}
 	snd.mu.Lock()
 	defer snd.mu.Unlock()
-	snd.helloRetryQueue.PushBack(OutgoingHRR{data: data, size: size, addr: addr})
+	snd.helloRetryQueue.PushBack(outgoingHRR{data: data, size: size, addr: addr})
 	snd.cond.Signal()
 }
 
-func (snd *Sender) RegisterConnectionForSend(conn *statemachine.ConnectionImpl) {
+func (snd *sender) RegisterConnectionForSend(conn *statemachine.ConnectionImpl) {
 	snd.mu.Lock()
 	defer snd.mu.Unlock()
 	if conn.InSenderQueue {

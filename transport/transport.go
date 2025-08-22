@@ -12,14 +12,13 @@ import (
 	"github.com/hrissan/dtls/circular"
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/transport/options"
-	"github.com/hrissan/dtls/transport/sender"
 	"github.com/hrissan/dtls/transport/statemachine"
 )
 
 type Transport struct {
 	opts        *options.TransportOptions
 	cookieState cookie.CookieState
-	snd         *sender.Sender
+	snd         *sender
 
 	connPoolMu sync.Mutex
 	// closed connections are at the back
@@ -37,7 +36,7 @@ type Transport struct {
 }
 
 func NewTransport(opts *options.TransportOptions) *Transport {
-	snd := sender.NewSender(opts)
+	snd := newSender(opts)
 	t := &Transport{
 		opts: opts,
 		snd:  snd,

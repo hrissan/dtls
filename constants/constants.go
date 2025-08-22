@@ -18,7 +18,7 @@ const MaxSendRecordsQueue = 16
 const MaxSendMessagesQueue = 8
 const MaxReceiveMessagesQueue = 8
 
-const MaxAssemblerHoles = 4 // minimal useful value 2
+const MaxAssemblerHoles = 3 // minimal useful value 2. 3 allows to pack 3 fragments and counter into 32 bytes
 
 // We do not want to send 25 bytes of headers at the end of datagram to send 1 byte of body.
 // If there is not enough space to send headers plus MinFragmentBodySize bytes,

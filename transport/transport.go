@@ -9,45 +9,52 @@ import (
 	"net/netip"
 	"sync"
 
+	"github.com/hrissan/dtls/circular"
+	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/transport/options"
-	"github.com/hrissan/dtls/transport/receiver"
 	"github.com/hrissan/dtls/transport/sender"
+	"github.com/hrissan/dtls/transport/statemachine"
 )
 
 type Transport struct {
-	opts *options.TransportOptions
+	opts        *options.TransportOptions
+	cookieState cookie.CookieState
+	snd         *sender.Sender
 
-	snd *sender.Sender
-	rc  *receiver.Receiver
+	connPoolMu sync.Mutex
+	// closed connections are at the back
+	// closing connections are at the front,
+	// so we can close connections 1 by 1, by looking at the front,
+	// closing, and putting to the back
+	connPool circular.Buffer[*statemachine.ConnectionImpl]
 
-	handshakesConnectionsMu sync.RWMutex
-	// only ClientHello with correct cookie and larger timestamp replaces previous handshake here [rfc9147:5.11]
-	// handshakes map[netip.AddrPort]*HandshakeContext
+	// owned by receiving goroutine
+	// only ClientHello with correct cookie and larger timestamp replaces
+	// previous handshake or connection here [rfc9147:5.11]
+	connections map[netip.AddrPort]*statemachine.ConnectionImpl
 
-	// we move handshake here, once it is finished
-	connections map[netip.AddrPort]*Connection
+	// TODO - limit on max number of parallel handshakes, clear items by LRU
 }
 
 func NewTransport(opts *options.TransportOptions) *Transport {
 	snd := sender.NewSender(opts)
-	rc := receiver.NewReceiver(opts, snd)
 	t := &Transport{
-		opts:        opts,
-		snd:         snd,
-		rc:          rc,
-		connections: map[netip.AddrPort]*Connection{},
+		opts: opts,
+		snd:  snd,
+	}
+	t.cookieState.SetRand(opts.Rnd)
+	if opts.Preallocate {
+		t.connections = make(map[netip.AddrPort]*statemachine.ConnectionImpl, opts.MaxConnections)
+		t.connPool.Reserve(opts.MaxConnections)
+	} else {
+		t.connections = map[netip.AddrPort]*statemachine.ConnectionImpl{}
 	}
 	return t
 }
 
 // socket must be closed by socket owner (externally)
 func (t *Transport) Close() {
-	t.rc.Close()
 	t.snd.Close()
-}
-
-func (t *Transport) StartConnection(peerAddr netip.AddrPort) error {
-	return t.rc.StartConnection(peerAddr)
 }
 
 // blocks until socket is closed (externally)
@@ -57,7 +64,7 @@ func (t *Transport) GoRunUDP(socket *net.UDPConn) {
 		t.snd.GoRunUDP(socket)
 		ch <- struct{}{}
 	}()
-	t.rc.GoRunUDP(socket)
+	t.goRunReceiverUDP(socket)
 	<-ch
 }
 

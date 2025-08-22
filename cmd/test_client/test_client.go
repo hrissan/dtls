@@ -28,7 +28,7 @@ func main() {
 	if err != nil {
 		log.Panic("dtls: cannot parse peer address: ", err)
 	}
-	_ = t.StartConnection(peerAddr)
+	_, _ = t.StartConnection(peerAddr)
 
 	t.GoRunUDP(socket)
 }

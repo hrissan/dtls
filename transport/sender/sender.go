@@ -155,13 +155,13 @@ func (snd *Sender) SendHelloRetryDatagram(data *[constants.MaxOutgoingHRRDatagra
 	snd.cond.Signal()
 }
 
-func (snd *Sender) RegisterConnectionForSend(hctx *statemachine.ConnectionImpl) {
+func (snd *Sender) RegisterConnectionForSend(conn *statemachine.ConnectionImpl) {
 	snd.mu.Lock()
 	defer snd.mu.Unlock()
-	if hctx.InSenderQueue {
+	if conn.InSenderQueue {
 		return
 	}
-	hctx.InSenderQueue = true
-	snd.wantToWriteQueue.PushBack(hctx)
+	conn.InSenderQueue = true
+	snd.wantToWriteQueue.PushBack(conn)
 	snd.cond.Signal()
 }

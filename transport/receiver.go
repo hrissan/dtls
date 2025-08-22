@@ -140,5 +140,6 @@ func (t *Transport) StartConnection(addr netip.AddrPort) (*statemachine.Connecti
 		return nil, err
 	}
 	t.connections[addr] = conn
+	t.snd.RegisterConnectionForSend(conn)
 	return conn, nil
 }

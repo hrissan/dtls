@@ -132,7 +132,7 @@ func (conn *ConnectionImpl) protectRecord(recordType byte, datagramLeft []byte, 
 	send := &conn.keys.Send
 	epoch := send.Symmetric.Epoch
 	rn := record.NumberWith(epoch, seq)
-	log.Printf("constructing ciphertext application with rn={%d,%d} hdrSize = %d", rn.Epoch(), rn.SeqNum(), hdrSize)
+	log.Printf("constructing ciphertext type %d with rn={%d,%d} hdrSize = %d body: %x", recordType, rn.Epoch(), rn.SeqNum(), hdrSize, datagramLeft[hdrSize:hdrSize+insideSize])
 
 	gcm := send.Symmetric.Write
 	iv := send.Symmetric.WriteIV

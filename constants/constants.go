@@ -18,6 +18,8 @@ const MaxSendRecordsQueue = 16
 const MaxSendMessagesQueue = 8
 const MaxReceiveMessagesQueue = 8
 
+const MaxAssemblerHoles = 4
+
 // We do not want to send 25 bytes of headers at the end of datagram to send 1 byte of body.
 // If there is not enough space to send headers plus MinFragmentBodySize bytes,
 // of body, we will send it in the next datagram.

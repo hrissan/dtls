@@ -15,7 +15,15 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *Connection) HasDataToSend() bool {
+func (conn *Connection) SetWriteable() {
+	if conn.handlerWriteable {
+		return // save
+	}
+	conn.handlerWriteable = true
+	conn.transport.snd.RegisterConnectionForSend(conn)
+}
+
+func (conn *Connection) hasDataToSend() bool {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	return conn.hasDataToSendLocked()
@@ -29,25 +37,25 @@ func (conn *Connection) hasDataToSendLocked() bool {
 	if conn.keys.Send.Symmetric.Epoch != 0 && conn.keys.SendAcks.GetBitCount() != 0 {
 		return true
 	}
-	return conn.handlerHasMoreData ||
+	return conn.handlerWriteable ||
 		(conn.keyUpdateInProgress() && (conn.sentKeyUpdateRN == record.Number{})) ||
 		(conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN == record.Number{}))
 }
 
 // must not write over len(datagram), returns part of datagram filled
-func (conn *Connection) ConstructDatagram(opts *options.TransportOptions, datagram []byte) (addr netip.AddrPort, datagramSize int, addToSendQueue bool) {
+func (conn *Connection) constructDatagram(opts *options.TransportOptions, datagram []byte) (addr netip.AddrPort, datagramSize int, addToSendQueue bool) {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	addr = conn.addr
 	var err error
-	datagramSize, addToSendQueue, err = conn.constructDatagram(opts, datagram)
+	datagramSize, addToSendQueue, err = conn.constructDatagramLocked(opts, datagram)
 	if err != nil {
 		log.Printf("TODO - close connection")
 	}
 	return
 }
 
-func (conn *Connection) constructDatagram(opts *options.TransportOptions, datagram []byte) (int, bool, error) {
+func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, datagram []byte) (int, bool, error) {
 	var datagramSize int
 	hctx := conn.hctx
 	// we send acks before messages, because peer with receive queue for the single message
@@ -105,7 +113,7 @@ func (conn *Connection) constructDatagram(opts *options.TransportOptions, datagr
 	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN != record.Number{}) {
 		// TODO
 	}
-	if conn.Handler != nil { // application data
+	if conn.handler != nil { // application data
 		// If we remove "if" below, we put ack for client finished together with
 		// application data into the same datagram. Then wolfSSL_connect will return
 		// err = -441, Application data is available for reading
@@ -116,7 +124,7 @@ func (conn *Connection) constructDatagram(opts *options.TransportOptions, datagr
 		hdrSize := record.OutgoingCiphertextRecordHeader16
 		hdrSize, insideBody, ok := conn.prepareProtect(datagram[datagramSize:], opts.Use8BitSeq)
 		if ok && len(insideBody) >= constants.MinFragmentBodySize {
-			insideSize, send, add := conn.Handler.OnWriteApplicationRecord(insideBody)
+			insideSize, send, add := conn.handler.OnWriteRecord(insideBody)
 			if insideSize > len(insideBody) {
 				panic("ciphertext user handler overflows allowed record")
 			}
@@ -131,7 +139,7 @@ func (conn *Connection) constructDatagram(opts *options.TransportOptions, datagr
 				datagramSize += recordSize
 			}
 			if !add {
-				conn.handlerHasMoreData = false
+				conn.handlerWriteable = false
 			}
 		}
 	}

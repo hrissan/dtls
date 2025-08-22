@@ -48,5 +48,5 @@ func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg han
 	// server decided to skip HRR, this is tricky SM switch, we should carefully test it
 	conn.hctx.serverUsedHRR = false
 	conn.stateID = smIDHandshakeClientExpectServerHello
-	return conn.State().OnServerHello(conn, msg, msgParsed)
+	return conn.state().OnServerHello(conn, msg, msgParsed)
 }

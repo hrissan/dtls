@@ -37,7 +37,7 @@ type Connection struct {
 	sentNewSessionTicketRN record.Number // if != 0, already sent, on resend overwrite rn
 
 	hctx    *handshakeContext // handshakeContext content is also protected by mutex above
-	Handler ConnectionHandler
+	handler ConnectionHandler
 
 	// Messages are protocol above records, these counters do not reset for connection lifetime.
 	// If any reaches 2^16, connection will be closed by both peers.
@@ -51,17 +51,17 @@ type Connection struct {
 	roleServer bool                // TODO - remove
 	stateID    stateMachineStateID // index in global table
 	// set when user signals it has data, clears after OnWriteRecord returns false
-	handlerHasMoreData bool
+	handlerWriteable bool
 
 	// intrusive, must not be changed except by sender, protected by sender mutex
 	inSenderQueue bool
 	// intrusive, must not be changed except by receiver, protected by receiver mutex
 	inReceiverClosingQueue bool
 	// intrusive, must not be changed except by clock, protected by clock mutex
-	TimerHeapIndex int
+	timerHeapIndex int
 	// time.Time object is larger and also has complicated comparison,
 	// which might be invalid as a heap predicate
-	FireTimeUnixNano int64
+	fireTimeUnixNano int64
 }
 
 func NewServerConnection(tr *Transport, addr netip.AddrPort) *Connection {
@@ -99,20 +99,15 @@ func NewClientConnection(tr *Transport, addr netip.AddrPort) (*Connection, error
 	return conn, nil
 }
 
-func (conn *Connection) Addr() netip.AddrPort { return conn.addr }
-func (conn *Connection) State() StateMachine  { return stateMachineStates[conn.stateID] }
+func (conn *Connection) state() StateMachine { return stateMachineStates[conn.stateID] }
 
-func (conn *Connection) OnReceiverClose() netip.AddrPort {
+func (conn *Connection) onReceiverClose() netip.AddrPort {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	// TODO - call user code if needed
 	addr := conn.addr
 	conn.addr = netip.AddrPort{}
 	return addr
-}
-
-func (conn *Connection) SetHandler(handler ConnectionHandler) {
-	conn.Handler = handler
 }
 
 func (conn *Connection) keyUpdateInProgress() bool {
@@ -134,7 +129,7 @@ func (conn *Connection) keyUpdateStart(updateRequested bool) error {
 	return nil
 }
 
-func (conn *Connection) OnTimer() {
+func (conn *Connection) onTimer() {
 }
 
 type exampleHandler struct {
@@ -145,7 +140,7 @@ func (h *exampleHandler) OnDisconnect(err error) {
 
 }
 
-func (h *exampleHandler) OnWriteApplicationRecord(recordData []byte) (recordSize int, send bool, addToSendQueue bool) {
+func (h *exampleHandler) OnWriteRecord(recordData []byte) (recordSize int, send bool, addToSendQueue bool) {
 	toSend := copy(recordData, h.toSend)
 	h.toSend = h.toSend[toSend:]
 	return toSend, toSend != 0, len(h.toSend) > 0

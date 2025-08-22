@@ -89,9 +89,9 @@ func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 		datagramSize := 0
 		addToSendQueue := false
 		if conn != nil {
-			addr, datagramSize, addToSendQueue = conn.ConstructDatagram(snd.opts, datagram[:MinimumPMTUv4])
+			addr, datagramSize, addToSendQueue = conn.constructDatagram(snd.opts, datagram[:MinimumPMTUv4])
 			if datagramSize == 0 && addToSendQueue {
-				panic("ConstructDatagram invariant violation")
+				panic("constructDatagram invariant violation")
 			}
 			if datagramSize != 0 {
 				if !snd.sendDatagram(socket, datagram[:datagramSize], addr) {

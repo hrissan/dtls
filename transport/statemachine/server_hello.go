@@ -11,11 +11,11 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *Connection) ReceivedServerHelloFragment(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
+func (conn *Connection) receivedServerHelloFragment(opts *options.TransportOptions, fragment handshake.Fragment, rn record.Number) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 
-	return conn.State().OnHandshakeMsgFragment(conn, opts, fragment, rn)
+	return conn.state().OnHandshakeMsgFragment(conn, opts, fragment, rn)
 }
 
 func (hctx *handshakeContext) generateClientHello(setCookie bool, ck cookie.Cookie) handshake.Message {

@@ -18,7 +18,7 @@ func (t *Transport) receivedPlaintextRecord(conn *Connection, hdr record.Plainte
 		if conn == nil { // Will not respond with alert, otherwise endless cycle
 			return conn, nil
 		}
-		return conn, conn.ReceivedAlert(false, hdr.Body)
+		return conn, conn.receivedAlert(false, hdr.Body)
 	case record.RecordTypeAck:
 		log.Printf("dtls: got ack record (plaintext) %d bytes from %v, message(hex): %x", len(hdr.Body), addr, hdr.Body)
 		// unencrypted acks can only acknowledge unencrypted messaged, so very niche, we simply ignore them
@@ -66,7 +66,7 @@ func (t *Transport) receivedPlaintextHandshake(conn *Connection, hdr record.Plai
 			if conn == nil {
 				return conn, dtlserrors.ErrServerHelloNoActiveConnection
 			}
-			return conn, conn.ReceivedServerHelloFragment(t.opts, fragment, record.NumberWith(0, hdr.SequenceNumber))
+			return conn, conn.receivedServerHelloFragment(t.opts, fragment, record.NumberWith(0, hdr.SequenceNumber))
 		default:
 			t.opts.Stats.MustBeEncrypted("handshake", handshake.MsgTypeToName(fragment.Header.MsgType), addr, fragment.Header)
 			return conn, dtlserrors.WarnHandshakeMessageMustBeEncrypted

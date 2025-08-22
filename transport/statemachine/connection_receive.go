@@ -6,7 +6,6 @@ package statemachine
 import (
 	"log"
 	"math"
-	"strings"
 
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
@@ -14,7 +13,7 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *Connection) ReceivedCiphertextRecord(opts *options.TransportOptions, hdr record.Ciphertext) error {
+func (conn *Connection) receivedCiphertextRecord(opts *options.TransportOptions, hdr record.Ciphertext) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if err := conn.checkReceiveLimits(); err != nil {
@@ -29,9 +28,9 @@ func (conn *Connection) ReceivedCiphertextRecord(opts *options.TransportOptions,
 	// [rfc9147:4.1]
 	switch contentType { // TODO - call StateMachine here
 	case record.RecordTypeAlert:
-		return conn.ReceivedAlert(true, recordBody)
+		return conn.receivedAlert(true, recordBody)
 	case record.RecordTypeAck:
-		// does not depend on conn.State()
+		// does not depend on conn.state()
 		return conn.receivedEncryptedAck(opts, recordBody)
 	case record.RecordTypeApplicationData:
 		// TODO - allow or drop based on early data state
@@ -42,7 +41,7 @@ func (conn *Connection) ReceivedCiphertextRecord(opts *options.TransportOptions,
 	return dtlserrors.ErrUnknownInnerPlaintextRecordType
 }
 
-func (conn *Connection) ReceivedAlert(encrypted bool, recordBody []byte) error {
+func (conn *Connection) receivedAlert(encrypted bool, recordBody []byte) error {
 	// record with an Alert type MUST contain exactly one message. [rfc8446:5.1]
 	var alert record.Alert
 	if err := alert.Parse(recordBody); err != nil {
@@ -55,23 +54,26 @@ func (conn *Connection) ReceivedAlert(encrypted bool, recordBody []byte) error {
 
 func (conn *Connection) receivedApplicationData(recordBody []byte) error {
 	log.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q", len(recordBody), conn.addr, recordBody)
-	if conn.roleServer && conn.Handler != nil {
-		// TODO - controller to play with state. Remove after testing!
-		if strings.HasPrefix(string(recordBody), "upds") && !conn.keyUpdateInProgress() {
-			if err := conn.keyUpdateStart(false); err != nil {
-				return err
+	return conn.handler.OnReadRecord(recordBody)
+	/*
+		if conn.roleServer && conn.handler != nil {
+			// TODO - controller to play with state. Remove after testing!
+			if strings.HasPrefix(string(recordBody), "upds") && !conn.keyUpdateInProgress() {
+				if err := conn.keyUpdateStart(false); err != nil {
+					return err
+				}
+			}
+			if strings.HasPrefix(string(recordBody), "upd2") && !conn.keyUpdateInProgress() {
+				if err := conn.keyUpdateStart(true); err != nil {
+					return err
+				}
+			}
+			if ha, ok := conn.handler.(*exampleHandler); ok {
+				ha.toSend = string(recordBody)
+				conn.handlerWriteable = true
 			}
 		}
-		if strings.HasPrefix(string(recordBody), "upd2") && !conn.keyUpdateInProgress() {
-			if err := conn.keyUpdateStart(true); err != nil {
-				return err
-			}
-		}
-		if ha, ok := conn.Handler.(*exampleHandler); ok {
-			ha.toSend = string(recordBody)
-			conn.handlerHasMoreData = true
-		}
-	}
+	*/
 	return nil
 }
 
@@ -100,7 +102,7 @@ func (conn *Connection) receivedEncryptedHandshakeRecord(opts *options.Transport
 			opts.Stats.MustNotBeEncrypted("handshake(encrypted)", handshake.MsgTypeToName(fragment.Header.MsgType), conn.addr, fragment.Header)
 			return dtlserrors.ErrServerHelloMustNotBeEncrypted
 		}
-		err = conn.State().OnHandshakeMsgFragment(conn, opts, fragment, rn)
+		err = conn.state().OnHandshakeMsgFragment(conn, opts, fragment, rn)
 		if dtlserrors.IsFatal(err) { // manual check in the loop, otherwise simply return
 			return err
 		} else if err != nil {

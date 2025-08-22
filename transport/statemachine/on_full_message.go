@@ -17,7 +17,7 @@ func (hctx *handshakeContext) receivedFullMessage(conn *Connection, msg handshak
 		if err := msgParsed.Parse(msg.Body); err != nil {
 			return dtlserrors.WarnPlaintextServerHelloParsing
 		}
-		return conn.State().OnServerHello(conn, msg, msgParsed)
+		return conn.state().OnServerHello(conn, msg, msgParsed)
 	case handshake.MsgTypeEncryptedExtensions:
 		var msgParsed handshake.ExtensionsSet
 		if err := msgParsed.ParseOutside(msg.Body, false, true, false); err != nil {
@@ -25,7 +25,7 @@ func (hctx *handshakeContext) receivedFullMessage(conn *Connection, msg handshak
 		}
 		log.Printf("encrypted extensions parsed: %+v", msgParsed)
 		msg.AddToHash(hctx.transcriptHasher)
-		return conn.State().OnEncryptedExtensions(conn, msg, msgParsed)
+		return conn.state().OnEncryptedExtensions(conn, msg, msgParsed)
 	case handshake.MsgTypeCertificate:
 		var msgParsed handshake.MsgCertificate
 		if err := msgParsed.Parse(msg.Body); err != nil {
@@ -36,20 +36,20 @@ func (hctx *handshakeContext) receivedFullMessage(conn *Connection, msg handshak
 		// then offload ECC to separate core and trigger state machine depending on result
 		log.Printf("certificate parsed: %+v", msgParsed)
 		msg.AddToHash(hctx.transcriptHasher)
-		return conn.State().OnCertificate(conn, msg, msgParsed)
+		return conn.state().OnCertificate(conn, msg, msgParsed)
 	case handshake.MsgTypeCertificateVerify:
 		var msgParsed handshake.MsgCertificateVerify
 		if err := msgParsed.Parse(msg.Body); err != nil {
 			return dtlserrors.ErrCertificateVerifyMessageParsing
 		}
-		return conn.State().OnCertificateVerify(conn, msg, msgParsed)
+		return conn.state().OnCertificateVerify(conn, msg, msgParsed)
 	case handshake.MsgTypeFinished:
 		var msgParsed handshake.MsgFinished
 		if err := msgParsed.Parse(msg.Body); err != nil {
 			return dtlserrors.ErrFinishedMessageParsing
 		}
 
-		return conn.State().OnFinished(conn, msg, msgParsed)
+		return conn.state().OnFinished(conn, msg, msgParsed)
 	case handshake.MsgTypeClientHello:
 	case handshake.MsgTypeKeyUpdate:
 	case handshake.MsgTypeNewSessionTicket:

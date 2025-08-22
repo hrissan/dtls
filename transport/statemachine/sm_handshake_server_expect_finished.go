@@ -36,10 +36,10 @@ func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handsha
 	conn.hctx = nil
 	// TODO - why wolf closes connection if we send application data immediately
 	// in the same datagram as ack. Reproduce on the latest version of us?
-	//conn.Handler = &exampleHandler{toSend: "Hello from server\n"}
-	conn.Handler = &exampleHandler{}
-	conn.handlerHasMoreData = true
+	//conn.handler = &exampleHandler{toSend: "Hello from server\n"}
 	conn.stateID = smIDPostHandshake
+	conn.handlerWriteable = true // we have to call OnWriteRecord to see if there is
+	conn.handler.OnConnect()
 	// }
 	return nil
 }

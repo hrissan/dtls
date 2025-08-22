@@ -53,7 +53,7 @@ func (t *Transport) ProcessDatagram(datagram []byte, addr netip.AddrPort, err er
 				t.opts.Stats.Warning(addr, err)
 			}
 		} else {
-			if conn.HasDataToSend() {
+			if conn.hasDataToSend() {
 				// We postpone sending responses until full datagram processed
 				t.snd.RegisterConnectionForSend(conn)
 			}
@@ -89,7 +89,7 @@ func (t *Transport) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 				// We can continue. but we do not, most likely there is more encrypted records
 				return conn, dtlserrors.WarnCiphertextNoConnection
 			}
-			err = conn.ReceivedCiphertextRecord(t.opts, hdr)
+			err = conn.receivedCiphertextRecord(t.opts, hdr)
 			if dtlserrors.IsFatal(err) { // manual check in the loop, otherwise simply return
 				return conn, err
 			} else if err != nil {

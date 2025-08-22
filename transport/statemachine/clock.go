@@ -20,7 +20,7 @@ type Clock struct {
 }
 
 func timerHeapPred(a, b *Connection) bool {
-	return a.FireTimeUnixNano < b.FireTimeUnixNano
+	return a.fireTimeUnixNano < b.fireTimeUnixNano
 }
 
 func NewClock(opts *options.TransportOptions) *Clock {
@@ -61,9 +61,9 @@ func (cl *Clock) GoRun() {
 		var conn *Connection
 		if cl.timers.Len() != 0 {
 			conn = cl.timers.Front()
-			fireDur = time.Duration(conn.FireTimeUnixNano - time.Now().UnixNano())
+			fireDur = time.Duration(conn.fireTimeUnixNano - time.Now().UnixNano())
 			if fireDur <= 0 {
-				conn.FireTimeUnixNano = 0
+				conn.fireTimeUnixNano = 0
 				cl.timers.PopFront()
 			}
 		}
@@ -77,7 +77,7 @@ func (cl *Clock) GoRun() {
 			continue
 		}
 		if fireDur <= 0 {
-			conn.OnTimer()
+			conn.onTimer()
 			continue
 		}
 		t.Reset(fireDur)
@@ -96,15 +96,15 @@ func (cl *Clock) GoRun() {
 func (cl *Clock) StopTimer(conn *Connection) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
-	cl.timers.Erase(conn, &conn.TimerHeapIndex)
-	conn.FireTimeUnixNano = 0
+	cl.timers.Erase(conn, &conn.timerHeapIndex)
+	conn.fireTimeUnixNano = 0
 }
 
 func (cl *Clock) SetTimer(conn *Connection, deadline time.Time) {
 	cl.mu.Lock()
 	defer cl.mu.Unlock()
 	fireTimeUnixNano := deadline.UnixNano()
-	if fireTimeUnixNano >= conn.FireTimeUnixNano {
+	if fireTimeUnixNano >= conn.fireTimeUnixNano {
 		// for applications which have watchdog timers per connection,
 		// which they reset/move forward on each packet.
 		// we will not touch heap, timer will fire, where user will have to
@@ -112,9 +112,9 @@ func (cl *Clock) SetTimer(conn *Connection, deadline time.Time) {
 		return
 	}
 	// TODO - 1 heap rebalance instead of 2
-	cl.timers.Erase(conn, &conn.TimerHeapIndex)
-	conn.FireTimeUnixNano = deadline.UnixNano()
-	cl.timers.Insert(conn, &conn.TimerHeapIndex)
+	cl.timers.Erase(conn, &conn.timerHeapIndex)
+	conn.fireTimeUnixNano = deadline.UnixNano()
+	cl.timers.Insert(conn, &conn.timerHeapIndex)
 	if cl.timers.Front() == conn { // we do not care if it was not in front position before erase
 		cl.signal()
 	}

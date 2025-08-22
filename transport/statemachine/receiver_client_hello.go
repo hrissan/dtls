@@ -74,10 +74,16 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	}
 	// we should check all parameters above, so that we do not create connection for unsupported params
 	if conn == nil {
-		conn = NewServerConnection(t, addr)
+		var ha ConnectionHandler
+		conn, ha = t.handler.OnNewConnection()
+		conn.transport = t
+		conn.addr = addr
+		conn.roleServer = true
+		conn.stateID = smIDClosed // explicit 0
+		conn.handler = ha
 		t.connections[addr] = conn
 	}
-	if err := conn.OnClientHello2(t.opts, msg, msgClientHello, params); err != nil {
+	if err := conn.onClientHello2(t.opts, msg, msgClientHello, params); err != nil {
 		// TODO - close/replace connection
 		return conn, err
 	}

@@ -15,6 +15,7 @@ import (
 
 type Transport struct {
 	opts        *options.TransportOptions
+	handler     TransportHandler
 	cookieState cookie.CookieState
 	snd         *sender
 
@@ -33,11 +34,11 @@ type Transport struct {
 	// TODO - limit on max number of parallel handshakes, clear items by LRU
 }
 
-func NewTransport(opts *options.TransportOptions) *Transport {
-	snd := newSender(opts)
+func NewTransport(opts *options.TransportOptions, handler TransportHandler) *Transport {
 	t := &Transport{
-		opts: opts,
-		snd:  snd,
+		opts:    opts,
+		handler: handler,
+		snd:     newSender(opts),
 	}
 	t.cookieState.SetRand(opts.Rnd)
 	if opts.Preallocate {

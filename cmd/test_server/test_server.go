@@ -6,6 +6,7 @@ package main
 import (
 	"log"
 
+	"github.com/hrissan/dtls/cmd/chat"
 	"github.com/hrissan/dtls/dtlsrand"
 	"github.com/hrissan/dtls/transport/options"
 	"github.com/hrissan/dtls/transport/sockets"
@@ -27,7 +28,8 @@ func main() {
 		"../../wolfssl-examples/certs/server-key.pem"); err != nil {
 		log.Fatal(err)
 	}
-	t := statemachine.NewTransport(opts)
+	room := chat.NewChatRoom()
+	t := statemachine.NewTransport(opts, room)
 
 	t.GoRunUDP(socket)
 }

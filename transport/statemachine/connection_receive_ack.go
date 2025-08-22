@@ -37,9 +37,9 @@ func (conn *Connection) receivedEncryptedAck(opts *options.TransportOptions, rec
 		conn.keys.Send.Symmetric.ComputeKeys(conn.keys.Send.ApplicationTrafficSecret[:])
 		conn.keys.Send.Symmetric.Epoch = 3
 		conn.keys.SendNextSegmentSequence = 0
-		conn.hctx = nil // TODO - reuse into pool
-		conn.Handler = &exampleHandler{toSend: "Hello from client\n"}
-		conn.handlerHasMoreData = true
+		conn.hctx = nil              // TODO - reuse into pool
+		conn.handlerWriteable = true // we have to call OnWriteRecord to see if there is
+		conn.handler.OnConnect()     //  = &exampleHandler{toSend: "Hello from client\n"}
 	}
 	return nil // ack occupies full record
 }

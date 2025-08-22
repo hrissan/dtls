@@ -6,6 +6,7 @@ package statemachine
 // you must call Connection.Lock() / defer Connection.Unlock()
 // See examples
 type ConnectionHandler interface {
+	OnConnect()
 	// application must remove connection from all data structures
 	// connection will be reused and become invalid immediately after method returns
 	OnDisconnect(err error)
@@ -18,11 +19,15 @@ type ConnectionHandler interface {
 	// Application sets moreData if it still has more data to send.
 	// Application can set send = false, and moreData = true only in case it did not want
 	// to send short record (application may prefer to send longer record on the next call).
-	OnWriteApplicationRecord(record []byte) (recordSize int, send bool, moreData bool)
+	OnWriteRecord(recordBody []byte) (recordSize int, send bool, moreData bool)
 
 	// every record sent will be delivered as is. Sent empty records are delivered as empty records.
 	// record points to buffer inside transport and must not be retained.
 	// bytes are guaranteed to be valid only during the call.
 	// if application returns error, connection close will be initiated, expect OnDisconnect in the near future.
-	OnReadApplicationRecord(record []byte) error
+	OnReadRecord(recordBody []byte) error
+}
+
+type TransportHandler interface {
+	OnNewConnection() (*Connection, ConnectionHandler)
 }

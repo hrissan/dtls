@@ -29,7 +29,7 @@ func (conn *ConnectionImpl) hasDataToSendLocked() bool {
 		return true
 	}
 	return conn.handlerHasMoreData ||
-		(conn.sendKeyUpdateMessageSeq != 0 && (conn.sentKeyUpdateRN == record.Number{})) ||
+		(conn.keyUpdateInProgress() && (conn.sentKeyUpdateRN == record.Number{})) ||
 		(conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN == record.Number{}))
 }
 
@@ -73,7 +73,7 @@ func (conn *ConnectionImpl) constructDatagram(opts *options.TransportOptions, da
 		//	return datagramSize, true, nil
 		//}
 	}
-	if conn.sendKeyUpdateMessageSeq != 0 && (conn.sentKeyUpdateRN == record.Number{}) {
+	if conn.keyUpdateInProgress() && (conn.sentKeyUpdateRN == record.Number{}) {
 		msgBody := make([]byte, 0, 1) // must be stack-allocated
 		msgKeyUpdate := handshake.MsgKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
 		msgBody = msgKeyUpdate.Write(msgBody)

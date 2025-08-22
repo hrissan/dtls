@@ -50,7 +50,10 @@ func (conn *ConnectionImpl) processAckBody(opts *options.TransportOptions, insid
 }
 
 func (conn *ConnectionImpl) processNewSessionTicketAck(rn record.Number) {
-	if conn.sendNewSessionTicketMessageSeq != 0 && conn.sentNewSessionTicketRN == (record.Number{}) || conn.sentNewSessionTicketRN != rn {
+	if conn.sendNewSessionTicketMessageSeq == 0 {
+		return
+	}
+	if conn.sentNewSessionTicketRN == (record.Number{}) || conn.sentNewSessionTicketRN != rn {
 		return
 	}
 	log.Printf("NewSessionTicket ack received")
@@ -59,7 +62,10 @@ func (conn *ConnectionImpl) processNewSessionTicketAck(rn record.Number) {
 }
 
 func (conn *ConnectionImpl) processKeyUpdateAck(rn record.Number) {
-	if conn.sendKeyUpdateMessageSeq != 0 && conn.sentKeyUpdateRN == (record.Number{}) || conn.sentKeyUpdateRN != rn {
+	if !conn.keyUpdateInProgress() {
+		return
+	}
+	if conn.sentKeyUpdateRN == (record.Number{}) || conn.sentKeyUpdateRN != rn {
 		return
 	}
 	log.Printf("KeyUpdate ack received")

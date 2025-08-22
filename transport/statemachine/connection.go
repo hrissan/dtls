@@ -64,7 +64,7 @@ type ConnectionImpl struct {
 	nextMessageSeqSend    uint16
 	nextMessageSeqReceive uint16
 
-	sendNewSessionTicketMessageSeq uint16 // != 0 if set
+	sendNewSessionTicketMessageSeq uint16 // != 0 if set. Sent using stateless sender to avoid storing message here
 	sendKeyUpdateMessageSeq        uint16 // != 0 if set
 	sendKeyUpdateUpdateRequested   bool   // fully defines content of KeyUpdate we are sending
 
@@ -123,9 +123,13 @@ func (conn *ConnectionImpl) firstMessageSeqInReceiveQueue() uint16 {
 	return conn.nextMessageSeqReceive - uint16(conn.hctx.receivedMessages.Len())
 }
 
-func (conn *ConnectionImpl) startKeyUpdate(updateRequested bool) error {
-	if conn.sendKeyUpdateMessageSeq != 0 {
-		return nil // KeyUpdate in progress
+func (conn *ConnectionImpl) keyUpdateInProgress() bool {
+	return conn.sendKeyUpdateMessageSeq != 0
+}
+
+func (conn *ConnectionImpl) keyUpdateStart(updateRequested bool) error {
+	if conn.keyUpdateInProgress() {
+		return nil
 	}
 	if conn.nextMessageSeqSend == math.MaxUint16 {
 		return dtlserrors.ErrSendMessageSeqOverflow

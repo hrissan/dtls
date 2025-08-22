@@ -52,13 +52,13 @@ func (conn *ConnectionImpl) receivedApplicationData(messageData []byte) error {
 	log.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q", len(messageData), conn.addr, messageData)
 	if conn.roleServer && conn.Handler != nil {
 		// TODO - controller to play with state. Remove after testing!
-		if strings.HasPrefix(string(messageData), "upds") && conn.sendKeyUpdateMessageSeq == 0 {
-			if err := conn.startKeyUpdate(false); err != nil {
+		if strings.HasPrefix(string(messageData), "upds") && !conn.keyUpdateInProgress() {
+			if err := conn.keyUpdateStart(false); err != nil {
 				return err
 			}
 		}
-		if strings.HasPrefix(string(messageData), "upd2") && conn.sendKeyUpdateMessageSeq == 0 {
-			if err := conn.startKeyUpdate(true); err != nil {
+		if strings.HasPrefix(string(messageData), "upd2") && !conn.keyUpdateInProgress() {
+			if err := conn.keyUpdateStart(true); err != nil {
 				return err
 			}
 		}
@@ -155,7 +155,7 @@ func (conn *ConnectionImpl) receivedKeyUpdate(opts *options.TransportOptions, fr
 	log.Printf("received KeyUpdate (%+v), expecting to receive record with the next epoch", msgKeyUpdate)
 	conn.keys.ExpectReceiveEpochUpdate = true // if this leads to epoch overflow, we'll generate error later in the function which actually increments epoch
 	if msgKeyUpdate.UpdateRequested {
-		if err := conn.startKeyUpdate(false); err != nil { // do not request update, when responding to request
+		if err := conn.keyUpdateStart(false); err != nil { // do not request update, when responding to request
 			return err
 		}
 	}

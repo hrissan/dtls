@@ -102,7 +102,7 @@ func (conn *ConnectionImpl) checkSendLimit() (uint64, error) {
 	if conn.keys.Send.Symmetric.Epoch < 3 || conn.keys.SendNextSegmentSequence < sendLimit*3/4 { // simple heuristic
 		return seq, nil
 	}
-	return seq, conn.startKeyUpdate(false)
+	return seq, conn.keyUpdateStart(false)
 }
 
 // Writes header and returns body to write used data to.

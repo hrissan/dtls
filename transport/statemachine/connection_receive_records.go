@@ -27,7 +27,7 @@ func (conn *ConnectionImpl) checkReceiveLimits() error {
 	if conn.keys.Receive.Symmetric.Epoch < 3 || receivedCurrentEpoch < receiveLimit*3/4 { // simple heuristics
 		return nil
 	}
-	if conn.sendKeyUpdateMessageSeq != 0 {
+	if conn.keyUpdateInProgress() {
 		// wait for previous key update to finish, it could be one with updateRequested = false
 		return nil
 	}
@@ -35,7 +35,7 @@ func (conn *ConnectionImpl) checkReceiveLimits() error {
 		return nil
 	}
 	conn.keys.RequestedReceiveEpochUpdate = true
-	return conn.startKeyUpdate(true)
+	return conn.keyUpdateStart(true)
 }
 
 // returns contentType == 0 (which is impossible due to padding format) with err == nil when replay detected

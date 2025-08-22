@@ -19,7 +19,7 @@ type FragmentInfo struct {
 
 type FragmentHeader struct {
 	MsgType MsgType
-	Length  uint32 // stored as 24-bit
+	Length  uint32 // message length, stored as 24-bit
 	FragmentInfo
 }
 

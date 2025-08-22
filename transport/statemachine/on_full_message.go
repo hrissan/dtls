@@ -13,18 +13,12 @@ import (
 func (hctx *handshakeContext) receivedFullMessage(conn *ConnectionImpl, msg handshake.Message) error {
 	switch msg.MsgType {
 	case handshake.MsgTypeServerHello:
-		if conn.roleServer {
-			return dtlserrors.ErrServerHelloReceivedByServer
-		}
 		var msgParsed handshake.MsgServerHello
 		if err := msgParsed.Parse(msg.Body); err != nil {
 			return dtlserrors.WarnPlaintextServerHelloParsing
 		}
 		return conn.State().OnServerHello(conn, msg, msgParsed)
 	case handshake.MsgTypeEncryptedExtensions:
-		if conn.roleServer {
-			return dtlserrors.ErrEncryptedExtensionsReceivedByServer
-		}
 		var msgParsed handshake.ExtensionsSet
 		if err := msgParsed.ParseOutside(msg.Body, false, true, false); err != nil {
 			return dtlserrors.ErrExtensionsMessageParsing
@@ -59,7 +53,7 @@ func (hctx *handshakeContext) receivedFullMessage(conn *ConnectionImpl, msg hand
 	case handshake.MsgTypeClientHello:
 	case handshake.MsgTypeKeyUpdate:
 	case handshake.MsgTypeNewSessionTicket:
-		panic("handled in ConnectionImpl.ProcessHandshake")
+		panic("should be handled in smHandshake.OnHandshakeMsgFragment")
 	default:
 		// TODO - process all messages in standard, generate error for the rest
 		log.Printf("TODO - encrypted message type %d not supported", msg.MsgType)

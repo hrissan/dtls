@@ -4,22 +4,34 @@
 package statemachine
 
 import (
-	"encoding/binary"
 	"log"
-	"math"
 
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *ConnectionImpl) receivedEncryptedAck(opts *options.TransportOptions, messageData []byte) error {
-	insideBody, err := record.ParseAcks(messageData)
+func (conn *ConnectionImpl) receivedEncryptedAck(opts *options.TransportOptions, recordData []byte) error {
+	parser, err := record.NewAckParser(recordData)
 	if err != nil {
 		return dtlserrors.ErrEncryptedAckMessageHeaderParsing
 	}
-	log.Printf("dtls: got ack record (encrypted) %d bytes from %v, message(hex): %x", len(messageData), conn.addr, messageData)
-	conn.processAckBody(opts, insideBody)
+	log.Printf("dtls: got ack record (encrypted) %d bytes from %v, message(hex): %x", len(recordData), conn.addr, recordData)
+	var epochOverflowCounter int
+	for {
+		rn, ok := parser.PopFront(&epochOverflowCounter)
+		if !ok {
+			break
+		}
+		if conn.hctx != nil {
+			conn.hctx.sendQueue.Ack(conn, rn)
+		}
+		conn.processKeyUpdateAck(rn)
+		conn.processNewSessionTicketAck(rn)
+	}
+	if epochOverflowCounter != 0 {
+		opts.Stats.Warning(conn.addr, dtlserrors.WarnAckEpochOverflow)
+	}
 	// if all messages from epoch 2 acked, then switch sending epoch
 	if conn.hctx != nil && conn.hctx.sendQueue.Len() == 0 && conn.keys.Send.Symmetric.Epoch == 2 {
 		conn.keys.Send.Symmetric.ComputeKeys(conn.keys.Send.ApplicationTrafficSecret[:])
@@ -30,23 +42,6 @@ func (conn *ConnectionImpl) receivedEncryptedAck(opts *options.TransportOptions,
 		conn.handlerHasMoreData = true
 	}
 	return nil // ack occupies full record
-}
-
-func (conn *ConnectionImpl) processAckBody(opts *options.TransportOptions, insideBody []byte) {
-	for ; len(insideBody) >= record.AckElementSize; insideBody = insideBody[record.AckElementSize:] {
-		epoch := binary.BigEndian.Uint64(insideBody)
-		seq := binary.BigEndian.Uint64(insideBody[8:])
-		if epoch > math.MaxUint16 {
-			opts.Stats.Warning(conn.addr, dtlserrors.WarnAckEpochOverflow)
-			continue // prevent overflow below
-		}
-		rn := record.NumberWith(uint16(epoch), seq)
-		if conn.hctx != nil {
-			conn.hctx.sendQueue.Ack(conn, rn)
-		}
-		conn.processKeyUpdateAck(rn)
-		conn.processNewSessionTicketAck(rn)
-	}
 }
 
 func (conn *ConnectionImpl) processNewSessionTicketAck(rn record.Number) {

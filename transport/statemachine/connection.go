@@ -113,16 +113,6 @@ func NewClientConnection(addr netip.AddrPort, opts *options.TransportOptions) (*
 func (conn *ConnectionImpl) Addr() netip.AddrPort { return conn.addr }
 func (conn *ConnectionImpl) State() StateMachine  { return stateMachineStates[conn.stateID] }
 
-func (conn *ConnectionImpl) firstMessageSeqInReceiveQueue() uint16 {
-	if conn.hctx == nil { // connection has no queue and processes full messages one by one
-		return conn.nextMessageSeqReceive
-	}
-	if conn.hctx.receivedMessages.Len() > int(conn.nextMessageSeqReceive) {
-		panic("received messages queue invariant violated")
-	}
-	return conn.nextMessageSeqReceive - uint16(conn.hctx.receivedMessages.Len())
-}
-
 func (conn *ConnectionImpl) keyUpdateInProgress() bool {
 	return conn.sendKeyUpdateMessageSeq != 0
 }

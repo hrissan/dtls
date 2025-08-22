@@ -78,7 +78,7 @@ func (conn *ConnectionImpl) deprotectLocked(hdr record.Ciphertext) ([]byte, reco
 		conn.keys.FailedDeprotectionCounterNewReceiveKeys = 0
 		receiver.ComputeNextApplicationTrafficSecret(!conn.roleServer)
 	}
-	decrypted, seq, contentType, err := conn.keys.NewReceiveKeys.Deprotect(hdr, !conn.keys.DoNotEncryptSequenceNumbers, 0)
+	recordBody, seq, contentType, err := conn.keys.NewReceiveKeys.Deprotect(hdr, !conn.keys.DoNotEncryptSequenceNumbers, 0)
 	if err != nil {
 		// [rfc9147:4.5.3] check against AEAD limit
 		conn.keys.FailedDeprotectionCounterNewReceiveKeys++
@@ -101,5 +101,5 @@ func (conn *ConnectionImpl) deprotectLocked(hdr record.Ciphertext) ([]byte, reco
 	conn.keys.FailedDeprotectionCounterNewReceiveKeys = 0
 
 	conn.keys.RequestedReceiveEpochUpdate = false // so we can request in the next epoch
-	return decrypted, record.NumberWith(receiver.Symmetric.Epoch, seq), contentType, nil
+	return recordBody, record.NumberWith(receiver.Symmetric.Epoch, seq), contentType, nil
 }

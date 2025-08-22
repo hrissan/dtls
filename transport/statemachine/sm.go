@@ -75,6 +75,7 @@ type StateMachine interface {
 	OnClientHello2(conn *ConnectionImpl, opts *options.TransportOptions,
 		msg handshake.Message, msgClientHello handshake.MsgClientHello,
 		initialHelloTranscriptHash [constants.MaxHashLength]byte, keyShareSet bool) error
+
 	OnServerHello(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgServerHello) error
 	OnEncryptedExtensions(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.ExtensionsSet) error
 	OnCertificate(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgCertificate) error

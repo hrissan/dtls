@@ -25,8 +25,6 @@ func (*smHandshake) OnHandshakeMsgFragment(conn *ConnectionImpl, opts *options.T
 	switch fragment.Header.MsgType {
 	case handshake.MsgTypeClientHello:
 		panic("TODO - should not be called, client_hello is special")
-	//case handshake.MsgTypeServerHello:
-	//	panic("TODO - should not be called")
 	case handshake.MsgTypeNewSessionTicket:
 	case handshake.MsgTypeKeyUpdate:
 		// we must never add post-handshake messages to received messages queue in Handshake,

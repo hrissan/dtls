@@ -4,7 +4,6 @@
 package statemachine
 
 import (
-	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
@@ -42,12 +41,6 @@ func (*smPostHandshake) OnHandshakeMsgFragment(conn *ConnectionImpl, opts *optio
 		}
 	}
 	return dtlserrors.ErrHandshakeMessagePostHandshake
-}
-
-func (*smPostHandshake) OnClientHello2(conn *ConnectionImpl, opts *options.TransportOptions,
-	msg handshake.Message, msgClientHello handshake.MsgClientHello,
-	params cookie.Params) error {
-	return nil // TODO - send encrypted empty ack on ClientHello1. Here, reset/close connection.
 }
 
 func (*smPostHandshake) OnServerHello(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgServerHello) error {

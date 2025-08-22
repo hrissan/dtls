@@ -8,21 +8,13 @@ import (
 	"log"
 
 	"github.com/hrissan/dtls/constants"
-	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/keys"
-	"github.com/hrissan/dtls/transport/options"
 )
 
 type smHandshakeServerExpectFinished struct {
 	smHandshake
-}
-
-func (*smHandshakeServerExpectFinished) OnClientHello2(conn *ConnectionImpl, opts *options.TransportOptions,
-	msg handshake.Message, msgClientHello handshake.MsgClientHello,
-	params cookie.Params) error {
-	return nil // retransmission. If not, we'll reset our handshake soon if unsuccessful, and process it
 }
 
 func (*smHandshakeServerExpectFinished) OnFinished(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgFinished) error {

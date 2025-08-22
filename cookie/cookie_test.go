@@ -16,25 +16,24 @@ import (
 func TestRoundTrip(t *testing.T) {
 	var state cookie.CookieState
 	state.SetRand(dtlsrand.CryptoRand())
-	transcriptHash := sha256.Sum256([]byte("test"))
 	addr, err := netip.ParseAddrPort("1.2.3.4:5")
 	now := time.Now()
 	if err != nil {
 		t.FailNow()
 	}
-	ck := state.CreateCookie(transcriptHash, true, addr, now)
+	params := cookie.Params{
+		TranscriptHash:    sha256.Sum256([]byte("test")),
+		TimestampUnixNano: now.UnixNano(),
+		KeyShareSet:       true,
+		Age:               time.Second,
+	}
+	ck := state.CreateCookie(params, addr)
 
-	ok, age, transcriptHash2, keyShareSet := state.IsCookieValid(addr, ck, now.Add(time.Second))
-	if !ok {
+	params2, err := state.IsCookieValid(addr, ck, now.Add(time.Second), time.Minute)
+	if err != nil {
 		t.FailNow()
 	}
-	if transcriptHash != transcriptHash2 {
-		t.FailNow()
-	}
-	if !keyShareSet {
-		t.FailNow()
-	}
-	if age != time.Second {
+	if params != params2 {
 		t.FailNow()
 	}
 }

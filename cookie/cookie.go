@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/dtlsrand"
 	"github.com/hrissan/dtls/hkdf"
 )
@@ -35,16 +36,7 @@ type Params struct {
 	TranscriptHash    [constants.MaxHashLength]byte
 	TimestampUnixNano int64
 	KeyShareSet       bool
-}
-
-func (p *Params) IsValidTimestamp(now time.Time, cookieValidDuration time.Duration) (time.Duration, bool) {
-	unixNanoNow := now.UnixNano()
-	if p.TimestampUnixNano > unixNanoNow { // cookie from the future
-		return 0, false
-	}
-	age := time.Duration(unixNanoNow - p.TimestampUnixNano)
-	return age, age <= cookieValidDuration
-
+	Age               time.Duration // set during validation
 }
 
 var ErrCookieDataTooLong = errors.New("cookie data is too long")
@@ -108,7 +100,7 @@ func (c *CookieState) CreateCookie(params Params, addr netip.AddrPort) Cookie {
 	return cookie
 }
 
-func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie) (_ Params, ok bool) {
+func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time.Time, cookieValidDuration time.Duration) (_ Params, err error) {
 	var params Params
 	data := cookie.GetValue()
 	if len(data) != saltLength+8+1+constants.MaxHashLength+cookieHashLength {
@@ -118,14 +110,24 @@ func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie) (_ Param
 	params.KeyShareSet = data[saltLength+8] != 0
 	copy(params.TranscriptHash[:], data[saltLength+8+1:])
 
+	unixNanoNow := now.UnixNano()
+	if params.TimestampUnixNano > unixNanoNow { // cookie from the future
+		return Params{}, dtlserrors.ErrClientHelloCookieAge
+	}
+	params.Age = time.Duration(unixNanoNow - params.TimestampUnixNano)
+	if params.Age >= cookieValidDuration {
+		return Params{}, dtlserrors.ErrClientHelloCookieAge
+	}
+
 	var mustBeHash [cookieHashLength]byte
 	copy(mustBeHash[:], data[saltLength+8+1+constants.MaxHashLength:])
 
 	hash := c.getScratchHash(data[:saltLength+8+1+constants.MaxHashLength], addr)
 	if hash != mustBeHash {
-		return Params{}, false
+		// important to return empty params, so we accidentally do not use them if forgot to check ok
+		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
-	return params, true
+	return params, nil
 }
 
 func (c *CookieState) getScratchHash(cookieHashedBytes []byte, addr netip.AddrPort) [cookieHashLength]byte {

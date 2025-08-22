@@ -56,13 +56,14 @@ func (s *Buffer[T]) Reserve(newCapacity int) {
 	}
 }
 
-func (s *Buffer[T]) PushBack(element T) {
+// TODO - fuzz all new methods
+func (s *Buffer[T]) PushFront(element T) {
 	capacity := len(s.elements)
 	if s.Len() == capacity {
 		s.reserve(capacity + 1)
 	}
-	s.elements[s.write_pos&s.mask()] = element
-	s.write_pos++
+	s.read_pos--
+	s.elements[s.read_pos&s.mask()] = element
 }
 
 func (s *Buffer[T]) Front() T {
@@ -74,31 +75,6 @@ func (s *Buffer[T]) FrontRef() *T {
 		panic("empty circular buffer")
 	}
 	return &s.elements[s.read_pos&s.mask()]
-}
-
-func (s *Buffer[T]) Back() T {
-	return *s.BackRef()
-}
-
-func (s *Buffer[T]) BackRef() *T {
-	if s.write_pos == s.read_pos {
-		panic("empty circular buffer")
-	}
-	return &s.elements[(s.write_pos-1)&s.mask()]
-}
-
-func (s *Buffer[T]) Index(pos int) T {
-	return *s.IndexRef(pos)
-}
-
-func (s *Buffer[T]) IndexRef(pos int) *T {
-	if pos < 0 {
-		panic("circular buffer index < 0")
-	}
-	if pos >= s.Len() {
-		panic("circular buffer index out of range")
-	}
-	return &s.elements[(s.read_pos+uint(pos))&s.mask()]
 }
 
 func (s *Buffer[T]) PopFront() T {
@@ -119,6 +95,60 @@ func (s *Buffer[T]) TryPopFront() (T, bool) {
 	s.elements[offset] = empty // do not have dangling references in unused parts of buffer
 	s.read_pos++
 	return element, true
+}
+
+func (s *Buffer[T]) PushBack(element T) {
+	capacity := len(s.elements)
+	if s.Len() == capacity {
+		s.reserve(capacity + 1)
+	}
+	s.elements[s.write_pos&s.mask()] = element
+	s.write_pos++
+}
+
+func (s *Buffer[T]) Back() T {
+	return *s.BackRef()
+}
+
+func (s *Buffer[T]) BackRef() *T {
+	if s.write_pos == s.read_pos {
+		panic("empty circular buffer")
+	}
+	return &s.elements[(s.write_pos-1)&s.mask()]
+}
+
+func (s *Buffer[T]) PopBack() T {
+	t, ok := s.TryPopBack()
+	if !ok {
+		panic("empty circular buffer")
+	}
+	return t
+}
+
+func (s *Buffer[T]) TryPopBack() (T, bool) {
+	var empty T
+	if s.write_pos == s.read_pos {
+		return empty, false
+	}
+	s.write_pos--
+	offset := s.write_pos & s.mask()
+	element := s.elements[offset]
+	s.elements[offset] = empty // do not have dangling references in unused parts of buffer
+	return element, true
+}
+
+func (s *Buffer[T]) Index(pos int) T {
+	return *s.IndexRef(pos)
+}
+
+func (s *Buffer[T]) IndexRef(pos int) *T {
+	if pos < 0 {
+		panic("circular buffer index < 0")
+	}
+	if pos >= s.Len() {
+		panic("circular buffer index out of range")
+	}
+	return &s.elements[(s.read_pos+uint(pos))&s.mask()]
 }
 
 func (s *Buffer[T]) Clear() {

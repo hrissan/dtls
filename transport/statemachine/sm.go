@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 
 	"github.com/hrissan/dtls/constants"
-	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
@@ -36,7 +35,7 @@ func (hctx *handshakeContext) generateFinished(conn *ConnectionImpl) handshake.M
 type stateMachineStateID byte
 
 const (
-	smIDPanic                                 stateMachineStateID = 0
+	smIDClosed                                stateMachineStateID = 0
 	smIDClientSentHello                       stateMachineStateID = 1
 	smIDHandshakeServerExpectClientHello2     stateMachineStateID = 2
 	smIDHandshakeServerExpectFinished         stateMachineStateID = 3
@@ -50,7 +49,7 @@ const (
 )
 
 var stateMachineStates = [...]StateMachine{
-	smIDPanic:                                 nil, // forgot to initialize stateID
+	smIDClosed:                                &smClosed{},
 	smIDClientSentHello:                       &smClientSentHello1{},
 	smIDHandshakeServerExpectClientHello2:     &smHandshakeServerExpectClientHello2{},
 	smIDHandshakeServerExpectFinished:         &smHandshakeServerExpectFinished{},
@@ -74,10 +73,6 @@ type StateMachine interface {
 
 	OnHandshakeMsgFragment(conn *ConnectionImpl, opts *options.TransportOptions,
 		fragment handshake.Fragment, rn record.Number) error
-
-	OnClientHello2(conn *ConnectionImpl, opts *options.TransportOptions,
-		msg handshake.Message, msgClientHello handshake.MsgClientHello,
-		params cookie.Params) error
 
 	OnServerHello(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgServerHello) error
 	OnEncryptedExtensions(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.ExtensionsSet) error

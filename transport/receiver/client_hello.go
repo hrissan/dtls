@@ -69,27 +69,20 @@ func (rc *Receiver) receivedClientHello(conn *statemachine.ConnectionImpl, msg h
 		// we asked for this key_share above, but client disrespected our demand
 		return conn, dtlserrors.ErrParamsSupportKeyShare
 	}
-	params, valid := rc.cookieState.IsCookieValid(addr, msgClientHello.Extensions.Cookie)
-	if !valid {
-		return conn, dtlserrors.ErrClientHelloCookieInvalid
-	}
-	if _, ok := params.IsValidTimestamp(time.Now(), rc.opts.CookieValidDuration); !ok {
-		return conn, dtlserrors.ErrClientHelloCookieAge
+	params, err := rc.cookieState.IsCookieValid(addr, msgClientHello.Extensions.Cookie, time.Now(), rc.opts.CookieValidDuration)
+	if err != nil {
+		return conn, err
 	}
 	// we should check all parameters above, so that we do not create connection for unsupported params
-	if conn != nil {
-		// TODO - check age, replace
-	}
 	if conn == nil {
-		rc.connectionsMu.Lock()
-		// TODO - get from pool
 		conn = statemachine.NewServerConnection(addr)
 		rc.connections[addr] = conn
-		rc.connectionsMu.Unlock()
 	}
-	if err := conn.ReceivedClientHello2(rc.opts, msg, msgClientHello, params); err != nil {
-		return conn, err // TODO - close connection here
+	if err := conn.OnClientHello2(rc.opts, msg, msgClientHello, params); err != nil {
+		// TODO - close/replace connection
+		return conn, err
 	}
+
 	rc.snd.RegisterConnectionForSend(conn)
 	return conn, nil
 }

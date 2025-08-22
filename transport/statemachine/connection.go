@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/netip"
 	"sync"
+	"time"
 
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
@@ -45,9 +46,10 @@ type ConnectionHandler interface {
 // after handshake finish
 type ConnectionImpl struct {
 	// variables below mu are protected by mu, except where noted
-	mu   sync.Mutex     // TODO - check that mutex is alwasy taken
-	addr netip.AddrPort // changes very rarely
-	keys keys.Keys
+	mu        sync.Mutex     // TODO - check that mutex is alwasy taken
+	addr      netip.AddrPort // changes very rarely
+	cookieAge time.Duration
+	keys      keys.Keys
 
 	// We do not support received messages of this kind to be fragmented,
 	// because we do not want to allocate memory for reassembly,
@@ -68,13 +70,15 @@ type ConnectionImpl struct {
 	sendKeyUpdateMessageSeq        uint16 // != 0 if set
 	sendKeyUpdateUpdateRequested   bool   // fully defines content of KeyUpdate we are sending
 
-	roleServer bool                // changes very rarely
+	roleServer bool                // TODO - remove
 	stateID    stateMachineStateID // index in global table
 	// set when user signals it has data, clears after OnWriteRecord returns false
 	handlerHasMoreData bool
 
 	// intrusive, must not be changed except by sender, protected by sender mutex
 	InSenderQueue bool
+	// intrusive, must not be changed except by receiver, protected by receiver mutex
+	InReceiverClosingQueue bool
 	// intrusive, must not be changed except by clock, protected by clock mutex
 	TimerHeapIndex int
 	// time.Time object is larger and also has complicated comparison,
@@ -86,7 +90,7 @@ func NewServerConnection(addr netip.AddrPort) *ConnectionImpl {
 	return &ConnectionImpl{
 		addr:       addr,
 		roleServer: true,
-		stateID:    smIDHandshakeServerExpectClientHello2,
+		stateID:    smIDClosed, // explicit 0
 	}
 }
 
@@ -117,6 +121,15 @@ func NewClientConnection(addr netip.AddrPort, opts *options.TransportOptions) (*
 
 func (conn *ConnectionImpl) Addr() netip.AddrPort { return conn.addr }
 func (conn *ConnectionImpl) State() StateMachine  { return stateMachineStates[conn.stateID] }
+
+func (conn *ConnectionImpl) OnReceiverClose() netip.AddrPort {
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
+	// TODO - call user code if needed
+	addr := conn.addr
+	conn.addr = netip.AddrPort{}
+	return addr
+}
 
 func (conn *ConnectionImpl) keyUpdateInProgress() bool {
 	return conn.sendKeyUpdateMessageSeq != 0

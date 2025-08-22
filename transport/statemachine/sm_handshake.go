@@ -4,14 +4,15 @@
 package statemachine
 
 import (
-	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/transport/options"
 )
 
-type smHandshake struct{}
+type smHandshake struct {
+	smClosed
+}
 
 func (*smHandshake) OnHandshakeMsgFragment(conn *ConnectionImpl, opts *options.TransportOptions,
 	fragment handshake.Fragment, rn record.Number) error {
@@ -38,30 +39,4 @@ func (*smHandshake) OnHandshakeMsgFragment(conn *ConnectionImpl, opts *options.T
 		return nil
 	}
 	return conn.hctx.ReceivedFragment(conn, fragment, rn)
-}
-
-func (*smHandshake) OnClientHello2(conn *ConnectionImpl, opts *options.TransportOptions,
-	msg handshake.Message, msgClientHello handshake.MsgClientHello,
-	params cookie.Params) error {
-	return dtlserrors.ErrUnexpectedMessage
-}
-
-func (*smHandshake) OnServerHello(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgServerHello) error {
-	return dtlserrors.ErrUnexpectedMessage
-}
-
-func (*smHandshake) OnEncryptedExtensions(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.ExtensionsSet) error {
-	return dtlserrors.ErrUnexpectedMessage
-}
-
-func (*smHandshake) OnCertificate(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgCertificate) error {
-	return dtlserrors.ErrUnexpectedMessage
-}
-
-func (*smHandshake) OnCertificateVerify(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgCertificateVerify) error {
-	return dtlserrors.ErrUnexpectedMessage
-}
-
-func (*smHandshake) OnFinished(conn *ConnectionImpl, msg handshake.Message, msgParsed handshake.MsgFinished) error {
-	return dtlserrors.ErrUnexpectedMessage
 }

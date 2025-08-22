@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hrissan/dtls/circular"
+	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/record"
@@ -27,7 +29,14 @@ type Receiver struct {
 	cookieState cookie.CookieState
 	snd         *sender.Sender
 
-	connectionsMu sync.Mutex
+	connPoolMu sync.Mutex
+	// closed connections are at the back
+	// closing connections are at the front,
+	// so we can close connections 1 by 1, by looking at the front,
+	// closing, and putting to the back
+	connPool circular.Buffer[*statemachine.ConnectionImpl]
+
+	// owned by receiving goroutine
 	// only ClientHello with correct cookie and larger timestamp replaces
 	// previous handshake or connection here [rfc9147:5.11]
 	connections map[netip.AddrPort]*statemachine.ConnectionImpl
@@ -37,16 +46,72 @@ type Receiver struct {
 
 func NewReceiver(opts *options.TransportOptions, snd *sender.Sender) *Receiver {
 	rc := &Receiver{
-		opts:        opts,
-		snd:         snd,
-		connections: map[netip.AddrPort]*statemachine.ConnectionImpl{},
+		opts: opts,
+		snd:  snd,
 	}
 	rc.cookieState.SetRand(opts.Rnd)
+	if opts.Preallocate {
+		rc.connections = make(map[netip.AddrPort]*statemachine.ConnectionImpl, opts.MaxConnections)
+		rc.connPool.Reserve(opts.MaxConnections)
+	} else {
+		rc.connections = map[netip.AddrPort]*statemachine.ConnectionImpl{}
+	}
 	return rc
 }
 
 // socket must be closed by socket owner (externally)
 func (rc *Receiver) Close() {
+}
+
+func (rc *Receiver) closeSomeConnectionsLocked() {
+	for i := 0; i != constants.MaxCloseConnectionsPerDatagram; i++ { // arbitrary constant
+		if rc.connPool.Len() == 0 || !rc.connPool.Front().InReceiverClosingQueue {
+			return
+		}
+		conn := rc.connPool.PopFront()
+		conn.InReceiverClosingQueue = false
+		addr := conn.OnReceiverClose() // changes state to closed, sets addr to empty and returns previous addr
+		//if _, ok := rc.connections[addr]; !ok {
+		//	panic("address of closing connection must be in the map")
+		//}
+		delete(rc.connections, addr)
+		rc.connPool.PushBack(conn)
+	}
+}
+
+// called from any goroutine
+func (rc *Receiver) AddToClosingQueue(conn *statemachine.ConnectionImpl, addr netip.AddrPort) {
+	rc.connPoolMu.Lock()
+	defer rc.connPoolMu.Unlock()
+	if conn.InReceiverClosingQueue {
+		return
+	}
+	conn.InReceiverClosingQueue = true
+	rc.connPool.PushFront(conn)
+}
+
+func (rc *Receiver) popConnection(addr netip.AddrPort) *statemachine.ConnectionImpl {
+	rc.connPoolMu.Lock()
+	defer rc.connPoolMu.Unlock()
+
+	rc.closeSomeConnectionsLocked()
+
+	conn, ok := rc.connPool.TryPopBack()
+	if !ok {
+		if len(rc.connections)+rc.connPool.Len() >= rc.opts.MaxConnections {
+			// TODO - send stateless datagram here, write to log
+			return nil
+		}
+		conn = statemachine.NewServerConnection(addr)
+	}
+	if conn.InReceiverClosingQueue {
+		panic("impossible, because closeSomeConnectionsLocked does at least 1 iteration")
+	}
+	if _, ok := rc.connections[addr]; ok {
+		panic("address of reused connection must not be in the map")
+	}
+	rc.connections[addr] = conn
+	return conn
 }
 
 // blocks until socket is closed (externally)
@@ -92,10 +157,10 @@ func (rc *Receiver) processDatagram(datagram []byte, addr netip.AddrPort) {
 }
 
 func (rc *Receiver) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
-	// look up always for simplicity
-	rc.connectionsMu.Lock()
+	// receiving goroutine owns rc.connections
+	rc.connPoolMu.Lock()
 	conn := rc.connections[addr]
-	rc.connectionsMu.Unlock()
+	rc.connPoolMu.Unlock()
 
 	recordOffset := 0                  // Multiple DTLS records MAY be placed in a single datagram [rfc9147:4.3]
 	for recordOffset < len(datagram) { // read records one by one
@@ -171,8 +236,8 @@ func (rc *Receiver) StartConnection(peerAddr netip.AddrPort) error {
 var ErrConnectionInProgress = errors.New("connection is in progress")
 
 func (rc *Receiver) startConnection(addr netip.AddrPort) (*statemachine.ConnectionImpl, error) {
-	rc.connectionsMu.Lock()
-	defer rc.connectionsMu.Unlock()
+	rc.connPoolMu.Lock()
+	defer rc.connPoolMu.Unlock()
 	conn := rc.connections[addr]
 	if conn != nil {
 		return nil, ErrConnectionInProgress // for now will wait for previous handshake timeout first

@@ -36,10 +36,10 @@ func (h *IntrusiveHeapAry[T]) Front() *T {
 }
 
 func (h *IntrusiveHeapAry[T]) moveIn(index uint, value pair[T]) {
-	if *value.heap_index != 0 {
+	if healthChecks && *value.heap_index != 0 {
 		panic("heap invariant violated")
 	}
-	if h.storage[index] != (pair[T]{}) {
+	if healthChecks && h.storage[index] != (pair[T]{}) {
 		panic("heap invariant violated")
 	}
 	*value.heap_index = int(index + 1)
@@ -48,12 +48,14 @@ func (h *IntrusiveHeapAry[T]) moveIn(index uint, value pair[T]) {
 
 func (h *IntrusiveHeapAry[T]) moveOut(index uint) pair[T] {
 	heapIndex := uint(*h.storage[index].heap_index)
-	if heapIndex != index+1 {
+	if healthChecks && heapIndex != index+1 {
 		panic("heap invariant violated")
 	}
 	value := h.storage[index]
-	*h.storage[index].heap_index = 0
-	h.storage[index] = pair[T]{nil, nil}
+	if healthChecks {
+		*h.storage[index].heap_index = 0
+		h.storage[index] = pair[T]{nil, nil}
+	}
 	return value
 }
 

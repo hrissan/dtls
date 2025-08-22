@@ -47,6 +47,7 @@ func (p *AckParser) PopFront(epochOverflowCounter *int) (rn Number, ok bool) {
 		}
 		epoch := binary.BigEndian.Uint64(p.recordBody)
 		seq := binary.BigEndian.Uint64(p.recordBody[8:])
+		p.recordBody = p.recordBody[AckElementSize:]
 		if epoch > math.MaxUint16 { // prevent overflow below
 			*epochOverflowCounter++ // in case someone needs this metric
 			continue

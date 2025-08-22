@@ -6,6 +6,7 @@ package statemachine
 import (
 	"encoding/binary"
 	"log"
+	"net/netip"
 
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/handshake"
@@ -34,9 +35,10 @@ func (conn *ConnectionImpl) hasDataToSendLocked() bool {
 }
 
 // must not write over len(datagram), returns part of datagram filled
-func (conn *ConnectionImpl) ConstructDatagram(opts *options.TransportOptions, datagram []byte) (datagramSize int, addToSendQueue bool) {
+func (conn *ConnectionImpl) ConstructDatagram(opts *options.TransportOptions, datagram []byte) (addr netip.AddrPort, datagramSize int, addToSendQueue bool) {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
+	addr = conn.addr
 	var err error
 	datagramSize, addToSendQueue, err = conn.constructDatagram(opts, datagram)
 	if err != nil {

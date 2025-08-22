@@ -86,15 +86,16 @@ func (snd *Sender) GoRunUDP(socket *net.UDPConn) {
 			_ = snd.sendDatagram(socket, (*hrr.data)[:hrr.size], hrr.addr)
 			// do not add stateless packet back to queue on error, we'll generate it again on next ClientHello
 		}
+		var addr netip.AddrPort
 		datagramSize := 0
 		addToSendQueue := false
 		if conn != nil {
-			datagramSize, addToSendQueue = conn.ConstructDatagram(snd.opts, datagram[:MinimumPMTUv4])
+			addr, datagramSize, addToSendQueue = conn.ConstructDatagram(snd.opts, datagram[:MinimumPMTUv4])
 			if datagramSize == 0 && addToSendQueue {
 				panic("ConstructDatagram invariant violation")
 			}
 			if datagramSize != 0 {
-				if !snd.sendDatagram(socket, datagram[:datagramSize], conn.Addr()) {
+				if !snd.sendDatagram(socket, datagram[:datagramSize], addr) {
 					addToSendQueue = true // otherwise state machine deadlock
 				}
 			}

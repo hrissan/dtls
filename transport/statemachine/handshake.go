@@ -121,9 +121,8 @@ func (hctx *handshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment ha
 				MsgType: fragment.Header.MsgType,
 				MsgSeq:  fragment.Header.MsgSeq,
 			},
-			SendOffset: 0,
-			SendEnd:    fragment.Header.Length,
 		}
+		partialMessage.Ass.ResetToFull(fragment.Header.Length)
 		partialMessage.Msg.Body = make([]byte, fragment.Header.Length) // TODO - rope from pull
 	} else {
 		if fragment.Header.MsgSeq != partialMessage.Msg.MsgSeq {
@@ -136,7 +135,7 @@ func (hctx *handshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment ha
 			return dtlserrors.ErrHandshakeMessageFragmentTypeMismatch
 		}
 	}
-	shouldAck, changed := partialMessage.Ack(fragment.Header.FragmentOffset, fragment.Header.FragmentLength)
+	shouldAck, changed := partialMessage.Ass.AddFragment(fragment.Header.FragmentOffset, fragment.Header.FragmentLength)
 	if !shouldAck {
 		return nil // got in the middle of the hole, wait for fragment which we can actully add
 	}
@@ -153,8 +152,8 @@ func (hctx *handshakeContext) ReceivedFragment(conn *ConnectionImpl, fragment ha
 func (hctx *handshakeContext) DeliverReceivedMessages(conn *ConnectionImpl) error {
 	for hctx.receivedMessages.Len() != 0 && hctx.CanDeliveryMessages { // check here because changes in receivedFullMessage
 		first := hctx.receivedMessages.FrontRef(hctx.receivedMessagesStorage[:])
-		if first.Msg.MsgType == handshake.MsgTypeZero || !first.FullyAcked() {
-			// not a single fragment received, or not fully acknowledged
+		if first.Msg.MsgType == handshake.MsgTypeZero || first.Ass.FragmentsCount() != 0 {
+			// not a single fragment received, or not fully received
 			return nil
 		}
 		msg := first.Msg

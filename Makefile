@@ -11,3 +11,7 @@ all: ascii
 .PHONY: ascii
 ascii:
 	@ ! find . -not -path "./.git/*" -not -path "./bin/*" -type f -exec grep -lP '[^\x00-\x7F]' {} +
+
+.PHONY: analyze
+analyze:
+	CGO_ENABLED=0 go build -gcflags='-m=1 -json=0,file://bin/analyze' ./...

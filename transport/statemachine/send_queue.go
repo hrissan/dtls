@@ -55,11 +55,7 @@ func (sq *sendQueue) PushMessage(msg handshake.Message) {
 		// must be never, because no flight contains so many messages
 		panic("too many messages are generated at once")
 	}
-	sq.messages.PushBack(sq.messagesStorage[:], partialHandshakeMsg{
-		Msg:        msg,
-		SendOffset: 0,
-		SendEnd:    uint32(len(msg.Body)),
-	})
+	sq.messages.PushBack(sq.messagesStorage[:], partialHandshakeMsgFull(msg))
 }
 
 func (sq *sendQueue) HasDataToSend() bool {
@@ -79,9 +75,6 @@ func (sq *sendQueue) ConstructDatagram(conn *ConnectionImpl, opts *options.Trans
 			break
 		}
 		outgoing := sq.messages.IndexRef(sq.messagesStorage[:], sq.messageOffset)
-		if sq.fragmentOffset < outgoing.SendOffset { // some were acked
-			sq.fragmentOffset = outgoing.SendOffset
-		}
 		var sendNextSegmentSequenceEpoch0 *uint16
 		if outgoing.Msg.MsgType == handshake.MsgTypeClientHello || outgoing.Msg.MsgType == handshake.MsgTypeServerHello {
 			if conn.hctx != nil {
@@ -89,35 +82,31 @@ func (sq *sendQueue) ConstructDatagram(conn *ConnectionImpl, opts *options.Trans
 			} else {
 				// We only can send that if we are still in handshake.
 				// If not, we simply pretend we sent it.
-				sq.fragmentOffset = outgoing.SendEnd
+				sq.fragmentOffset = uint32(len(outgoing.Msg.Body))
 			}
 		}
-		if !outgoing.FullyAcked() {
-			if sq.fragmentOffset >= outgoing.SendEnd { // never due to combination of checks above
-				panic("invariant violation")
-			}
-			recordSize, fragmentInfo, rn, err := conn.constructRecord(opts, datagram[datagramSize:],
-				outgoing.Msg,
-				sq.fragmentOffset, outgoing.SendEnd-sq.fragmentOffset, sendNextSegmentSequenceEpoch0)
-			if err != nil {
-				return 0, err
-			}
-			if recordSize == 0 {
-				break
-			}
-			// Unfortunately, not in order because we have epoch 0 and need to resend ServerHello, so linear search
-			// limited to constants.MaxSendRecordsQueue due to check above
-			sq.sentRecords.PushBack(sq.sentRecordsStorage[:], record2Fragment{rn: rn, fragment: fragmentInfo})
-			datagramSize += recordSize
-			sq.fragmentOffset += fragmentInfo.FragmentLength
-		}
-		if sq.fragmentOffset > outgoing.SendEnd {
-			panic("invariant violation")
-		}
-		if sq.fragmentOffset == outgoing.SendEnd {
+		fragmentOffset, fragmentLength := outgoing.Ass.GetFragmentFromOffset(sq.fragmentOffset)
+		if fragmentLength == 0 { // fully acked since we reset our iterator
 			sq.messageOffset++
 			sq.fragmentOffset = 0
+			continue
 		}
+		recordSize, fragmentInfo, rn, err := conn.constructRecord(opts, datagram[datagramSize:],
+			outgoing.Msg, fragmentOffset, fragmentLength, sendNextSegmentSequenceEpoch0)
+		if err != nil {
+			return 0, err
+		}
+		if recordSize == 0 {
+			break
+		}
+		if fragmentInfo.FragmentLength == 0 {
+			panic("constructRecord must not send empty fragments")
+		}
+		// Unfortunately, not in order because we have epoch 0 and need to resend ServerHello, so linear search
+		// limited to constants.MaxSendRecordsQueue due to check above
+		sq.sentRecords.PushBack(sq.sentRecordsStorage[:], record2Fragment{rn: rn, fragment: fragmentInfo})
+		datagramSize += recordSize
+		sq.fragmentOffset += fragmentInfo.FragmentLength
 	}
 	return datagramSize, nil
 }
@@ -161,8 +150,9 @@ func (sq *sendQueue) Ack(conn *ConnectionImpl, rn record.Number) {
 		return
 	}
 	msg := sq.messages.IndexRef(sq.messagesStorage[:], index)
-	msg.Ack(rec.FragmentOffset, rec.FragmentLength)
-	for sq.messages.Len() != 0 && sq.messages.FrontRef(sq.messagesStorage[:]).FullyAcked() {
+	msg.Ass.AddFragment(rec.FragmentOffset, rec.FragmentLength)
+	for sq.messages.Len() != 0 && sq.messages.FrontRef(sq.messagesStorage[:]).Ass.FragmentsCount() == 0 {
+		// fully acknowledged
 		if sq.messageOffset == 0 {
 			sq.fragmentOffset = 0
 		} else {

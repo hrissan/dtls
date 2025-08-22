@@ -66,7 +66,8 @@ func (a *Assembler) ResetToFull(length uint32) {
 	a.holes[0] = fragment{start: 0, end: length}
 }
 
-func (a *Assembler) Len() int {
+// used for both acks and reassembling incoming messages
+func (a *Assembler) FragmentsCount() int {
 	return a.num
 }
 

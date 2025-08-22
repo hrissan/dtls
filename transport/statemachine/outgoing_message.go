@@ -3,40 +3,18 @@
 
 package statemachine
 
-import "github.com/hrissan/dtls/handshake"
+import (
+	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/replay"
+)
 
 type partialHandshakeMsg struct {
 	Msg handshake.Message
-	// We support acks from both sides for now, so only single hole. TODO - support more holes
-	// Once SendOffset == SendEnd, message is fully sent
-	SendOffset uint32
-	SendEnd    uint32
+	Ass replay.Assembler
 }
 
-// used for both acks, and reconstructing incoming messages, in that case it means FullyReceived
-func (msg *partialHandshakeMsg) FullyAcked() bool {
-	return msg.SendEnd == msg.SendOffset
-}
-
-// used for both acks, and reconstructing incoming messages
-func (msg *partialHandshakeMsg) Ack(fragmentOffset uint32, fragmentLength uint32) (shouldAck bool, changed bool) {
-	fragmentEnd := fragmentOffset + fragmentLength
-	if fragmentOffset > msg.SendOffset && fragmentEnd < msg.SendEnd {
-		// when receiving, we should not acknowledge this packet, we need to receive it again
-		return
-	}
-	if fragmentOffset < msg.SendEnd && fragmentEnd >= msg.SendEnd {
-		msg.SendEnd = fragmentOffset
-		changed = true
-	}
-	if fragmentOffset <= msg.SendOffset && fragmentEnd > msg.SendOffset {
-		msg.SendOffset = fragmentEnd
-		changed = true
-	}
-	// as both conditions above could be true, ends can become reversed, fix here
-	if msg.SendOffset > msg.SendEnd {
-		msg.SendOffset = msg.SendEnd
-	}
-	shouldAck = true
-	return
+func partialHandshakeMsgFull(msg handshake.Message) partialHandshakeMsg {
+	p := partialHandshakeMsg{Msg: msg}
+	p.Ass.ResetToFull(uint32(len(msg.Body)))
+	return p
 }

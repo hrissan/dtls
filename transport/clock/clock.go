@@ -17,7 +17,7 @@ type Clock struct {
 	cond     chan struct{}
 	shutdown bool
 
-	timers *intrusive.IntrusiveHeap[statemachine.ConnectionImpl]
+	timers intrusive.IntrusiveHeap[statemachine.ConnectionImpl]
 }
 
 func heapPred(a, b *statemachine.ConnectionImpl) bool {
@@ -28,9 +28,9 @@ func NewClock(opts *options.TransportOptions) *Clock {
 	cl := &Clock{cond: make(chan struct{})}
 
 	if opts.Preallocate {
-		cl.timers = intrusive.NewIntrusiveHeap(heapPred, opts.MaxConnections)
+		cl.timers = *intrusive.NewIntrusiveHeap(heapPred, opts.MaxConnections)
 	} else {
-		cl.timers = intrusive.NewIntrusiveHeap(heapPred, 0)
+		cl.timers = *intrusive.NewIntrusiveHeap(heapPred, 0)
 	}
 	return cl
 }

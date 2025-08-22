@@ -35,26 +35,26 @@ func (h *IntrusiveHeapAry[T]) Front() *T {
 	return h.storage[0].ptr
 }
 
-func (h *IntrusiveHeapAry[T]) moveIn(index uint, value pair[T]) {
+func moveIn[T any](storage []pair[T], index uint, value pair[T]) {
 	if healthChecks && *value.heap_index != 0 {
 		panic("heap invariant violated")
 	}
-	if healthChecks && h.storage[index] != (pair[T]{}) {
+	if healthChecks && storage[index] != (pair[T]{}) {
 		panic("heap invariant violated")
 	}
 	*value.heap_index = int(index + 1)
-	h.storage[index] = value
+	storage[index] = value
 }
 
-func (h *IntrusiveHeapAry[T]) moveOut(index uint) pair[T] {
-	heapIndex := uint(*h.storage[index].heap_index)
+func moveOut[T any](storage []pair[T], index uint) pair[T] {
+	heapIndex := uint(*storage[index].heap_index)
 	if healthChecks && heapIndex != index+1 {
 		panic("heap invariant violated")
 	}
-	value := h.storage[index]
+	value := storage[index]
 	if healthChecks {
-		*h.storage[index].heap_index = 0
-		h.storage[index] = pair[T]{nil, nil}
+		*storage[index].heap_index = 0
+		storage[index] = pair[T]{nil, nil}
 	}
 	return value
 }
@@ -66,21 +66,21 @@ func (h *IntrusiveHeapAry[T]) Insert(node *T, heap_index *int) bool {
 	h.storage = append(h.storage, pair[T]{})
 	index := uint(len(h.storage) - 1)
 	value := pair[T]{node, heap_index}
-	h.moveUp(index, value)
+	h.moveUp(h.storage, index, value)
 	return true
 }
 
-func (h *IntrusiveHeapAry[T]) moveUp(index uint, value pair[T]) {
+func (h *IntrusiveHeapAry[T]) moveUp(storage []pair[T], index uint, value pair[T]) {
 	for index > 0 {
 		parent := parentIndex(index)
 		if h.pred(h.storage[parent].ptr, value.ptr) {
 			break
 		}
-		tmp := h.moveOut(parent)
-		h.moveIn(index, tmp)
+		tmp := moveOut(storage, parent)
+		moveIn(storage, index, tmp)
 		index = parent
 	}
-	h.moveIn(index, value)
+	moveIn(storage, index, value)
 	h.checkHeap()
 }
 
@@ -88,28 +88,34 @@ func (h *IntrusiveHeapAry[T]) Erase(node *T, heap_index *int) bool {
 	if *heap_index == 0 {
 		return false
 	}
-	h.checkHeap()
 	index := uint(*heap_index) - 1
-	erased := h.moveOut(index)
+	erased := moveOut(h.storage, index)
+	if erased != (pair[T]{node, heap_index}) {
+		// this is user's invariant, we want to keep it to debug business logic
+		panic("heap invariant violated")
+	}
+	*erased.heap_index = 0
+
 	if index == uint(len(h.storage))-1 {
 		h.storage = h.storage[:index]
 		h.checkHeap()
 		return true
 	}
 	length := uint(len(h.storage) - 1)
-	value := h.moveOut(length)
+	value := moveOut(h.storage, length)
 	h.storage = h.storage[:length]
 	if h.pred(erased.ptr, value.ptr) {
-		h.moveDown(index, length, value)
+		h.moveDown(h.storage, index, length, value)
 	} else {
-		h.moveUp(index, value)
+		h.moveUp(h.storage, index, value)
 	}
 	h.checkHeap()
 	return true
 }
 
 func (h *IntrusiveHeapAry[T]) PopFront() {
-	_ = h.moveOut(0)
+	erased := moveOut(h.storage, 0)
+	*erased.heap_index = 0
 	if len(h.storage) == 1 {
 		h.storage = h.storage[:0]
 		h.checkHeap()
@@ -117,12 +123,12 @@ func (h *IntrusiveHeapAry[T]) PopFront() {
 	}
 
 	length := uint(len(h.storage) - 1)
-	value := h.moveOut(length)
+	value := moveOut(h.storage, length)
 	h.storage = h.storage[:length]
-	h.moveDown(0, length, value)
+	h.moveDown(h.storage, 0, length, value)
 }
 
-func (h *IntrusiveHeapAry[T]) moveDown(index uint, length uint, value pair[T]) {
+func (h *IntrusiveHeapAry[T]) moveDown(storage []pair[T], index uint, length uint, value pair[T]) {
 	for {
 		lastChild := lastChildIndex(index)
 		firstChild := lastChild - mult + 1
@@ -131,14 +137,14 @@ func (h *IntrusiveHeapAry[T]) moveDown(index uint, length uint, value pair[T]) {
 			if h.pred(value.ptr, h.storage[largestChild].ptr) {
 				break
 			}
-			tmp := h.moveOut(largestChild)
-			h.moveIn(index, tmp)
+			tmp := moveOut(h.storage, largestChild)
+			moveIn(h.storage, index, tmp)
 			index = largestChild
 		} else if firstChild < length {
 			largestChild := h.largestChildPartialRec(mult, firstChild, length-firstChild)
 			if !h.pred(value.ptr, h.storage[largestChild].ptr) {
-				tmp := h.moveOut(largestChild)
-				h.moveIn(index, tmp)
+				tmp := moveOut(h.storage, largestChild)
+				moveIn(h.storage, index, tmp)
 				index = largestChild
 			}
 			break
@@ -146,7 +152,7 @@ func (h *IntrusiveHeapAry[T]) moveDown(index uint, length uint, value pair[T]) {
 			break
 		}
 	}
-	h.moveIn(index, value)
+	moveIn(h.storage, index, value)
 	h.checkHeap()
 }
 
@@ -181,10 +187,6 @@ func (h *IntrusiveHeapAry[T]) isHeap() bool {
 	return true
 }
 
-func firstChildIndex(index uint) uint {
-	return index*mult + 1
-}
-
 func lastChildIndex(index uint) uint {
 	return index*mult + mult
 }
@@ -207,8 +209,9 @@ func (h *IntrusiveHeapAry[T]) largestChildFullRec(multArg uint, firstChild uint)
 	case 2:
 		return firstChild + bool2uint(!h.pred(h.storage[firstChild].ptr, h.storage[firstChild+1].ptr))
 	default:
-		firstHalfLargest := h.largestChildFullRec(multArg/2, firstChild)
-		secondHalfLargest := h.largestChildFullRec(multArg-multArg/2, firstChild+multArg/2)
+		half := multArg / 2
+		firstHalfLargest := h.largestChildFullRec(half, firstChild)
+		secondHalfLargest := h.largestChildFullRec(multArg-half, firstChild+half)
 		if !h.pred(h.storage[firstHalfLargest].ptr, h.storage[secondHalfLargest].ptr) {
 			return secondHalfLargest
 		}
@@ -238,6 +241,34 @@ func (h *IntrusiveHeapAry[T]) largestChildPartialRec(multArg uint, firstChild ui
 		}
 		return largest
 	default:
-		panic("later")
+		switch numChildren {
+		case 1:
+			return firstChild
+		case 2:
+			return firstChild + bool2uint(!h.pred(h.storage[firstChild].ptr, h.storage[firstChild+1].ptr))
+		case 3:
+			largest := firstChild + bool2uint(!h.pred(h.storage[firstChild].ptr, h.storage[firstChild+1].ptr))
+			if !h.pred(h.storage[largest].ptr, h.storage[firstChild+2].ptr) {
+				return firstChild + 2
+			}
+			return largest
+		case 4:
+			{
+				largestFirstHalf := firstChild + bool2uint(!h.pred(h.storage[firstChild].ptr, h.storage[firstChild+1].ptr))
+				largestSecondHalf := firstChild + 2 + bool2uint(!h.pred(h.storage[firstChild+2].ptr, h.storage[firstChild+3].ptr))
+				if !h.pred(h.storage[largestFirstHalf].ptr, h.storage[largestSecondHalf].ptr) {
+					return largestSecondHalf
+				}
+				return largestFirstHalf
+			}
+		default:
+			half := numChildren / 2
+			firstHalfLargest := h.largestChildFullRec(half, firstChild)
+			secondHalfLargest := h.largestChildPartialRec(numChildren-half+1, firstChild+half, numChildren-half)
+			if !h.pred(h.storage[firstHalfLargest].ptr, h.storage[secondHalfLargest].ptr) {
+				return secondHalfLargest
+			}
+			return firstHalfLargest
+		}
 	}
 }

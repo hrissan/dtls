@@ -74,10 +74,8 @@ func (h *IntrusiveHeap[T]) Erase(node *T, heap_index *int) bool {
 		return false
 	}
 	ind := *heap_index - 1
-	if healthChecks && ind >= len(h.storage) {
-		panic("heap invariant violated")
-	}
-	if healthChecks && h.storage[ind] != (pair[T]{node, heap_index}) {
+	if h.storage[ind] != (pair[T]{node, heap_index}) {
+		// this is user's invariant, we want to keep it to debug business logic
 		panic("heap invariant violated")
 	}
 	*heap_index = 0

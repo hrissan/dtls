@@ -74,7 +74,7 @@ func (hdr *Ciphertext) ClosestSequenceNumber(seqNumData []byte, expectedSN uint6
 		seq := binary.BigEndian.Uint16(seqNumData)
 		return seq, closestSequenceNumber(seq, expectedSN, 0x10000)
 	}
-	seq := uint16(seqNumData[0])
+	seq := uint16(seqNumData[0]) // widening
 	return seq, closestSequenceNumber(seq, expectedSN, 0x100)
 }
 

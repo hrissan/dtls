@@ -16,6 +16,7 @@ import (
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/replay"
+	"github.com/hrissan/dtls/safecast"
 )
 
 type handshakeContext struct {
@@ -67,7 +68,7 @@ func (hctx *handshakeContext) firstMessageSeqInReceiveQueue(conn *Connection) ui
 	if hctx.receivedMessages.Len() > int(conn.nextMessageSeqReceive) {
 		panic("received messages queue invariant violated")
 	}
-	return conn.nextMessageSeqReceive - uint16(hctx.receivedMessages.Len())
+	return conn.nextMessageSeqReceive - uint16(hctx.receivedMessages.Len()) // safe due to check above
 }
 
 func (hctx *handshakeContext) ComputeKeyShare(rnd dtlsrand.Rand) {
@@ -134,7 +135,7 @@ func (hctx *handshakeContext) ReceivedFragment(conn *Connection, fragment handsh
 		if fragment.Header.MsgSeq != partialMessage.Msg.MsgSeq {
 			panic("message sequence is queue offset and must always match")
 		}
-		if fragment.Header.Length != uint32(len(partialMessage.Msg.Body)) {
+		if fragment.Header.Length != safecast.Cast[uint32](len(partialMessage.Msg.Body)) {
 			return dtlserrors.ErrHandshakeMessageFragmentLengthMismatch
 		}
 		if fragment.Header.MsgType != partialMessage.Msg.MsgType {

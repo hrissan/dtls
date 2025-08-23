@@ -12,6 +12,7 @@ import (
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/replay"
+	"github.com/hrissan/dtls/safecast"
 	"github.com/hrissan/dtls/transport/options"
 )
 
@@ -82,7 +83,7 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 		msgBody := make([]byte, 0, 1) // must be stack-allocated
 		msgKeyUpdate := handshake.MsgKeyUpdate{UpdateRequested: conn.sendKeyUpdateUpdateRequested}
 		msgBody = msgKeyUpdate.Write(msgBody)
-		lenBody := uint32(len(msgBody))
+		lenBody := safecast.Cast[uint32](len(msgBody))
 		msg := handshake.Message{
 			MsgType: handshake.MsgTypeKeyUpdate,
 			MsgSeq:  conn.sendKeyUpdateMessageSeq,
@@ -157,7 +158,7 @@ func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, da
 		return 0, nil // do not send tiny records at the end of datagram
 	}
 	nextReceiveSeq := acks.GetNextReceivedSeq()
-	binary.BigEndian.PutUint16(insideBody, uint16(acksCount*record.AckElementSize))
+	binary.BigEndian.PutUint16(insideBody, safecast.Cast[uint16](acksCount*record.AckElementSize))
 	offset := record.AckHeaderSize
 	for i := uint64(0); i < replay.Width; i++ {
 		if nextReceiveSeq+i < replay.Width { // anomaly around 0

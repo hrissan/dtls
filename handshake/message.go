@@ -20,7 +20,8 @@ func (msg *Message) AddToHash(transcriptHasher hash.Hash) {
 		panic("message body too large")
 	}
 	var result [4]byte
-	binary.BigEndian.PutUint32(result[:], (uint32(msg.MsgType)<<24)+uint32(len(msg.Body)))
+	first4Bytes := (uint32(msg.MsgType) << 24) + uint32(len(msg.Body)) // widening, safe due to check above
+	binary.BigEndian.PutUint32(result[:], first4Bytes)
 	_, _ = transcriptHasher.Write(result[:])
 	_, _ = transcriptHasher.Write(msg.Body[:])
 	return

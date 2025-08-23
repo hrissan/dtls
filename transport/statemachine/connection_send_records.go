@@ -13,18 +13,20 @@ import (
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/safecast"
 	"github.com/hrissan/dtls/transport/options"
 )
 
 func (conn *Connection) constructRecord(opts *options.TransportOptions, datagramLeft []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
-	if fragmentOffset >= uint32(len(handshakeMsg.Body)) { // >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
+	if fragmentOffset >= safecast.Cast[uint32](len(handshakeMsg.Body)) {
+		// >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
 		panic("invariant of send queue fragment offset violated")
 	}
 	msg := handshake.Fragment{
 		Header: handshake.FragmentHeader{
 			MsgType: handshakeMsg.MsgType,
-			Length:  uint32(len(handshakeMsg.Body)),
+			Length:  safecast.Cast[uint32](len(handshakeMsg.Body)),
 			FragmentInfo: handshake.FragmentInfo{
 				MsgSeq:         handshakeMsg.MsgSeq,
 				FragmentOffset: fragmentOffset,
@@ -41,12 +43,12 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 		if remainingSpace <= 0 {
 			return
 		}
-		msg.Header.FragmentLength = min(maxFragmentLength, uint32(remainingSpace))
+		msg.Header.FragmentLength = min(maxFragmentLength, safecast.Cast[uint32](remainingSpace))
 		if msg.Header.FragmentLength <= constants.MinFragmentBodySize && msg.Header.FragmentLength != maxFragmentLength {
 			return // do not send tiny records at the end of datagram
 		}
 		da, rn, err := conn.constructPlaintextRecord(datagramLeft[:0], msg, sendNextSegmentSequenceEpoch0)
-		if uint32(len(da)) != msg.Header.FragmentLength+handshake.FragmentHeaderSize+record.PlaintextRecordHeaderSize {
+		if len(da) != int(msg.Header.FragmentLength+handshake.FragmentHeaderSize+record.PlaintextRecordHeaderSize) { // safe if Header.FragmentLength is in spec
 			panic("plaintext handshake record construction length invariant failed")
 		}
 		if err != nil {
@@ -59,7 +61,7 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 	if !ok || len(insideBody) <= handshake.FragmentHeaderSize {
 		return
 	}
-	msg.Header.FragmentLength = min(maxFragmentLength, uint32(len(insideBody)-handshake.FragmentHeaderSize))
+	msg.Header.FragmentLength = min(maxFragmentLength, safecast.Cast[uint32](len(insideBody)-handshake.FragmentHeaderSize)) // safe due to check above, but only if Msg.Body is limited
 	if msg.Header.FragmentLength <= constants.MinFragmentBodySize && msg.Header.FragmentLength != maxFragmentLength {
 		return // do not send tiny records at the end of datagram
 	}
@@ -73,7 +75,7 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 	return recordSize, msg.Header.FragmentInfo, rn, nil
 }
 
-func (conn *Connection) constructPlaintextRecord(data []byte, msg handshake.Fragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, record.Number, error) {
+func (conn *Connection) constructPlaintextRecord(datagramLeft []byte, msg handshake.Fragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, record.Number, error) {
 	if *sendNextSegmentSequenceEpoch0 >= math.MaxUint16 {
 		// We arbitrarily decided that we do not need more outgoing sequence numbers for epoch 0
 		// We needed code to prevent overflow below anyway
@@ -85,10 +87,10 @@ func (conn *Connection) constructPlaintextRecord(data []byte, msg handshake.Frag
 		SequenceNumber: uint64(*sendNextSegmentSequenceEpoch0),
 	}
 	*sendNextSegmentSequenceEpoch0++ // never overflows due to check above
-	data = recordHdr.Write(data, handshake.FragmentHeaderSize+int(msg.Header.FragmentLength))
-	data = msg.Header.Write(data)
-	data = append(data, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
-	return data, rn, nil
+	datagramLeft = recordHdr.Write(datagramLeft, safecast.Cast[uint16](handshake.FragmentHeaderSize+int(msg.Header.FragmentLength)))
+	datagramLeft = msg.Header.Write(datagramLeft)
+	datagramLeft = append(datagramLeft, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
+	return datagramLeft, rn, nil
 }
 
 // returns seq number to use
@@ -123,7 +125,10 @@ func (conn *Connection) prepareProtect(datagramLeft []byte, use8BitSeq bool) (hd
 
 func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, hdrSize int, insideSize int) (recordSize int, _ record.Number, _ error) {
 	if hdrSize != record.OutgoingCiphertextRecordHeader8 && hdrSize != record.OutgoingCiphertextRecordHeader16 {
-		panic("outgoing record size must be 4 or 5 bytes")
+		panic("outgoing record header size must be 4 or 5 bytes")
+	}
+	if insideSize > record.MaxPlaintextRecordLength {
+		panic("outgoing record size too big")
 	}
 	seq, err := conn.checkSendLimit()
 	if err != nil {
@@ -159,12 +164,12 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, hdrS
 	var seqNumData []byte
 	if hdrSize == record.OutgoingCiphertextRecordHeader8 {
 		seqNumData = datagramLeft[1:2]
-		seqNumData[0] = byte(seq)
-		binary.BigEndian.PutUint16(datagramLeft[2:], uint16(insideSize+constants.AEADSealSize))
+		seqNumData[0] = byte(seq) // truncation
+		binary.BigEndian.PutUint16(datagramLeft[2:], safecast.Cast[uint16](insideSize+constants.AEADSealSize))
 	} else {
 		seqNumData = datagramLeft[1:3]
-		binary.BigEndian.PutUint16(seqNumData, uint16(seq))
-		binary.BigEndian.PutUint16(datagramLeft[3:], uint16(insideSize+constants.AEADSealSize))
+		binary.BigEndian.PutUint16(seqNumData, uint16(seq)) // truncation
+		binary.BigEndian.PutUint16(datagramLeft[3:], safecast.Cast[uint16](insideSize+constants.AEADSealSize))
 	}
 
 	encrypted := gcm.Seal(datagramLeft[hdrSize:hdrSize], iv[:], datagramLeft[hdrSize:hdrSize+insideSize], datagramLeft[:hdrSize])

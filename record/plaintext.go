@@ -73,13 +73,10 @@ func (hdr *Plaintext) Parse(datagram []byte) (n int, err error) {
 	return endOffset, nil
 }
 
-func (hdr *PlaintextHeader) Write(datagram []byte, length int) []byte {
+func (hdr *PlaintextHeader) Write(datagram []byte, length uint16) []byte {
 	datagram = append(datagram, hdr.ContentType, 0xFE, 0xFD)
 	datagram = binary.BigEndian.AppendUint16(datagram, 0)
 	datagram = format.AppendUint48(datagram, hdr.SequenceNumber)
-	if length < 0 || length > MaxPlaintextRecordLength {
-		panic("length of plaintext record out of range")
-	}
-	datagram = binary.BigEndian.AppendUint16(datagram, uint16(length))
+	datagram = binary.BigEndian.AppendUint16(datagram, length)
 	return datagram
 }

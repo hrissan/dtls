@@ -8,6 +8,7 @@ import (
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/safecast"
 	"github.com/hrissan/dtls/transport/options"
 )
 
@@ -82,7 +83,7 @@ func (sq *sendQueue) ConstructDatagram(conn *Connection, opts *options.Transport
 			} else {
 				// We only can send that if we are still in handshake.
 				// If not, we simply pretend we sent it.
-				sq.fragmentOffset = uint32(len(outgoing.Msg.Body))
+				sq.fragmentOffset = safecast.Cast[uint32](len(outgoing.Msg.Body))
 			}
 		}
 		fragmentOffset, fragmentLength := outgoing.Ass.GetFragmentFromOffset(sq.fragmentOffset)

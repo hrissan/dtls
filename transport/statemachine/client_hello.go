@@ -15,6 +15,7 @@ import (
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/safecast"
 	"github.com/hrissan/dtls/signature"
 	"github.com/hrissan/dtls/transport/options"
 )
@@ -50,15 +51,15 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) (
 	msgBody := datagram[record.PlaintextRecordHeaderSize+handshake.FragmentHeaderSize:]
 
 	// now overwrite reserved space
-	da := recordHdr.Write(datagram[:0], handshake.FragmentHeaderSize+len(msgBody))
+	da := recordHdr.Write(datagram[:0], safecast.Cast[uint16](handshake.FragmentHeaderSize+len(msgBody)))
 
 	msgHeader := handshake.FragmentHeader{
 		MsgType: handshake.MsgTypeServerHello,
-		Length:  uint32(len(msgBody)),
+		Length:  safecast.Cast[uint32](len(msgBody)),
 		FragmentInfo: handshake.FragmentInfo{
 			MsgSeq:         0,
 			FragmentOffset: 0,
-			FragmentLength: uint32(len(msgBody)),
+			FragmentLength: safecast.Cast[uint32](len(msgBody)),
 		},
 	}
 

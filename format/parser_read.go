@@ -78,14 +78,15 @@ func ParserReadUint24(body []byte, offset int) (_ int, value uint32, err error) 
 	if len(body) < offset+3 {
 		return offset, 0, ErrMessageBodyTooShort
 	}
-	return offset + 3, (uint32(body[offset]) << 16) | (uint32(body[offset+1]) << 8) | uint32(body[offset+2]), nil
+	return offset + 3, (uint32(body[offset]) << 16) | (uint32(body[offset+1]) << 8) | uint32(body[offset+2]), nil // widening
 }
 
 func ParserReadUint24Length(body []byte, offset int) (_ int, value []byte, err error) {
 	if len(body) < offset+3 {
 		return offset, nil, ErrMessageBodyTooShort
 	}
-	endOffset := offset + 3 + int((uint32(body[offset])<<16)|(uint32(body[offset+1])<<8)|uint32(body[offset+2]))
+	length := (uint32(body[offset]) << 16) | (uint32(body[offset+1]) << 8) | uint32(body[offset+2]) // widening
+	endOffset := offset + 3 + int(length)                                                           // safe due to limit above
 	if len(body) < endOffset {
 		return offset, nil, ErrMessageBodyTooShort
 	}

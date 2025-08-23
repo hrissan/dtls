@@ -40,8 +40,8 @@ func (r *windowMirror) SetNextReceived(nextSeq uint64) {
 	if nextSeq > r.nextReceivedSeq {
 		r.nextReceivedSeq = nextSeq
 	}
-	for s := 0; s < int(r.nextReceivedSeq)-Width; s++ {
-		*r.ensure(uint64(s)) = 1
+	for s := uint64(0); s < r.nextReceivedSeq-Width; s++ {
+		*r.ensure(s) = 1
 	}
 }
 
@@ -75,7 +75,7 @@ func FuzzReplay(f *testing.F) {
 		nextReceived := uint64(0)
 		for i := 0; i+1 < len(commands); i += 2 {
 			c := commands[i]
-			v := commands[i+1]
+			v := uint64(commands[i+1]) // widening
 			if cb.GetNextReceivedSeq() != cb2.GetNextReceivedSeq() {
 				t.FailNow()
 			}
@@ -96,13 +96,13 @@ func FuzzReplay(f *testing.F) {
 				cb.SetBit(nextReceived - 1)
 				cb2.SetBit(nextReceived - 1)
 			case c == 2:
-				cb.SetBit(uint64(v))
-				cb2.SetBit(uint64(v))
+				cb.SetBit(v)
+				cb2.SetBit(v)
 			case c == 3:
-				cb.ClearBit(uint64(v))
-				cb2.ClearBit(uint64(v))
+				cb.ClearBit(v)
+				cb2.ClearBit(v)
 			case c == 4:
-				nextReceived = min(nextReceived+uint64(v), maxLastReceivedForFuzzing)
+				nextReceived = min(nextReceived+v, maxLastReceivedForFuzzing)
 				cb.SetNextReceived(nextReceived)
 				cb2.SetNextReceived(nextReceived)
 			case c == 5:

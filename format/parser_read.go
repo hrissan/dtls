@@ -39,7 +39,7 @@ func ParserReadByteLength(body []byte, offset int) (_ int, value []byte, err err
 	if len(body) < offset+1 {
 		return offset, nil, ErrMessageBodyTooShort
 	}
-	endOffset := offset + 1 + int(body[offset])
+	endOffset := offset + 1 + int(body[offset]) // widening
 	if len(body) < endOffset {
 		return offset, nil, ErrMessageBodyTooShort
 	}
@@ -67,7 +67,7 @@ func ParserReadUint16Length(body []byte, offset int) (_ int, value []byte, err e
 	if len(body) < offset+2 {
 		return offset, nil, ErrMessageBodyTooShort
 	}
-	endOffset := offset + 2 + int(binary.BigEndian.Uint16(body[offset:]))
+	endOffset := offset + 2 + int(binary.BigEndian.Uint16(body[offset:])) // widening
 	if len(body) < endOffset {
 		return offset, nil, ErrMessageBodyTooShort
 	}

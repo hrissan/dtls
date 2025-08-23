@@ -20,7 +20,7 @@ func NumberWith(epoch uint16, seqNum uint64) Number {
 	if seqNum > MaxSeq {
 		panic("seqNum must not be over 2^48")
 	}
-	return Number{epochSeqNum: (uint64(epoch) << 48) + seqNum}
+	return Number{epochSeqNum: (uint64(epoch) << 48) + seqNum} // safe due to check above
 }
 
 func (r Number) Less(other Number) bool {
@@ -28,7 +28,7 @@ func (r Number) Less(other Number) bool {
 }
 
 func (r Number) Epoch() uint16 {
-	return uint16(r.epochSeqNum >> 48)
+	return uint16(r.epochSeqNum >> 48) // safe
 }
 
 func (r Number) SeqNum() uint64 {

@@ -6,12 +6,18 @@ package handshake
 import (
 	"encoding/binary"
 	"hash"
+
+	"github.com/hrissan/dtls/safecast"
 )
 
 type Message struct {
 	MsgType MsgType
 	MsgSeq  uint16
 	Body    []byte // TODO - reuse in rope
+}
+
+func (msg *Message) Len32() uint32 {
+	return safecast.Cast[uint32](len(msg.Body))
 }
 
 // MsgSeq is not part of original TLSv3.0, so not included in transcript

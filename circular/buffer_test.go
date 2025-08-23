@@ -46,7 +46,7 @@ func FuzzCircularBuffer(f *testing.F) {
 				cb.Clear()
 				mirror = mirror[:0]
 			default:
-				cb.Reserve(int(c))
+				cb.Reserve(int(c)) // widening
 			}
 		}
 	})

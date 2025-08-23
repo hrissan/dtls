@@ -56,6 +56,6 @@ func (p *AckParser) PopFront(epochSeqOverflowCounter *int) (rn Number, ok bool) 
 			*epochSeqOverflowCounter++ // in case someone needs this metric
 			continue
 		}
-		return NumberWith(uint16(epoch), seq), true
+		return NumberWith(uint16(epoch), seq), true // safe due to checks above
 	}
 }

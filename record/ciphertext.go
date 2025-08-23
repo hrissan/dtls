@@ -35,7 +35,7 @@ var ErrCiphertextRecordBodyTooLong = errors.New("cipher text record body exceeds
 var ErrRecordTypeFailedToParse = errors.New("record type failed to parse")
 
 func CiphertextHeaderFirstByte(hasCID bool, has16bitSeqNum bool, hasLength bool, epoch uint16) byte {
-	result := 0b00100000 | (byte(epoch) & 0b00000011)
+	result := 0b00100000 | (byte(epoch) & 0b00000011) // truncation
 	if hasCID {
 		result |= 0b00010000
 	}
@@ -54,15 +54,15 @@ func (hdr *Ciphertext) HasLength() bool      { return hdr.FirstByte&0b00000100 !
 func (hdr *Ciphertext) Epoch() byte          { return hdr.FirstByte & 0b00000011 }
 
 func (hdr *Ciphertext) MatchesEpoch(epoch uint16) bool {
-	return byte(epoch&0b00000011) == hdr.Epoch()
+	return byte(epoch&0b00000011) == hdr.Epoch() // truncation
 }
 
 func closestSequenceNumber(seq uint16, expectedSN uint64, mask uint64) uint64 {
 	if expectedSN < mask/2 { // irregularity around 0
-		return (expectedSN &^ (mask - 1)) | uint64(seq)
+		return (expectedSN &^ (mask - 1)) | uint64(seq) // widening
 	}
 	bottom := (expectedSN - mask/2)
-	seqCandidate := (bottom &^ (mask - 1)) | uint64(seq)
+	seqCandidate := (bottom &^ (mask - 1)) | uint64(seq) // widening
 	if seqCandidate < bottom {
 		seqCandidate += mask
 	}
@@ -109,8 +109,8 @@ func (hdr *Ciphertext) Parse(datagram []byte, cIDLength int) (n int, err error) 
 	if len(datagram) < offset+2 {
 		return 0, ErrCiphertextRecordTooShort
 	}
-	length := int(binary.BigEndian.Uint16(datagram[offset:]))
-	if length > MaxCiphertextRecordLength { // TODO - generate record_overflow alert
+	length := int(binary.BigEndian.Uint16(datagram[offset:])) // widening
+	if length > MaxCiphertextRecordLength {                   // TODO - generate record_overflow alert
 		return 0, ErrCiphertextRecordBodyTooLong
 	}
 	offset += 2

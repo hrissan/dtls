@@ -166,7 +166,7 @@ func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, da
 		}
 		seq := nextReceiveSeq + i - replay.Width
 		if acks.IsSetBit(seq) {
-			binary.BigEndian.PutUint64(insideBody[offset:], uint64(conn.keys.SendAcksEpoch))
+			binary.BigEndian.PutUint64(insideBody[offset:], uint64(conn.keys.SendAcksEpoch)) // widening
 			binary.BigEndian.PutUint64(insideBody[offset+8:], seq)
 			offset += record.AckElementSize
 			acks.ClearBit(seq)

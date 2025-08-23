@@ -40,7 +40,7 @@ func FuzzHeapAry(f *testing.F) {
 					mirror = mirror[1:]
 				}
 			case c < 128:
-				el := storage[int(c)%len(storage)]
+				el := storage[int(c)%len(storage)] // widening
 				mirrorIndex := -1
 				for i, m := range mirror {
 					if el == m {
@@ -60,7 +60,7 @@ func FuzzHeapAry(f *testing.F) {
 					}
 				}
 			default:
-				el := storage[int(c)%len(storage)]
+				el := storage[int(c)%len(storage)] // widening
 				mirrorIndex := -1
 				for i, m := range mirror {
 					if el == m {

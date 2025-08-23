@@ -16,7 +16,6 @@ import (
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/replay"
-	"github.com/hrissan/dtls/safecast"
 )
 
 type handshakeContext struct {
@@ -65,7 +64,7 @@ func newHandshakeContext(hasher hash.Hash) *handshakeContext {
 }
 
 func (hctx *handshakeContext) firstMessageSeqInReceiveQueue(conn *Connection) uint16 {
-	if hctx.receivedMessages.Len() > int(conn.nextMessageSeqReceive) {
+	if hctx.receivedMessages.Len() > int(conn.nextMessageSeqReceive) { // widening
 		panic("received messages queue invariant violated")
 	}
 	return conn.nextMessageSeqReceive - uint16(hctx.receivedMessages.Len()) // safe due to check above
@@ -106,7 +105,7 @@ func (hctx *handshakeContext) ReceivedFragment(conn *Connection, fragment handsh
 	if fragment.Header.MsgType == handshake.MsgTypeZero { // we use it as a flag of not yet received message below, so check here
 		return dtlserrors.ErrHandshakeMessageTypeUnknown
 	}
-	messageOffset := int(fragment.Header.MsgSeq) + hctx.receivedMessages.Len() - int(conn.nextMessageSeqReceive)
+	messageOffset := int(fragment.Header.MsgSeq) + hctx.receivedMessages.Len() - int(conn.nextMessageSeqReceive) // widening
 	if messageOffset < 0 {
 		panic("checked before calling handshakeContext.ReceivedFragment")
 	}
@@ -135,7 +134,7 @@ func (hctx *handshakeContext) ReceivedFragment(conn *Connection, fragment handsh
 		if fragment.Header.MsgSeq != partialMessage.Msg.MsgSeq {
 			panic("message sequence is queue offset and must always match")
 		}
-		if fragment.Header.Length != safecast.Cast[uint32](len(partialMessage.Msg.Body)) {
+		if fragment.Header.Length != partialMessage.Msg.Len32() {
 			return dtlserrors.ErrHandshakeMessageFragmentLengthMismatch
 		}
 		if fragment.Header.MsgType != partialMessage.Msg.MsgType {

@@ -84,7 +84,7 @@ func (c *CookieState) CreateCookie(params Params, addr netip.AddrPort) Cookie {
 	}
 	{
 		var unixNanoBytes [8]byte
-		binary.BigEndian.PutUint64(unixNanoBytes[:], uint64(params.TimestampUnixNano))
+		binary.BigEndian.PutUint64(unixNanoBytes[:], uint64(params.TimestampUnixNano)) // type conversion
 		cookie.AppendMust(unixNanoBytes[:])
 	}
 	if params.KeyShareSet { // to reconstruct stateless HRR, we must remember if we asked for alternative key_share

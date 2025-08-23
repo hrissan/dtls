@@ -46,7 +46,7 @@ func prepareBufferExtForTests(elements []record2Fragment) *circular.BufferExt[re
 		sentRecords.PopFront(elements)
 	}
 	for i := 0; i < size; i++ {
-		rn := record.NumberWith(1, uint64(i))
+		rn := record.NumberWith(1, uint64(i)) // widening
 		if i%2 == 0 {
 			sentRecords.PushBack(elements, record2Fragment{rn: rn})
 		}
@@ -58,7 +58,7 @@ func TestSendQueue_AckExt(t *testing.T) {
 	var elements [32]record2Fragment
 	sentRecords := prepareBufferExtForTests(elements[:])
 	for i := 0; i < 30; i++ {
-		rn := record.NumberWith(1, uint64(i))
+		rn := record.NumberWith(1, uint64(i)) // widening
 		fragmentPtr1 := findSentRecordIndexExt(elements[:], sentRecords, rn)
 		fragmentPtr2 := findSentRecordIndexExt2(elements[:], sentRecords, rn)
 		if fragmentPtr1 != fragmentPtr2 {

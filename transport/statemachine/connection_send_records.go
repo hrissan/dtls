@@ -19,14 +19,14 @@ import (
 
 func (conn *Connection) constructRecord(opts *options.TransportOptions, datagramLeft []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
-	if fragmentOffset >= safecast.Cast[uint32](len(handshakeMsg.Body)) {
+	if fragmentOffset >= handshakeMsg.Len32() {
 		// >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
 		panic("invariant of send queue fragment offset violated")
 	}
 	msg := handshake.Fragment{
 		Header: handshake.FragmentHeader{
 			MsgType: handshakeMsg.MsgType,
-			Length:  safecast.Cast[uint32](len(handshakeMsg.Body)),
+			Length:  handshakeMsg.Len32(),
 			FragmentInfo: handshake.FragmentInfo{
 				MsgSeq:         handshakeMsg.MsgSeq,
 				FragmentOffset: fragmentOffset,
@@ -81,13 +81,13 @@ func (conn *Connection) constructPlaintextRecord(datagramLeft []byte, msg handsh
 		// We needed code to prevent overflow below anyway
 		return nil, record.Number{}, dtlserrors.ErrSendEpoch0RecordSeqOverflow
 	}
-	rn := record.NumberWith(0, uint64(*sendNextSegmentSequenceEpoch0))
+	rn := record.NumberWith(0, uint64(*sendNextSegmentSequenceEpoch0)) // widening
 	recordHdr := record.PlaintextHeader{
 		ContentType:    record.RecordTypeHandshake,
-		SequenceNumber: uint64(*sendNextSegmentSequenceEpoch0),
+		SequenceNumber: uint64(*sendNextSegmentSequenceEpoch0), // widening
 	}
 	*sendNextSegmentSequenceEpoch0++ // never overflows due to check above
-	datagramLeft = recordHdr.Write(datagramLeft, safecast.Cast[uint16](handshake.FragmentHeaderSize+int(msg.Header.FragmentLength)))
+	datagramLeft = recordHdr.Write(datagramLeft, safecast.Cast[uint16](handshake.FragmentHeaderSize+msg.Header.FragmentLength))
 	datagramLeft = msg.Header.Write(datagramLeft)
 	datagramLeft = append(datagramLeft, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
 	return datagramLeft, rn, nil

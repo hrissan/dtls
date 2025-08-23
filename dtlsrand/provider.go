@@ -34,7 +34,7 @@ type fixedRand struct {
 
 func (c *fixedRand) ReadMust(data []byte) {
 	for i := range data {
-		data[i] = byte(c.offset)
+		data[i] = byte(c.offset) // truncate
 		c.offset++
 	}
 }

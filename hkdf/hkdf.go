@@ -8,7 +8,11 @@ package hkdf
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/binary"
 	"hash"
+	"math"
+
+	"github.com/hrissan/dtls/safecast"
 )
 
 // TODO - remove allocations
@@ -28,7 +32,7 @@ func Expand(hasher hash.Hash, keymaterial, info []byte, outlength int) []byte {
 	T := []byte{}
 	for i := 1; i <= n; i++ {
 		T = append(T, info...)
-		T = append(T, byte(i))
+		T = append(T, byte(i)) // truncate
 		T = HMAC(keymaterial, T, hasher)
 		result = append(result, T...)
 	}
@@ -36,13 +40,15 @@ func Expand(hasher hash.Hash, keymaterial, info []byte, outlength int) []byte {
 }
 
 func ExpandLabel(hasher hash.Hash, secret []byte, label string, context []byte, length int) []byte {
-	hkdflabel := make([]byte, 0, 512) // goblin:inline
-	hkdflabel = append(hkdflabel, byte(length>>8))
-	hkdflabel = append(hkdflabel, byte(length))
-	hkdflabel = append(hkdflabel, byte(len(label)+6))
+	if length < 0 || length > math.MaxUint16 {
+		panic("invalid expand label result length")
+	}
+	hkdflabel := make([]byte, 0, 128)
+	hkdflabel = binary.BigEndian.AppendUint16(hkdflabel, uint16(length)) // safe due to check above
+	hkdflabel = append(hkdflabel, safecast.Cast[byte](len(label)+6))
 	hkdflabel = append(hkdflabel, "dtls13"...)
 	hkdflabel = append(hkdflabel, label...)
-	hkdflabel = append(hkdflabel, byte(len(context)))
+	hkdflabel = append(hkdflabel, safecast.Cast[byte](len(context)))
 	hkdflabel = append(hkdflabel, context...)
 	return Expand(hasher, secret, hkdflabel, length)
 }

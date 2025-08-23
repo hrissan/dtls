@@ -58,7 +58,7 @@ func (hdr *Plaintext) Parse(datagram []byte) (n int, err error) {
 		return 0, ErrPlaintextRecordBodyEpochNonZero
 	}
 	hdr.SequenceNumber = binary.BigEndian.Uint64(datagram[3:11]) & 0xFFFFFFFFFFFF
-	length := int(binary.BigEndian.Uint16(datagram[11:13]))
+	length := int(binary.BigEndian.Uint16(datagram[11:13])) // widening
 	if length == 0 {
 		return 0, ErrPlaintextRecordBodyTooShort
 	}

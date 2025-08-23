@@ -57,7 +57,7 @@ func (hdr *FragmentHeader) Write(datagram []byte) []byte {
 	if hdr.FragmentOffset >= hdr.Length || hdr.FragmentOffset+hdr.FragmentLength > hdr.Length {
 		panic("attempt to write handshake message fragment with offset or length mismatch")
 	}
-	datagram = append(datagram, byte(hdr.MsgType))
+	datagram = append(datagram, byte(hdr.MsgType)) // typecast
 	datagram = format.AppendUint24(datagram, hdr.Length)
 	datagram = binary.BigEndian.AppendUint16(datagram, hdr.MsgSeq)
 	datagram = format.AppendUint24(datagram, hdr.FragmentOffset)
@@ -69,7 +69,7 @@ func (fragment *Fragment) Parse(record []byte) (n int, err error) {
 	if err := fragment.Header.Parse(record); err != nil {
 		return 0, err
 	}
-	endOffset := FragmentHeaderSize + int(fragment.Header.FragmentLength)
+	endOffset := FragmentHeaderSize + int(fragment.Header.FragmentLength) // safe due to limit in Header.Parse above
 	if len(record) < endOffset {
 		return 0, ErrHandshakeFragmentTooShort
 	}

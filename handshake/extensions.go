@@ -166,7 +166,7 @@ func (msg *ExtensionsSet) WriteInside(body []byte, isNewSessionTicket bool, isSe
 		if len(data) >= math.MaxUint16 {
 			panic("cookie length too big")
 		}
-		body = binary.BigEndian.AppendUint16(body, uint16(len(data)))
+		body = binary.BigEndian.AppendUint16(body, uint16(len(data))) // safe due to check above
 		body = append(body, data...)
 		format.FillUint16Offset(body, mark)
 	}

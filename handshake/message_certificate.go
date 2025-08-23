@@ -39,8 +39,8 @@ func (msg *MsgCertificate) parseCertificates(body []byte) (err error) {
 			return err
 		}
 		// TODO - use rope here
-		msg.Certificates[msg.CertificatesLength].CertData = append([]byte(nil), certData...)
-		msg.Certificates[msg.CertificatesLength].ExtenstionsData = append([]byte(nil), externsionData...)
+		msg.Certificates[msg.CertificatesLength].CertData = append([]byte{}, certData...)
+		msg.Certificates[msg.CertificatesLength].ExtenstionsData = append([]byte{}, externsionData...)
 		msg.CertificatesLength++
 	}
 	return nil

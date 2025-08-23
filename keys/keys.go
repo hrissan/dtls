@@ -63,11 +63,12 @@ func (keys *Keys) AddAck(rn record.Number) {
 func (keys *Keys) SequenceNumberLimit() uint64 {
 	limitExp := keys.SequenceNumberLimitExp
 	if limitExp < 5 {
-		panic("do not set limitExp = 4 even for tests, as key update reaches hard limit before epoch will advance")
+		panic("do not set limitExp < 5 even for tests, as sequence reaches hard limit before key update protocol finished")
 	}
-	// with limitExp = 5 and very few packets you can continuously test key update state machine.
-
-	return min(record.MaxSeq, (uint64(1)<<limitExp)-1) // -1 gives us margin in case we actually store nextSeqNum in 48-bit field somewhere (we should not)
+	if limitExp > 63 { // some cipher suite might declare very high limit, we have no problem with that
+		limitExp = 63
+	}
+	return min(record.MaxSeq, uint64(1)<<limitExp) // safe due to check above
 }
 
 func NewAesCipher(key []byte) cipher.Block {

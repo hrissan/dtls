@@ -8,7 +8,6 @@ import (
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
-	"github.com/hrissan/dtls/safecast"
 	"github.com/hrissan/dtls/transport/options"
 )
 
@@ -83,7 +82,7 @@ func (sq *sendQueue) ConstructDatagram(conn *Connection, opts *options.Transport
 			} else {
 				// We only can send that if we are still in handshake.
 				// If not, we simply pretend we sent it.
-				sq.fragmentOffset = safecast.Cast[uint32](len(outgoing.Msg.Body))
+				sq.fragmentOffset = outgoing.Msg.Len32()
 			}
 		}
 		fragmentOffset, fragmentLength := outgoing.Ass.GetFragmentFromOffset(sq.fragmentOffset)
@@ -142,11 +141,11 @@ func (sq *sendQueue) Ack(conn *Connection, rn record.Number) {
 	for sq.sentRecords.Len() != 0 && sq.sentRecords.Front(sq.sentRecordsStorage[:]).fragment == (handshake.FragmentInfo{}) {
 		sq.sentRecords.PopFront(sq.sentRecordsStorage[:]) // delete everything from the front
 	}
-	if sq.messages.Len() > int(conn.nextMessageSeqSend) {
+	if sq.messages.Len() > int(conn.nextMessageSeqSend) { // widening
 		panic("invariant violation")
 	}
 	// sq.messages end() is aligned with conn.nextMessageSeqSend
-	index := int(rec.MsgSeq) + sq.messages.Len() - int(conn.nextMessageSeqSend)
+	index := int(rec.MsgSeq) + sq.messages.Len() - int(conn.nextMessageSeqSend) // widening
 	if index < 0 || index >= sq.messages.Len() {
 		return
 	}

@@ -5,7 +5,7 @@ package statemachine
 
 import (
 	"encoding/binary"
-	"log"
+	"fmt"
 	"net/netip"
 
 	"github.com/hrissan/dtls/constants"
@@ -15,11 +15,7 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *Connection) SetWriteable() {
-	if conn.handlerWriteable {
-		return // save
-	}
-	conn.handlerWriteable = true
+func (conn *Connection) SignalWriteable() {
 	conn.transport.snd.RegisterConnectionForSend(conn)
 }
 
@@ -37,8 +33,7 @@ func (conn *Connection) hasDataToSendLocked() bool {
 	if conn.keys.Send.Symmetric.Epoch != 0 && conn.keys.SendAcks.GetBitCount() != 0 {
 		return true
 	}
-	return conn.handlerWriteable ||
-		(conn.keyUpdateInProgress() && (conn.sentKeyUpdateRN == record.Number{})) ||
+	return (conn.keyUpdateInProgress() && (conn.sentKeyUpdateRN == record.Number{})) ||
 		(conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN == record.Number{}))
 }
 
@@ -50,7 +45,7 @@ func (conn *Connection) constructDatagram(opts *options.TransportOptions, datagr
 	var err error
 	datagramSize, addToSendQueue, err = conn.constructDatagramLocked(opts, datagram)
 	if err != nil {
-		log.Printf("TODO - close connection")
+		fmt.Printf("TODO - close connection\n")
 	}
 	return
 }
@@ -113,7 +108,8 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN != record.Number{}) {
 		// TODO
 	}
-	if conn.handler != nil { // application data
+	signalWriteable := false
+	if conn.stateID == smIDPostHandshake { // application data
 		// If we remove "if" below, we put ack for client finished together with
 		// application data into the same datagram. Then wolfSSL_connect will return
 		// err = -441, Application data is available for reading
@@ -124,7 +120,7 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 		hdrSize := record.OutgoingCiphertextRecordHeader16
 		hdrSize, insideBody, ok := conn.prepareProtect(datagram[datagramSize:], opts.Use8BitSeq)
 		if ok && len(insideBody) >= constants.MinFragmentBodySize {
-			insideSize, send, add := conn.handler.OnWriteRecord(insideBody)
+			insideSize, send, wr := conn.handler.OnWriteRecordLocked(insideBody)
 			if insideSize > len(insideBody) {
 				panic("ciphertext user handler overflows allowed record")
 			}
@@ -133,17 +129,12 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 				if err != nil {
 					return 0, false, err
 				}
-				//if len(da) > len(datagram[datagramSize:]) {
-				//	panic("ciphertext application record construction length invariant failed")
-				//}
 				datagramSize += recordSize
 			}
-			if !add {
-				conn.handlerWriteable = false
-			}
+			signalWriteable = wr
 		}
 	}
-	return datagramSize, conn.hasDataToSendLocked(), nil
+	return datagramSize, signalWriteable || conn.hasDataToSendLocked(), nil
 }
 
 func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, datagramLeft []byte) (int, error) {

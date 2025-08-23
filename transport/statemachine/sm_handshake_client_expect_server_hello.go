@@ -5,7 +5,7 @@ package statemachine
 
 import (
 	"crypto/ecdh"
-	"log"
+	"fmt"
 
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
@@ -27,11 +27,11 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	}
 	// ServerHello can have messageSeq 0 or 1, depending on whether server used HRR
 	if !hctx.serverUsedHRR && msg.MsgSeq != 0 {
-		log.Printf("ServerHello after ServerHelloRetryRequest has msgSeq != 1")
+		fmt.Printf("ServerHello after ServerHelloRetryRequest has msgSeq != 1\n")
 		return dtlserrors.ErrClientHelloUnsupportedParams
 	}
 	if hctx.serverUsedHRR && msg.MsgSeq != 1 {
-		log.Printf("ServerHello after ServerHelloRetryRequest has msgSeq != 1")
+		fmt.Printf("ServerHello after ServerHelloRetryRequest has msgSeq != 1\n")
 		return dtlserrors.ErrClientHelloUnsupportedParams
 	}
 	if !msgParsed.Extensions.KeyShare.X25519PublicKeySet {
@@ -55,6 +55,6 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	conn.keys.SequenceNumberLimitExp = 5 // TODO - set for actual cipher suite. Small value is for testing.
 
 	conn.stateID = smIDHandshakeClientExpectServerEE
-	log.Printf("processed server hello")
+	fmt.Printf("processed server hello\n")
 	return nil
 }

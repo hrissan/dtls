@@ -4,7 +4,7 @@
 package statemachine
 
 import (
-	"log"
+	"fmt"
 	"net/netip"
 
 	"github.com/hrissan/dtls/dtlserrors"
@@ -20,7 +20,7 @@ func (t *Transport) receivedPlaintextRecord(conn *Connection, hdr record.Plainte
 		}
 		return conn, conn.receivedAlert(false, hdr.Body)
 	case record.RecordTypeAck:
-		log.Printf("dtls: got ack record (plaintext) %d bytes from %v, message(hex): %x", len(hdr.Body), addr, hdr.Body)
+		fmt.Printf("dtls: got ack record (plaintext) %d bytes from %v, message(hex): %x\n", len(hdr.Body), addr, hdr.Body)
 		// unencrypted acks can only acknowledge unencrypted messaged, so very niche, we simply ignore them
 	case record.RecordTypeHandshake:
 		return t.receivedPlaintextHandshake(conn, hdr, addr)
@@ -29,7 +29,7 @@ func (t *Transport) receivedPlaintextRecord(conn *Connection, hdr record.Plainte
 }
 
 func (t *Transport) receivedPlaintextHandshake(conn *Connection, hdr record.Plaintext, addr netip.AddrPort) (*Connection, error) {
-	// log.Printf("dtls: got handshake record (plaintext) %d bytes from %v, message(hex): %x", len(recordData), addr, recordData)
+	// fmt.Printf("dtls: got handshake record (plaintext) %d bytes from %v, message(hex): %x", len(recordData), addr, recordData)
 	if len(hdr.Body) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding
 		return conn, dtlserrors.ErrHandshakeRecordEmpty
@@ -38,7 +38,7 @@ func (t *Transport) receivedPlaintextHandshake(conn *Connection, hdr record.Plai
 	// there are two acceptable ways to pack two DTLS handshake messages into the same datagram:
 	// in the same record or in separate records [rfc9147:5.5]
 	for messageOffset < len(hdr.Body) {
-		// log.Printf("dtls: got handshake message %v from %v, message(hex): %x", hdr, addr, messageData)
+		// fmt.Printf("dtls: got handshake message %v from %v, message(hex): %x", hdr, addr, messageData)
 		var fragment handshake.Fragment
 		n, err := fragment.Parse(hdr.Body[messageOffset:])
 		if err != nil {

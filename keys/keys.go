@@ -55,7 +55,7 @@ func (keys *Keys) AddAck(rn record.Number) {
 		keys.SendAcks.Reset()
 	}
 	// in epoch 0, we send ack for ServerHello, but not for ClientHello,
-	// log.Printf("adding ack={%d,%d}", rn.Epoch(), rn.SeqNum())
+	// fmt.Printf("adding ack={%d,%d}\n", rn.Epoch(), rn.SeqNum())
 	keys.SendAcks.SetNextReceived(rn.SeqNum() + 1)
 	keys.SendAcks.SetBit(rn.SeqNum())
 }

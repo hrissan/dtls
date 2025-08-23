@@ -5,7 +5,7 @@ package statemachine
 
 import (
 	"encoding/binary"
-	"log"
+	"fmt"
 	"math"
 
 	"github.com/hrissan/dtls/constants"
@@ -132,7 +132,7 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, hdrS
 	send := &conn.keys.Send
 	epoch := send.Symmetric.Epoch
 	rn := record.NumberWith(epoch, seq)
-	log.Printf("constructing ciphertext type %d with rn={%d,%d} hdrSize = %d body: %x", recordType, rn.Epoch(), rn.SeqNum(), hdrSize, datagramLeft[hdrSize:hdrSize+insideSize])
+	fmt.Printf("constructing ciphertext type %d with rn={%d,%d} hdrSize = %d body: %x\n", recordType, rn.Epoch(), rn.SeqNum(), hdrSize, datagramLeft[hdrSize:hdrSize+insideSize])
 
 	gcm := send.Symmetric.Write
 	iv := send.Symmetric.WriteIV
@@ -180,6 +180,6 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, hdrS
 			panic("cipher text too short when sending")
 		}
 	}
-	//	log.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
+	//	fmt.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
 	return hdrSize + insideSize + constants.AEADSealSize, rn, nil
 }

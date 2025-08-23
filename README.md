@@ -238,3 +238,5 @@ we should mostly ignore it.
 * offload long calculations (ECC, RSA, etc.) to separate goroutine(s)
 
 * throughput and latency benchmarks, comparison with UDP without encryption. 
+
+* implement key log writer https://developer.mozilla.org/en-US/docs/Mozilla/Projects/NSS/Key_Log_Format.

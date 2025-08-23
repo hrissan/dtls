@@ -5,7 +5,7 @@ package statemachine
 
 import (
 	"crypto/sha256"
-	"log"
+	"fmt"
 
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
@@ -28,7 +28,7 @@ func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handsha
 	if string(msgParsed.VerifyData[:msgParsed.VerifyDataLength]) != string(mustBeFinished) {
 		return dtlserrors.ErrFinishedMessageVerificationFailed
 	}
-	log.Printf("finished message verify ok: %+v", msgParsed)
+	fmt.Printf("finished message verify ok: %+v\n", msgParsed)
 	// if conn.hctx.sendQueue.Len() == 0 && conn.keys.Send.Symmetric.Epoch == 2 {
 	conn.keys.Send.Symmetric.ComputeKeys(conn.keys.Send.ApplicationTrafficSecret[:])
 	conn.keys.Send.Symmetric.Epoch = 3
@@ -38,8 +38,8 @@ func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handsha
 	// in the same datagram as ack. Reproduce on the latest version of us?
 	//conn.handler = &exampleHandler{toSend: "Hello from server\n"}
 	conn.stateID = smIDPostHandshake
-	conn.handlerWriteable = true // we have to call OnWriteRecord to see if there is
-	conn.handler.OnConnect()
+	conn.handler.OnConnectLocked()
+	conn.SignalWriteable()
 	// }
 	return nil
 }

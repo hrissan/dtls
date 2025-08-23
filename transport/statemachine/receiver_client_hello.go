@@ -5,7 +5,7 @@ package statemachine
 
 import (
 	"crypto/sha256"
-	"log"
+	"fmt"
 	"net/netip"
 	"time"
 
@@ -57,7 +57,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 			panic("Large HRR datagram must not be generated")
 		}
 		hrrHash := sha256.Sum256(hrrDatagram)
-		log.Printf("serverHRRHash1: %x\n", hrrHash[:])
+		fmt.Printf("serverHRRHash1: %x\n", hrrHash[:])
 		t.snd.SendHelloRetryDatagram(hrrStorage, len(hrrDatagram), addr)
 		return conn, nil
 	}

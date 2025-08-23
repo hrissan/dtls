@@ -4,7 +4,7 @@
 package statemachine
 
 import (
-	"log"
+	"fmt"
 
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/record"
@@ -16,7 +16,7 @@ func (conn *Connection) receivedEncryptedAck(opts *options.TransportOptions, rec
 	if err != nil {
 		return dtlserrors.ErrEncryptedAckMessageHeaderParsing
 	}
-	log.Printf("dtls: got ack record (encrypted) %d bytes from %v, message(hex): %x", len(recordData), conn.addr, recordData)
+	fmt.Printf("dtls: got ack record (encrypted) %d bytes from %v, message(hex): %x\n", len(recordData), conn.addr, recordData)
 	var epochOverflowCounter int
 	for {
 		rn, ok := parser.PopFront(&epochOverflowCounter)
@@ -37,9 +37,10 @@ func (conn *Connection) receivedEncryptedAck(opts *options.TransportOptions, rec
 		conn.keys.Send.Symmetric.ComputeKeys(conn.keys.Send.ApplicationTrafficSecret[:])
 		conn.keys.Send.Symmetric.Epoch = 3
 		conn.keys.SendNextSegmentSequence = 0
-		conn.hctx = nil              // TODO - reuse into pool
-		conn.handlerWriteable = true // we have to call OnWriteRecord to see if there is
-		conn.handler.OnConnect()     //  = &exampleHandler{toSend: "Hello from client\n"}
+		conn.hctx = nil                // TODO - reuse into pool
+		conn.handler.OnConnectLocked() //  = &exampleHandler{toSend: "Hello from client\n"}
+		conn.stateID = smIDPostHandshake
+		conn.SignalWriteable()
 	}
 	return nil // ack occupies full record
 }
@@ -51,7 +52,7 @@ func (conn *Connection) processNewSessionTicketAck(rn record.Number) {
 	if conn.sentNewSessionTicketRN == (record.Number{}) || conn.sentNewSessionTicketRN != rn {
 		return
 	}
-	log.Printf("NewSessionTicket ack received")
+	fmt.Printf("NewSessionTicket ack received\n")
 	conn.sendNewSessionTicketMessageSeq = 0
 	conn.sentNewSessionTicketRN = record.Number{}
 }
@@ -63,7 +64,7 @@ func (conn *Connection) processKeyUpdateAck(rn record.Number) {
 	if conn.sentKeyUpdateRN == (record.Number{}) || conn.sentKeyUpdateRN != rn {
 		return
 	}
-	log.Printf("KeyUpdate ack received")
+	fmt.Printf("KeyUpdate ack received\n")
 	conn.sendKeyUpdateMessageSeq = 0
 	conn.sentKeyUpdateRN = record.Number{}
 	conn.sendKeyUpdateUpdateRequested = false // must not be necessary

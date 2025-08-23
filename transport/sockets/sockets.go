@@ -1,6 +1,7 @@
 package sockets
 
 import (
+	"fmt"
 	"log"
 	"net"
 )
@@ -15,6 +16,6 @@ func OpenSocketMust(addressPort string) *net.UDPConn {
 	if err != nil {
 		log.Fatalf("dtls: cannot listen to udp address %s: %v", addressPort, err)
 	}
-	log.Printf("dtls: opened socket for address %s localAddr %s\n", addressPort, socket.LocalAddr().String())
+	fmt.Printf("dtls: opened socket for address %s localAddr %s\n", addressPort, socket.LocalAddr().String())
 	return socket
 }

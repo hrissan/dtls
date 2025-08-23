@@ -7,8 +7,8 @@ import (
 	"crypto/ecdh"
 	"crypto/rsa"
 	"crypto/sha256"
+	"fmt"
 	"hash"
-	"log"
 
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/cookie"
@@ -22,7 +22,7 @@ import (
 func debugPrintSum(hasher hash.Hash) {
 	var ha [constants.MaxHashLength]byte
 	hasher.Sum(ha[:0])
-	log.Printf("%x\n", ha[:])
+	fmt.Printf("%x\n", ha[:])
 }
 
 // we must generate the same server hello, because we are stateless, but this message is in transcript
@@ -111,7 +111,7 @@ func generateServerCertificateVerify(opts *options.TransportOptions, hctx *hands
 	privateRsa := opts.ServerCertificate.PrivateKey.(*rsa.PrivateKey)
 	sig, err := signature.CreateSignature_RSA_PSS_RSAE_SHA256(opts.Rnd, privateRsa, sigMessageHash)
 	if err != nil {
-		log.Printf("create signature error: %v", err)
+		fmt.Printf("create signature error: %v\n", err)
 		return handshake.Message{}, dtlserrors.ErrCertificateVerifyMessageSignature
 	}
 	msg.Signature = sig
@@ -155,7 +155,7 @@ func (conn *Connection) onClientHello2(opts *options.TransportOptions,
 			panic("Large HRR datagram must not be generated")
 		}
 		hrrHash := sha256.Sum256(hrrDatagram)
-		log.Printf("serverHRRHash2: %x\n", hrrHash[:])
+		fmt.Printf("serverHRRHash2: %x\n", hrrHash[:])
 
 		// [rfc8446:4.4.1] replace initial client hello message with its hash if HRR was used
 		syntheticMessage := handshake.Message{
@@ -179,7 +179,7 @@ func (conn *Connection) onClientHello2(opts *options.TransportOptions,
 		msg.AddToHash(hctx.transcriptHasher)
 		debugPrintSum(hctx.transcriptHasher)
 	}
-	log.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x", params.KeyShareSet, params.TranscriptHash)
+	fmt.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x\n", params.KeyShareSet, params.TranscriptHash)
 	opts.Rnd.ReadMust(hctx.localRandom[:])
 	hctx.ComputeKeyShare(opts.Rnd)
 

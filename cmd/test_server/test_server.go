@@ -28,7 +28,7 @@ func main() {
 		"../../wolfssl-examples/certs/server-key.pem"); err != nil {
 		log.Fatal(err)
 	}
-	room := chat.NewChatRoom()
+	room := chat.NewRoom()
 	t := statemachine.NewTransport(opts, room)
 
 	t.GoRunUDP(socket)

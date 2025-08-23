@@ -4,7 +4,7 @@
 package statemachine
 
 import (
-	"log"
+	"fmt"
 
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
@@ -23,7 +23,7 @@ func (hctx *handshakeContext) receivedFullMessage(conn *Connection, msg handshak
 		if err := msgParsed.ParseOutside(msg.Body, false, true, false); err != nil {
 			return dtlserrors.ErrExtensionsMessageParsing
 		}
-		log.Printf("encrypted extensions parsed: %+v", msgParsed)
+		fmt.Printf("encrypted extensions parsed: %+v\n", msgParsed)
 		msg.AddToHash(hctx.transcriptHasher)
 		return conn.state().OnEncryptedExtensions(conn, msg, msgParsed)
 	case handshake.MsgTypeCertificate:
@@ -34,7 +34,7 @@ func (hctx *handshakeContext) receivedFullMessage(conn *Connection, msg handshak
 		// We do not want checks here, because receiving goroutine should not be blocked for long
 		// We have to first receive everything up to finished, send acks,
 		// then offload ECC to separate core and trigger state machine depending on result
-		log.Printf("certificate parsed: %+v", msgParsed)
+		fmt.Printf("certificate parsed: %+v\n", msgParsed)
 		msg.AddToHash(hctx.transcriptHasher)
 		return conn.state().OnCertificate(conn, msg, msgParsed)
 	case handshake.MsgTypeCertificateVerify:
@@ -56,7 +56,7 @@ func (hctx *handshakeContext) receivedFullMessage(conn *Connection, msg handshak
 		panic("should be handled in smHandshake.OnHandshakeMsgFragment")
 	default:
 		// TODO - process all messages in standard, generate error for the rest
-		log.Printf("TODO - encrypted message type %d not supported", msg.MsgType)
+		fmt.Printf("TODO - encrypted message type %d not supported\n", msg.MsgType)
 	}
 	return nil
 }

@@ -35,7 +35,7 @@ func (hctx *handshakeContext) generateFinished(conn *Connection) handshake.Messa
 type stateMachineStateID byte
 
 const (
-	smIDClosed                                stateMachineStateID = 0
+	smIDClosed                                stateMachineStateID = 0 // must be 0 for correct default state
 	smIDClientSentHello                       stateMachineStateID = 1
 	smIDHandshakeServerExpectClientHello2     stateMachineStateID = 2
 	smIDHandshakeServerExpectFinished         stateMachineStateID = 3

@@ -4,7 +4,7 @@
 package statemachine
 
 import (
-	"log"
+	"fmt"
 	"math"
 
 	"github.com/hrissan/dtls/dtlserrors"
@@ -24,7 +24,7 @@ func (conn *Connection) receivedCiphertextRecord(opts *options.TransportOptions,
 		// either garbage, attack or epoch wrapping
 		return err
 	}
-	log.Printf("dtls: ciphertext deprotected with rn={%d,%d} cid(hex): %x from %v, body(hex): %x", rn.Epoch(), rn.SeqNum(), hdr.CID, conn.addr, recordBody)
+	fmt.Printf("dtls: ciphertext deprotected with rn={%d,%d} cid(hex): %x from %v, body(hex): %x\n", rn.Epoch(), rn.SeqNum(), hdr.CID, conn.addr, recordBody)
 	// [rfc9147:4.1]
 	switch contentType { // TODO - call StateMachine here
 	case record.RecordTypeAlert:
@@ -48,13 +48,13 @@ func (conn *Connection) receivedAlert(encrypted bool, recordBody []byte) error {
 		return err
 	}
 	// TODO - beware of unencrypted alert!
-	log.Printf("dtls: got alert record (encrypted=%v) %d bytes from %v, %+v", encrypted, len(recordBody), conn.addr, alert)
+	fmt.Printf("dtls: got alert record (encrypted=%v) %d bytes from %v, %+v\n", encrypted, len(recordBody), conn.addr, alert)
 	return nil
 }
 
 func (conn *Connection) receivedApplicationData(recordBody []byte) error {
-	log.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q", len(recordBody), conn.addr, recordBody)
-	return conn.handler.OnReadRecord(recordBody)
+	fmt.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q\n", len(recordBody), conn.addr, recordBody)
+	return conn.handler.OnReadRecordLocked(recordBody)
 	/*
 		if conn.roleServer && conn.handler != nil {
 			// TODO - controller to play with state. Remove after testing!
@@ -78,7 +78,7 @@ func (conn *Connection) receivedApplicationData(recordBody []byte) error {
 }
 
 func (conn *Connection) receivedEncryptedHandshakeRecord(opts *options.TransportOptions, recordBody []byte, rn record.Number) error {
-	log.Printf("dtls: got handshake record (encrypted) %d bytes from %v, message(hex): %x", len(recordBody), conn.addr, recordBody)
+	fmt.Printf("dtls: got handshake record (encrypted) %d bytes from %v, message(hex): %x\n", len(recordBody), conn.addr, recordBody)
 	if len(recordBody) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding
 		return dtlserrors.ErrHandshakeRecordEmpty
@@ -117,8 +117,8 @@ func (conn *Connection) receivedNewSessionTicket(opts *options.TransportOptions,
 		return dtlserrors.ErrReceivedMessageSeqOverflow
 	}
 	conn.keys.AddAck(rn)
-	conn.nextMessageSeqReceive++                        // never due to check above
-	log.Printf("received and ignored NewSessionTicket") // TODO
+	conn.nextMessageSeqReceive++                          // never due to check above
+	fmt.Printf("received and ignored NewSessionTicket\n") // TODO
 	return nil
 }
 
@@ -127,7 +127,7 @@ func (conn *Connection) receivedKeyUpdate(opts *options.TransportOptions, fragme
 	if err := msgKeyUpdate.Parse(fragment.Body); err != nil {
 		return dtlserrors.ErrKeyUpdateMessageParsing
 	}
-	log.Printf("KeyUpdate parsed: %+v", msgKeyUpdate)
+	fmt.Printf("KeyUpdate parsed: %+v\n", msgKeyUpdate)
 	if conn.hctx != nil {
 		opts.Stats.Warning(conn.addr, dtlserrors.ErrPostHandshakeMessageDuringHandshake)
 		return nil
@@ -137,7 +137,7 @@ func (conn *Connection) receivedKeyUpdate(opts *options.TransportOptions, fragme
 	}
 	conn.keys.AddAck(rn)
 	conn.nextMessageSeqReceive++ // never due to check above
-	log.Printf("received KeyUpdate (%+v), expecting to receive record with the next epoch", msgKeyUpdate)
+	fmt.Printf("received KeyUpdate (%+v), expecting to receive record with the next epoch\n", msgKeyUpdate)
 	conn.keys.ExpectReceiveEpochUpdate = true // if this leads to epoch overflow, we'll generate error later in the function which actually increments epoch
 	if msgKeyUpdate.UpdateRequested {
 		if err := conn.keyUpdateStart(false); err != nil { // do not request update, when responding to request

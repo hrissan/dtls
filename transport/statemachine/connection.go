@@ -5,7 +5,7 @@ package statemachine
 
 import (
 	"crypto/sha256"
-	"log"
+	"fmt"
 	"math"
 	"net/netip"
 	"sync"
@@ -25,7 +25,7 @@ type Connection struct {
 	transport *Transport
 	// variables below mu are protected by mu, except where noted
 	mu        sync.Mutex     // TODO - check that mutex is alwasy taken
-	addr      netip.AddrPort // changes very rarely
+	addr      netip.AddrPort // cleared when conn is removed from map, set when added
 	cookieAge time.Duration
 	keys      keys.Keys
 
@@ -50,8 +50,6 @@ type Connection struct {
 
 	roleServer bool                // TODO - remove
 	stateID    stateMachineStateID // index in global table
-	// set when user signals it has data, clears after OnWriteRecord returns false
-	handlerWriteable bool
 
 	// intrusive, must not be changed except by sender, protected by sender mutex
 	inSenderQueue bool
@@ -64,16 +62,23 @@ type Connection struct {
 	fireTimeUnixNano int64
 }
 
-func NewServerConnection(tr *Transport, addr netip.AddrPort) *Connection {
-	return &Connection{
-		transport:  tr,
-		addr:       addr,
-		roleServer: true,
-		stateID:    smIDClosed, // explicit 0
-	}
+func (conn *Connection) Lock()   { conn.mu.Lock() }
+func (conn *Connection) Unlock() { conn.mu.Unlock() }
+
+func (conn *Connection) AddrLocked() netip.AddrPort {
+	return conn.addr
 }
 
-func NewClientConnection(tr *Transport, addr netip.AddrPort) (*Connection, error) {
+func (conn *Connection) Shutdown() {
+	// TODO - send stateless encrypted alert and destroy connection
+}
+
+func (conn *Connection) startConnection(tr *Transport, addr netip.AddrPort) error {
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
+	if conn.stateID != smIDClosed {
+		panic("connection first must be closed")
+	}
 	// TODO - take from pool, limit # of outstanding handshakes
 	hctx := newHandshakeContext(sha256.New())
 	tr.opts.Rnd.ReadMust(hctx.localRandom[:])
@@ -83,20 +88,19 @@ func NewClientConnection(tr *Transport, addr netip.AddrPort) (*Connection, error
 	hctx.ComputeKeyShare(tr.opts.Rnd)
 
 	// TODO - take from pool, limit # of connections
-	conn := &Connection{
-		transport:  tr,
-		addr:       addr,
-		roleServer: false,
-		stateID:    smIDHandshakeClientExpectServerHRR,
-		hctx:       hctx,
-	}
+	conn.transport = tr
+	conn.addr = addr
+	conn.roleServer = false
+	conn.stateID = smIDHandshakeClientExpectServerHRR
+	conn.hctx = hctx
+
 	clientHelloMsg := hctx.generateClientHello(false, cookie.Cookie{})
 
 	if err := hctx.PushMessage(conn, clientHelloMsg); err != nil {
 		// If you start returning nil, err from this function, do not forget to return conn and hctx to the pool
 		panic("push message for client hello must always succeed")
 	}
-	return conn, nil
+	return nil
 }
 
 func (conn *Connection) state() StateMachine { return stateMachineStates[conn.stateID] }
@@ -114,6 +118,16 @@ func (conn *Connection) keyUpdateInProgress() bool {
 	return conn.sendKeyUpdateMessageSeq != 0
 }
 
+// TODO - remove after testing
+func (conn *Connection) DebugKeyUpdateLocked(updateRequested bool) {
+	if err := conn.keyUpdateStart(updateRequested); err != nil {
+		fmt.Printf("dtls: DebugKeyUpdateLocked returned error: %v\n", err)
+		return
+	}
+	fmt.Printf("dtls: DebugKeyUpdateLocked updateRequested: %v\n", updateRequested)
+	conn.SignalWriteable()
+}
+
 func (conn *Connection) keyUpdateStart(updateRequested bool) error {
 	if conn.keyUpdateInProgress() {
 		return nil
@@ -125,7 +139,7 @@ func (conn *Connection) keyUpdateStart(updateRequested bool) error {
 	conn.sentKeyUpdateRN = record.Number{}
 	conn.sendKeyUpdateUpdateRequested = updateRequested
 	conn.nextMessageSeqSend++ // never due to check above
-	log.Printf("KeyUpdate started (updateRequested=%v), messageSeq: %d", updateRequested, conn.sendKeyUpdateMessageSeq)
+	fmt.Printf("KeyUpdate started (updateRequested=%v), messageSeq: %d\n", updateRequested, conn.sendKeyUpdateMessageSeq)
 	return nil
 }
 

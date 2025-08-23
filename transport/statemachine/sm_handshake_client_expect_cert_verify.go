@@ -6,7 +6,7 @@ package statemachine
 import (
 	"crypto/sha256"
 	"crypto/x509"
-	"log"
+	"fmt"
 
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
@@ -47,7 +47,7 @@ func (*smHandshakeClientExpectCertVerify) OnCertificateVerify(conn *Connection, 
 	if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash, msgParsed.Signature); err != nil {
 		return dtlserrors.ErrCertificateSignatureInvalid
 	}
-	log.Printf("certificate verify ok: %+v", msgParsed)
+	fmt.Printf("certificate verify ok: %+v\n", msgParsed)
 	msg.AddToHash(hctx.transcriptHasher)
 	conn.stateID = smIDHandshakeClientExpectServerFinished
 	return nil

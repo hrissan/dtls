@@ -5,7 +5,7 @@ package statemachine
 
 import (
 	"crypto/sha256"
-	"log"
+	"fmt"
 
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
@@ -28,7 +28,7 @@ func (*smHandshakeClientExpectFinished) OnFinished(conn *Connection, msg handsha
 	if string(msgParsed.VerifyData[:msgParsed.VerifyDataLength]) != string(mustBeFinished) {
 		return dtlserrors.ErrFinishedMessageVerificationFailed
 	}
-	log.Printf("finished message verify ok: %+v", msgParsed)
+	fmt.Printf("finished message verify ok: %+v\n", msgParsed)
 	// server finished is not part of traffic secret transcript
 	msg.AddToHash(hctx.transcriptHasher)
 

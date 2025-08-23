@@ -5,8 +5,8 @@ package statemachine
 
 import (
 	"crypto/ecdh"
+	"fmt"
 	"hash"
-	"log"
 	"math"
 
 	"github.com/hrissan/dtls/circular"
@@ -85,7 +85,7 @@ func (hctx *handshakeContext) ReceivedFlight(conn *Connection, flight byte) (new
 		return false
 	}
 	hctx.currentFlight = flight
-	log.Printf("received next flight, clearing send queue")
+	fmt.Printf("received next flight, clearing send queue\n")
 	// implicit ack of all previous flights
 	hctx.sendQueue.Clear()
 

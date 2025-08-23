@@ -6,8 +6,8 @@ package keys
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"fmt"
 	"hash"
-	"log"
 
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/hkdf"
@@ -32,10 +32,10 @@ func (keys *DirectionKeys) ComputeHandshakeKeys(roleServer bool, handshakeSecret
 	hasher := sha256.New()
 	if roleServer {
 		copy(handshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "s hs traffic", trHash[:]))
-		log.Printf("server2 handshake traffic secret: %x\n", handshakeTrafficSecret)
+		fmt.Printf("server2 handshake traffic secret: %x\n", handshakeTrafficSecret)
 	} else {
 		copy(handshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "c hs traffic", trHash[:]))
-		log.Printf("client2 handshake traffic secret: %x\n", handshakeTrafficSecret)
+		fmt.Printf("client2 handshake traffic secret: %x\n", handshakeTrafficSecret)
 	}
 	keys.Symmetric.ComputeKeys(handshakeTrafficSecret[:])
 
@@ -54,10 +54,10 @@ func (keys *DirectionKeys) ComputeApplicationTrafficSecret(roleServer bool, mast
 	hasher := sha256.New()
 	if roleServer {
 		copy(keys.ApplicationTrafficSecret[:], deriveSecret(hasher, masterSecret[:], "s ap traffic", trHash[:]))
-		log.Printf("server2 application traffic secret: %x\n", keys.ApplicationTrafficSecret)
+		fmt.Printf("server2 application traffic secret: %x\n", keys.ApplicationTrafficSecret)
 	} else {
 		copy(keys.ApplicationTrafficSecret[:], deriveSecret(hasher, masterSecret[:], "c ap traffic", trHash[:]))
-		log.Printf("client2 application traffic secret: %x\n", keys.ApplicationTrafficSecret)
+		fmt.Printf("client2 application traffic secret: %x\n", keys.ApplicationTrafficSecret)
 	}
 	// [rfc8446:7.2]
 	//The next-generation application_traffic_secret is computed as:
@@ -71,7 +71,7 @@ func (keys *DirectionKeys) ComputeNextApplicationTrafficSecret(direction string)
 	// the next application traffic secret is calculated from the previous one
 	hasher := sha256.New()
 	copy(keys.ApplicationTrafficSecret[:], hkdf.ExpandLabel(hasher, keys.ApplicationTrafficSecret[:], "traffic upd", []byte{}, len(keys.ApplicationTrafficSecret)))
-	log.Printf("next %s application traffic secret: %x\n", direction, keys.ApplicationTrafficSecret)
+	fmt.Printf("next %s application traffic secret: %x\n", direction, keys.ApplicationTrafficSecret)
 }
 
 // contentType is the first non-zero byte from the end
@@ -104,7 +104,7 @@ func (keys *SymmetricKeys) Deprotect(hdr record.Ciphertext, encryptSN bool, expe
 	gcm := keys.Write
 	iv := keys.WriteIV // copy, otherwise disaster
 	decryptedSeqData, seq := hdr.ClosestSequenceNumber(hdr.SeqNum, expectedSN)
-	log.Printf("decrypted SN: %d, closest: %d", decryptedSeqData, seq)
+	fmt.Printf("decrypted SN: %d, closest: %d\n", decryptedSeqData, seq)
 
 	FillIVSequence(iv[:], seq)
 	decrypted, err = gcm.Open(hdr.Body[:0], iv[:], hdr.Body, hdr.Header)

@@ -5,7 +5,7 @@ package statemachine
 
 import (
 	"errors"
-	"log"
+	"fmt"
 	"net"
 	"net/netip"
 	"time"
@@ -48,7 +48,7 @@ func (t *Transport) ProcessDatagram(datagram []byte, addr netip.AddrPort, err er
 			// TODO - return *dtlserrors.Error instead of error, so we cannot
 			// return generic error by accident
 			if dtlserrors.IsFatal(err) {
-				log.Printf("fatal error: TODO - send alert and close connection: %v", err)
+				fmt.Printf("fatal error: TODO - send alert and close connection: %v\n", err)
 			} else {
 				t.opts.Stats.Warning(addr, err)
 			}
@@ -84,7 +84,7 @@ func (t *Transport) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 				return conn, dtlserrors.WarnCiphertextRecordParsing
 			}
 			recordOffset += n
-			// log.Printf("dtls: got ciphertext %v cid(hex): %x from %v, body(hex): %x", hdr., cid, addr, body)
+			// fmt.Printf("dtls: got ciphertext %v cid(hex): %x from %v, body(hex): %x", hdr., cid, addr, body)
 			if conn == nil {
 				// We can continue. but we do not, most likely there is more encrypted records
 				return conn, dtlserrors.WarnCiphertextNoConnection
@@ -133,6 +133,7 @@ func (t *Transport) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 var ErrConnectionInProgress = errors.New("connection is in progress")
 
 func (t *Transport) StartConnection(addr netip.AddrPort) (*Connection, error) {
+	// TODO - race with access to t.connections
 	t.connPoolMu.Lock()
 	defer t.connPoolMu.Unlock()
 	conn := t.connections[addr]
@@ -140,9 +141,12 @@ func (t *Transport) StartConnection(addr netip.AddrPort) (*Connection, error) {
 		return nil, ErrConnectionInProgress // for now will wait for previous handshake timeout first
 	} // TODO - if this is long going handshake, clear and start again?
 
-	conn, err := NewClientConnection(t, addr)
-	if err != nil {
-		return nil, err
+	// TODO - reuse in pool?
+	var ha ConnectionHandler
+	conn, ha = t.handler.OnNewConnection()
+	conn.handler = ha
+	if err := conn.startConnection(t, addr); err != nil {
+		return conn, err
 	}
 	t.connections[addr] = conn
 	t.snd.RegisterConnectionForSend(conn)

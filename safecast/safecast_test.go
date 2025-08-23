@@ -1,23 +1,61 @@
-package safecast
+package safecast_test
 
 import (
+	"reflect"
+	"strconv"
 	"testing"
+
+	"github.com/hrissan/dtls/safecast"
 )
 
-func testCast[Result Integer, Arg Integer](t *testing.T, arg Arg) {
-	var scratch1 [32]byte
-	var scratch2 [32]byte
-	_, err := TryCast[Result](arg)
-	s1 := Append(scratch1[:], arg, 10)
-	s2 := Append(scratch2[:], Result(arg), 10)
-	good := string(s1) == string(s2)
-
-	if (err == nil) != good {
-		t.Errorf("result of string cast different to safecast")
+func strconvAppend[Arg safecast.Integer](w []byte, arg Arg) []byte {
+	switch v := any(arg).(type) {
+	case int:
+		return strconv.AppendInt(w, int64(v), 10)
+	case int8:
+		return strconv.AppendInt(w, int64(v), 10)
+	case int16:
+		return strconv.AppendInt(w, int64(v), 10)
+	case int32:
+		return strconv.AppendInt(w, int64(v), 10)
+	case int64:
+		return strconv.AppendInt(w, v, 10)
+	case uint:
+		return strconv.AppendUint(w, uint64(v), 10)
+	case uint8:
+		return strconv.AppendUint(w, uint64(v), 10)
+	case uint16:
+		return strconv.AppendUint(w, uint64(v), 10)
+	case uint32:
+		return strconv.AppendUint(w, uint64(v), 10)
+	case uint64:
+		return strconv.AppendUint(w, v, 10)
+	case uintptr:
+		return strconv.AppendUint(w, uint64(v), 10)
+	case float32:
+		return strconv.AppendFloat(w, float64(v), 'f', -1, 64)
+	case float64:
+		return strconv.AppendFloat(w, v, 'f', -1, 64)
+	default:
+		panic("must be never")
 	}
 }
 
-func testCasts[Arg Integer](t *testing.T, arg Arg) {
+func testCast[Result safecast.Integer, Arg safecast.Integer](t *testing.T, arg Arg) {
+	var scratch1 [32]byte
+	var scratch2 [32]byte
+	_, err := safecast.TryCast[Result](arg)
+	builtinCast := Result(arg)
+	s1 := strconvAppend(scratch1[:0], arg)
+	s2 := strconvAppend(scratch2[:0], builtinCast)
+	good := string(s1) == string(s2)
+
+	if (err == nil) != good {
+		t.Errorf("%v %s -> %s %s\n", reflect.TypeOf(arg).String(), s1, reflect.TypeOf(builtinCast).String(), s2)
+	}
+}
+
+func testCasts[Arg safecast.Integer](t *testing.T, arg Arg) {
 	testCast[int](t, arg)
 	testCast[int8](t, arg)
 	testCast[int16](t, arg)
@@ -29,13 +67,35 @@ func testCasts[Arg Integer](t *testing.T, arg Arg) {
 	testCast[uint32](t, arg)
 	testCast[uint64](t, arg)
 	testCast[uintptr](t, arg)
+	//testCast[float32](t, arg)
+	//testCast[float64](t, arg)
 }
 
-func FuzzCast(f *testing.F) {
-	f.Fuzz(func(t *testing.T, arg1 int64, arg2 uint64, arg3 int8, arg4 uint8) {
-		testCasts(t, arg1)
-		testCasts(t, arg2)
-		testCasts(t, arg3)
-		testCasts(t, arg4)
-	})
+func testCastsFromInteger[Arg safecast.Integer](t *testing.T) {
+	for highBits := uint64(0); highBits < 16; highBits++ {
+		pattern1 := uint64((1<<64)-1) ^ (highBits << 60) // 00..00XXFF..FF
+		pattern2 := highBits << 60                       // 00..00XX00..00
+		pattern3 := uint64((1<<64)-1) ^ highBits         // FF..FFXX00..00
+		for sh := 0; sh < 64; sh++ {
+			testCasts(t, Arg(pattern1>>sh))
+			testCasts(t, Arg(pattern2>>sh))
+			testCasts(t, Arg(pattern3<<sh))
+		}
+	}
+}
+
+func TestPatterns(t *testing.T) {
+	testCastsFromInteger[int](t)
+	testCastsFromInteger[int8](t)
+	testCastsFromInteger[int16](t)
+	testCastsFromInteger[int32](t)
+	testCastsFromInteger[int64](t)
+	testCastsFromInteger[uint](t)
+	testCastsFromInteger[uint8](t)
+	testCastsFromInteger[uint16](t)
+	testCastsFromInteger[uint32](t)
+	testCastsFromInteger[uint64](t)
+	testCastsFromInteger[uintptr](t)
+	// testCastsFromFloat[float32](t)
+	// testCastsFromFloat[float64](t)
 }

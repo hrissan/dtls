@@ -36,7 +36,7 @@ func Expand(hasher hash.Hash, keymaterial, info []byte, outlength int) []byte {
 }
 
 func ExpandLabel(hasher hash.Hash, secret []byte, label string, context []byte, length int) []byte {
-	hkdflabel := make([]byte, 0)
+	hkdflabel := make([]byte, 0, 512) // goblin:inline
 	hkdflabel = append(hkdflabel, byte(length>>8))
 	hkdflabel = append(hkdflabel, byte(length))
 	hkdflabel = append(hkdflabel, byte(len(label)+6))

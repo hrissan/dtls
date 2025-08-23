@@ -58,7 +58,7 @@ func NewWarning(code int, text string) error {
 var WarnServerHelloFragmented = NewWarning(-398, "fragmented ServerHello message not supported")
 var WarnClientHelloFragmented = NewWarning(-399, "fragmented ClientHello message not supported")
 var WarnPostHandshakeMessageFragmented = NewWarning(-400, "fragmented post-handshake message not supported by this implementation, waiting for retransmission")
-var WarnAckEpochOverflow = NewWarning(-403, "ack record epoch overflows 2^16")
+var WarnAckEpochSeqnumOverflow = NewWarning(-403, "ack record epoch overflows 2^16")
 var WarnPlaintextRecordParsing = NewWarning(-405, "plaintext record header failed to parse")
 var WarnCiphertextRecordParsing = NewWarning(-406, "ciphertext record header failed to parse")
 var WarnCiphertextNoConnection = NewWarning(-407, "received ciphertext without connection")

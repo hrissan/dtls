@@ -66,14 +66,8 @@ func (keys *Keys) SequenceNumberLimit() uint64 {
 		panic("do not set limitExp = 4 even for tests, as key update reaches hard limit before epoch will advance")
 	}
 	// with limitExp = 5 and very few packets you can continuously test key update state machine.
-	if limitExp > 48 {
-		// Our implementation pack 16-bit epoch with 48-bit sequence number for efficient storage.
-		// So we must prevent sequence number from ever reaching this limit.
-		// See for example record.Number
-		// Also, we must prevent overflow below.
-		limitExp = 48
-	}
-	return (uint64(1) << limitExp) - 1 // -1 gives us margin in case we actually store nextSeqNum in 48-bit field somewhere (we should not)
+
+	return min(record.MaxSeq, (uint64(1)<<limitExp)-1) // -1 gives us margin in case we actually store nextSeqNum in 48-bit field somewhere (we should not)
 }
 
 func NewAesCipher(key []byte) cipher.Block {

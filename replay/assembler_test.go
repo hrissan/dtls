@@ -6,6 +6,8 @@ package replay
 import (
 	"bytes"
 	"testing"
+
+	"github.com/hrissan/dtls/safecast"
 )
 
 const assemblerMessageLength = 32 // no benefits of larger values

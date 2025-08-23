@@ -17,9 +17,9 @@ func (conn *Connection) receivedEncryptedAck(opts *options.TransportOptions, rec
 		return dtlserrors.ErrEncryptedAckMessageHeaderParsing
 	}
 	fmt.Printf("dtls: got ack record (encrypted) %d bytes from %v, message(hex): %x\n", len(recordData), conn.addr, recordData)
-	var epochOverflowCounter int
+	var epochSeqOverflowCounter int
 	for {
-		rn, ok := parser.PopFront(&epochOverflowCounter)
+		rn, ok := parser.PopFront(&epochSeqOverflowCounter)
 		if !ok {
 			break
 		}
@@ -29,8 +29,8 @@ func (conn *Connection) receivedEncryptedAck(opts *options.TransportOptions, rec
 		conn.processKeyUpdateAck(rn)
 		conn.processNewSessionTicketAck(rn)
 	}
-	if epochOverflowCounter != 0 {
-		opts.Stats.Warning(conn.addr, dtlserrors.WarnAckEpochOverflow)
+	if epochSeqOverflowCounter != 0 {
+		opts.Stats.Warning(conn.addr, dtlserrors.WarnAckEpochSeqnumOverflow)
 	}
 	// if all messages from epoch 2 acked, then switch sending epoch
 	if conn.hctx != nil && conn.hctx.sendQueue.Len() == 0 && conn.keys.Send.Symmetric.Epoch == 2 {

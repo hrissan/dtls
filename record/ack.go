@@ -37,7 +37,7 @@ func NewAckParser(recordBody []byte) (AckParser, error) {
 	return AckParser{recordBody: insideBody}, format.ParserReadFinish(recordBody, offset)
 }
 
-func (p *AckParser) PopFront(epochOverflowCounter *int) (rn Number, ok bool) {
+func (p *AckParser) PopFront(epochSeqOverflowCounter *int) (rn Number, ok bool) {
 	for { // we should skip records which overflow epoch of  our implementation
 		if len(p.recordBody) == 0 {
 			return Number{}, false
@@ -49,7 +49,11 @@ func (p *AckParser) PopFront(epochOverflowCounter *int) (rn Number, ok bool) {
 		seq := binary.BigEndian.Uint64(p.recordBody[8:])
 		p.recordBody = p.recordBody[AckElementSize:]
 		if epoch > math.MaxUint16 { // prevent overflow below
-			*epochOverflowCounter++ // in case someone needs this metric
+			*epochSeqOverflowCounter++ // in case someone needs this metric
+			continue
+		}
+		if seq > MaxSeq { // prevent overflow below
+			*epochSeqOverflowCounter++ // in case someone needs this metric
 			continue
 		}
 		return NumberWith(uint16(epoch), seq), true

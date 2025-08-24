@@ -9,6 +9,7 @@ import (
 	"math"
 
 	"github.com/hrissan/dtls/cookie"
+	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/format"
 )
 
@@ -116,6 +117,10 @@ func (msg *ExtensionsSet) parseInside(body []byte, isNewSessionTicket bool, isSe
 			}
 			msg.KeyShareSet = true
 		case EXTENSION_PSK_KEY_EXCHANGE_MODE:
+			if isServerHello {
+				// [rfc8446:4.2.9]
+				return dtlserrors.ErrServerMustNotSendPSKModes
+			}
 			if err := msg.PskExchangeModes.Parse(extensionBody); err != nil {
 				return err
 			}
@@ -124,7 +129,7 @@ func (msg *ExtensionsSet) parseInside(body []byte, isNewSessionTicket bool, isSe
 			if err := msg.PreSharedKey.Parse(extensionBody, isServerHello); err != nil {
 				return err
 			}
-			msg.KeyShareSet = true
+			msg.PreSharedKeySet = true
 			// "pre_shared_key" must be last [rfc8446:4.2.11] (which MUST be the last extension in the ClientHello)
 			if offset != len(body) {
 				return ErrPreSharedKeyExtensionMustBeLast

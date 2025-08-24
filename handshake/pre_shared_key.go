@@ -79,7 +79,7 @@ func (msg *PreSharedKey) parseBinders(body []byte) (err error) {
 	binderNum := 0
 	for ; offset < len(body); binderNum++ {
 		var binder []byte
-		if offset, binder, err = format.ParserReadUint16Length(body, offset); err != nil {
+		if offset, binder, err = format.ParserReadByteLength(body, offset); err != nil {
 			return err
 		}
 		if len(binder) > constants.MaxHashLength {
@@ -88,11 +88,12 @@ func (msg *PreSharedKey) parseBinders(body []byte) (err error) {
 		if binderNum >= msg.IdentitiesSize {
 			return ErrPSKBindersMismatch
 		}
-		identity := &msg.Identities[msg.IdentitiesSize]
-		msg.IdentitiesSize++ // no overflow due to check above
-
+		identity := &msg.Identities[binderNum] // no overflow due to check above
 		identity.BinderSize = len(binder)
 		copy(identity.Binder[:], binder)
+	}
+	if binderNum != msg.IdentitiesSize {
+		return ErrPSKBindersMismatch
 	}
 	return nil
 }
@@ -100,9 +101,9 @@ func (msg *PreSharedKey) parseBinders(body []byte) (err error) {
 func (msg *PreSharedKey) writeBinders(body []byte) []byte {
 	var mark int
 	for _, identity := range msg.Identities {
-		body, mark = format.MarkUint16Offset(body)
+		body, mark = format.MarkByteOffset(body)
 		body = append(body, identity.Binder[:identity.BinderSize]...)
-		format.FillUint16Offset(body, mark)
+		format.FillByteOffset(body, mark)
 	}
 	return body
 }

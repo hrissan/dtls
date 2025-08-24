@@ -36,7 +36,7 @@ type TransportOptions struct {
 	ServerCertificate tls.Certificate // some shortcut
 
 	PSKIdentity     string
-	PSKAppendSecret func(peerIdentity []byte, scratch []byte) []byte
+	PSKAppendSecret func(peerIdentity []byte, scratch []byte) []byte // must append secret to scratch and return it, or return nil
 }
 
 func DefaultTransportOptions(roleServer bool, rnd dtlsrand.Rand, stats stats.Stats) *TransportOptions {

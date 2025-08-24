@@ -125,8 +125,10 @@ var ErrClientHelloUnsupportedParams = NewWarning(-704, "ClientHello unsupported 
 var ErrParamsSupportOnlyDTLS13 = NewWarning(-705, "unsupported version - only DTLSv1.3 supported")
 var ErrParamsSupportCiphersuites = NewWarning(-705, "unsupported ciphersuite - only TLS_AES_128_GCM_SHA256 supported")
 var ErrParamsSupportKeyShare = NewWarning(-705, "unsupported key share - only X25519 supported")
+var ErrPskKeyRequiresPskModes = NewWarning(-705, "pre_shared_key requires psk_key_exchange_modes")
 var ErrServerHRRMustContainCookie = errors.New("server HelloRetryRequest must contain valid cookie")
 var ErrServerHRRMustHaveMsgSeq0 = errors.New("server HelloRetryRequest must have message seq 0")
+var ErrServerMustNotSendPSKModes = NewWarning(-705, "server must not send psk_key_exchange_modes")
 
 var ErrClientHelloCookieInvalid = NewWarning(-705, "ClientHello cookie failed validation")
 var ErrClientHelloCookieAge = NewWarning(-706, "ClientHello cookie expired")

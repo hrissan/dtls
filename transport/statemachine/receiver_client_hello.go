@@ -12,6 +12,7 @@ import (
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/transport/options"
 )
 
 func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message, addr netip.AddrPort) (*Connection, error) {
@@ -72,6 +73,11 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	if err != nil {
 		return conn, err
 	}
+	pskNum, identity, ok := selectPSKIdentity(t.opts, &msgClientHello.Extensions)
+	if ok {
+		fmt.Printf("server PSK selected identity %d (%q)\n", pskNum, identity.Identity)
+	}
+
 	// we should check all parameters above, so that we do not create connection for unsupported params
 	if conn == nil {
 		var ha ConnectionHandler
@@ -92,6 +98,21 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	return conn, nil
 }
 
+func selectPSKIdentity(opts *options.TransportOptions, ext *handshake.ExtensionsSet) (int, handshake.PSKIdentity, bool) {
+	if !ext.PskExchangeModesSet || !ext.PskExchangeModes.ECDHE ||
+		!ext.PreSharedKeySet || opts.PSKAppendSecret == nil {
+		return 0, handshake.PSKIdentity{}, false
+	}
+	for num, identity := range ext.PreSharedKey.Identities[:ext.PreSharedKey.IdentitiesSize] {
+		var secretStorage [256]byte
+		secret := opts.PSKAppendSecret(identity.Identity, secretStorage[:0]) // allocates if secret very long
+		if len(secret) != 0 {
+			return num, identity, true
+		}
+	}
+	return 0, handshake.PSKIdentity{}, false
+}
+
 func IsSupportedClientHello(msgParsed *handshake.MsgClientHello) error {
 	if !msgParsed.Extensions.SupportedVersions.DTLS_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
@@ -102,6 +123,11 @@ func IsSupportedClientHello(msgParsed *handshake.MsgClientHello) error {
 	}
 	if !msgParsed.Extensions.SupportedGroups.X25519 {
 		return dtlserrors.ErrParamsSupportKeyShare
+	}
+
+	if msgParsed.Extensions.PreSharedKeySet && !msgParsed.Extensions.PskExchangeModesSet {
+		// [rfc8446:4.2.9]
+		return dtlserrors.ErrPskKeyRequiresPskModes
 	}
 	return nil
 }

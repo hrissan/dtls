@@ -93,6 +93,13 @@ func ParserReadUint24Length(body []byte, offset int) (_ int, value []byte, err e
 	return endOffset, body[offset+3 : endOffset], nil
 }
 
+func ParserReadUint32(body []byte, offset int) (_ int, value uint32, err error) {
+	if len(body) < offset+4 {
+		return offset, 0, ErrMessageBodyTooShort
+	}
+	return offset + 4, binary.BigEndian.Uint32(body[offset:]), nil
+}
+
 func ParserReadFixedBytes(body []byte, offset int, value []byte) (_ int, _ error) {
 	if len(body) < offset+len(value) {
 		return offset, ErrMessageBodyTooShort

@@ -30,7 +30,7 @@ const (
 	// SignatureAlgorithm_ECDSA_SHA1 = 0x0203 // legacy
 )
 
-type SignatureAlgorithmsSet struct {
+type SignatureAlgorithms struct {
 	// We do not want to support with RSA, due to certificate size
 	ECDSA_SECP256r1_SHA256 bool
 	ECDSA_SECP384r1_SHA384 bool
@@ -48,7 +48,7 @@ type SignatureAlgorithmsSet struct {
 	RSA_PSS_PSS_SHA256     bool
 }
 
-func (msg *SignatureAlgorithmsSet) parseInside(body []byte) (err error) {
+func (msg *SignatureAlgorithms) parseInside(body []byte) (err error) {
 	offset := 0
 	for offset < len(body) {
 		var version uint16
@@ -89,7 +89,7 @@ func (msg *SignatureAlgorithmsSet) parseInside(body []byte) (err error) {
 	return nil
 }
 
-func (msg *SignatureAlgorithmsSet) Parse(body []byte) (err error) {
+func (msg *SignatureAlgorithms) Parse(body []byte) (err error) {
 	offset := 0
 	var insideBody []byte
 	if offset, insideBody, err = format.ParserReadUint16Length(body, offset); err != nil {
@@ -101,7 +101,7 @@ func (msg *SignatureAlgorithmsSet) Parse(body []byte) (err error) {
 	return format.ParserReadFinish(body, offset)
 }
 
-func (msg *SignatureAlgorithmsSet) Write(body []byte) []byte {
+func (msg *SignatureAlgorithms) Write(body []byte) []byte {
 	body, mark := format.MarkUint16Offset(body)
 	if msg.ECDSA_SECP256r1_SHA256 {
 		body = binary.BigEndian.AppendUint16(body, SignatureAlgorithm_ECDSA_SECP256r1_SHA256)

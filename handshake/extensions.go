@@ -13,24 +13,27 @@ import (
 )
 
 const (
-	EXTENSION_SUPPORTED_GROUPS     = 0x000a
-	EXTENSION_SIGNATURE_ALGORITHMS = 0x000d
-	EXTENSION_ENCRYPT_THEN_MAC     = 0x0016
-	EXTENSION_EARLY_DATA           = 0x002a
-	EXTENSION_SUPPORTED_VERSIONS   = 0x002b
-	EXTENSION_COOKIE               = 0x002c
-	EXTENSION_KEY_SHARE            = 0x0033
+	EXTENSION_SUPPORTED_GROUPS      = 0x000a
+	EXTENSION_SIGNATURE_ALGORITHMS  = 0x000d
+	EXTENSION_ENCRYPT_THEN_MAC      = 0x0016
+	EXTENSION_PRE_SHARED_KEY        = 0x0029
+	EXTENSION_EARLY_DATA            = 0x002a
+	EXTENSION_SUPPORTED_VERSIONS    = 0x002b
+	EXTENSION_COOKIE                = 0x002c
+	EXTENSION_PSK_KEY_EXCHANGE_MODE = 0x002d
+	EXTENSION_KEY_SHARE             = 0x0033
 )
 
 var ErrInvalidEarlyDataIndicationSize = errors.New("invalid EarlyDataIndicationSize")
+var ErrPreSharedKeyExtensionMustBeLast = errors.New("psk_key_exchange_modes extension must be last")
 
 type ExtensionsSet struct {
 	SupportedVersionsSet   bool
-	SupportedVersions      SupportedVersionsSet
+	SupportedVersions      SupportedVersions
 	SupportedGroupsSet     bool
-	SupportedGroups        SupportedGroupsSet
+	SupportedGroups        SupportedGroups
 	SignatureAlgorithmsSet bool
-	SignatureAlgorithms    SignatureAlgorithmsSet
+	SignatureAlgorithms    SignatureAlgorithms
 	EarlyDataSet           bool
 	EarlyDataMaxSize       uint32
 	EncryptThenMacSet      bool
@@ -42,9 +45,13 @@ type ExtensionsSet struct {
 	Cookie cookie.Cookie
 
 	KeyShareSet bool
-	KeyShare    KeyShareSet
+	KeyShare    KeyShare
 
-	// "pre_shared_key" must be last [rfc8446:4.2.11] (which MUST be the last extension in the ClientHello)
+	PskExchangeModesSet bool
+	PskExchangeModes    PskExchangeModes
+
+	PreSharedKeySet bool
+	PreSharedKey    PreSharedKey
 }
 
 func (msg *ExtensionsSet) parseCookie(body []byte) (err error) {
@@ -59,8 +66,7 @@ func (msg *ExtensionsSet) parseCookie(body []byte) (err error) {
 	return format.ParserReadFinish(body, offset)
 }
 
-// TODO - rename to parseInside
-func (msg *ExtensionsSet) Parse(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) (err error) {
+func (msg *ExtensionsSet) parseInside(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) (err error) {
 	offset := 0
 	for offset < len(body) {
 		var extensionType uint16
@@ -109,18 +115,32 @@ func (msg *ExtensionsSet) Parse(body []byte, isNewSessionTicket bool, isServerHe
 				return err
 			}
 			msg.KeyShareSet = true
+		case EXTENSION_PSK_KEY_EXCHANGE_MODE:
+			if err := msg.PskExchangeModes.Parse(extensionBody); err != nil {
+				return err
+			}
+			msg.PskExchangeModesSet = true
+		case EXTENSION_PRE_SHARED_KEY:
+			if err := msg.PreSharedKey.Parse(extensionBody, isServerHello); err != nil {
+				return err
+			}
+			msg.KeyShareSet = true
+			// "pre_shared_key" must be last [rfc8446:4.2.11] (which MUST be the last extension in the ClientHello)
+			if offset != len(body) {
+				return ErrPreSharedKeyExtensionMustBeLast
+			}
 		}
 	}
 	return nil
 }
 
-func (msg *ExtensionsSet) ParseOutside(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) (err error) {
+func (msg *ExtensionsSet) Parse(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) (err error) {
 	offset := 0
 	var extensionsBody []byte
 	if offset, extensionsBody, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
-	if err = msg.Parse(extensionsBody, isNewSessionTicket, isServerHello, isHelloRetryRequest); err != nil {
+	if err = msg.parseInside(extensionsBody, isNewSessionTicket, isServerHello, isHelloRetryRequest); err != nil {
 		return err
 	}
 	return format.ParserReadFinish(body, offset)
@@ -174,6 +194,19 @@ func (msg *ExtensionsSet) WriteInside(body []byte, isNewSessionTicket bool, isSe
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_KEY_SHARE)
 		body, mark = format.MarkUint16Offset(body)
 		body = msg.KeyShare.Write(body, isServerHello, isHelloRetryRequest)
+		format.FillUint16Offset(body, mark)
+	}
+	if msg.PskExchangeModesSet {
+		body = binary.BigEndian.AppendUint16(body, EXTENSION_PSK_KEY_EXCHANGE_MODE)
+		body, mark = format.MarkUint16Offset(body)
+		body = msg.PskExchangeModes.Write(body)
+		format.FillUint16Offset(body, mark)
+	}
+	// "pre_shared_key" must be last [rfc8446:4.2.11] (which MUST be the last extension in the ClientHello)
+	if msg.PreSharedKeySet {
+		body = binary.BigEndian.AppendUint16(body, EXTENSION_PRE_SHARED_KEY)
+		body, mark = format.MarkUint16Offset(body)
+		body = msg.PreSharedKey.Write(body, isServerHello)
 		format.FillUint16Offset(body, mark)
 	}
 	return body

@@ -25,6 +25,8 @@ const MaxAssemblerHoles = 3 // minimal useful value 2. 3 allows to pack 3 fragme
 // of body, we will send it in the next datagram.
 const MinFragmentBodySize = 32
 
+const MaxPSKIdentities = 32
+
 const AEADSealSize = 16 // TODO - include into our gcm wrapper
 
 const MaxCloseConnectionsPerDatagram = 5 // Do not block receiver for long

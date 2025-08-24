@@ -51,7 +51,7 @@ func (msg *MsgServerHello) Parse(body []byte) (err error) {
 	if offset, err = format.ParserReadByteConst(body, offset, 0, ErrServerHelloLegacyCompressionMethod); err != nil {
 		return err
 	}
-	return msg.Extensions.ParseOutside(body[offset:], false, true, msg.IsHelloRetryRequest())
+	return msg.Extensions.Parse(body[offset:], false, true, msg.IsHelloRetryRequest())
 }
 
 func (msg *MsgServerHello) Write(body []byte) []byte {
@@ -60,8 +60,6 @@ func (msg *MsgServerHello) Write(body []byte) []byte {
 	body = append(body, 0) // legacy_session_id
 	body = binary.BigEndian.AppendUint16(body, msg.CipherSuite)
 	body = append(body, 0) // legacy_compression_methods
-	body, mark := format.MarkUint16Offset(body)
-	body = msg.Extensions.WriteInside(body, false, true, msg.IsHelloRetryRequest())
-	format.FillUint16Offset(body, mark)
+	body = msg.Extensions.Write(body, false, true, msg.IsHelloRetryRequest())
 	return body
 }

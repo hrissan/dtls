@@ -37,7 +37,7 @@ func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) (
 	helloRetryRequest.Extensions.SupportedVersions.SelectedVersion = handshake.DTLS_VERSION_13
 	if keyShareSet {
 		helloRetryRequest.Extensions.KeyShareSet = true
-		helloRetryRequest.Extensions.KeyShare.KeyShareHRRSelectedGroup = handshake.SupportedGroup_X25519
+		helloRetryRequest.Extensions.KeyShare.HRRSelectedGroup = handshake.SupportedGroup_X25519
 	}
 	helloRetryRequest.Extensions.CookieSet = true
 	helloRetryRequest.Extensions.Cookie = ck

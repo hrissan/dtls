@@ -10,7 +10,7 @@ import (
 	"github.com/hrissan/dtls/format"
 )
 
-type KeyShareSet struct {
+type KeyShare struct {
 	X25519PublicKeySet    bool
 	X25519PublicKey       [32]byte
 	SECP256R1PublicKeySet bool
@@ -18,13 +18,13 @@ type KeyShareSet struct {
 
 	// Be careful to set this extension only when strictly needed, conditions are specified in [rfc8446:4.2.8]
 	// otherwise client will abort connection. TODO - ask dtls13 workgroup if condition makes any sense
-	KeyShareHRRSelectedGroup uint16
+	HRRSelectedGroup uint16
 }
 
 var ErrKeyShareX25519PublicKeyWrongFormat = errors.New("x25519 public key has wrong format")
 var ErrKeyShareSECP256R1PublicKeyWrongFormat = errors.New("secp256r1 public key has wrong format")
 
-func (msg *KeyShareSet) parseElement(body []byte, offset int) (_ int, err error) {
+func (msg *KeyShare) parseElement(body []byte, offset int) (_ int, err error) {
 	var keyShareType uint16
 	if offset, keyShareType, err = format.ParserReadUint16(body, offset); err != nil {
 		return offset, err
@@ -50,7 +50,7 @@ func (msg *KeyShareSet) parseElement(body []byte, offset int) (_ int, err error)
 	return offset, nil
 }
 
-func (msg *KeyShareSet) parseInside(body []byte) (err error) {
+func (msg *KeyShare) parseInside(body []byte) (err error) {
 	offset := 0
 	for offset < len(body) {
 		if offset, err = msg.parseElement(body, offset); err != nil {
@@ -60,10 +60,10 @@ func (msg *KeyShareSet) parseInside(body []byte) (err error) {
 	return nil
 }
 
-func (msg *KeyShareSet) Parse(body []byte, isServerHello bool, isHelloRetryRequest bool) (err error) {
+func (msg *KeyShare) Parse(body []byte, isServerHello bool, isHelloRetryRequest bool) (err error) {
 	offset := 0
 	if isHelloRetryRequest {
-		if offset, msg.KeyShareHRRSelectedGroup, err = format.ParserReadUint16(body, offset); err != nil {
+		if offset, msg.HRRSelectedGroup, err = format.ParserReadUint16(body, offset); err != nil {
 			return err
 		}
 		return format.ParserReadFinish(body, offset)
@@ -84,9 +84,9 @@ func (msg *KeyShareSet) Parse(body []byte, isServerHello bool, isHelloRetryReque
 	return format.ParserReadFinish(body, offset)
 }
 
-func (msg *KeyShareSet) Write(body []byte, isServerHello bool, isHelloRetryRequest bool) []byte {
+func (msg *KeyShare) Write(body []byte, isServerHello bool, isHelloRetryRequest bool) []byte {
 	if isHelloRetryRequest {
-		body = binary.BigEndian.AppendUint16(body, msg.KeyShareHRRSelectedGroup)
+		body = binary.BigEndian.AppendUint16(body, msg.HRRSelectedGroup)
 		return body
 	}
 	var mark int

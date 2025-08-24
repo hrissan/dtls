@@ -48,7 +48,7 @@ func (msg *MsgClientHello) Parse(body []byte) (err error) {
 	if offset, err = format.ParserReadUint16Const(body, offset, 0x0100, ErrClientHelloLegacyCompressionMethod); err != nil {
 		return err
 	}
-	return msg.Extensions.ParseOutside(body[offset:], false, false, false)
+	return msg.Extensions.Parse(body[offset:], false, false, false)
 }
 
 func (msg *MsgClientHello) Write(body []byte) []byte {
@@ -64,9 +64,7 @@ func (msg *MsgClientHello) Write(body []byte) []byte {
 
 	body = binary.BigEndian.AppendUint16(body, 0x0100) // legacy_compression_methods
 
-	body, mark = format.MarkUint16Offset(body)
-	body = msg.Extensions.WriteInside(body, false, false, false)
-	format.FillUint16Offset(body, mark)
+	body = msg.Extensions.Write(body, false, false, false)
 
 	return body
 }

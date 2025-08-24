@@ -14,14 +14,14 @@ const (
 	DTLS_VERSION_13 = 0xFEFC
 )
 
-type SupportedVersionsSet struct {
+type SupportedVersions struct {
 	DTLS_12 bool
 	DTLS_13 bool
 
 	SelectedVersion uint16
 }
 
-func (msg *SupportedVersionsSet) parseInside(body []byte) (err error) {
+func (msg *SupportedVersions) parseInside(body []byte) (err error) {
 	offset := 0
 	for offset < len(body) {
 		var version uint16
@@ -38,7 +38,7 @@ func (msg *SupportedVersionsSet) parseInside(body []byte) (err error) {
 	return nil
 }
 
-func (msg *SupportedVersionsSet) Parse(body []byte, isServerHello bool) (err error) {
+func (msg *SupportedVersions) Parse(body []byte, isServerHello bool) (err error) {
 	offset := 0
 	if isServerHello {
 		if offset, msg.SelectedVersion, err = format.ParserReadUint16(body, offset); err != nil {
@@ -56,7 +56,7 @@ func (msg *SupportedVersionsSet) Parse(body []byte, isServerHello bool) (err err
 	return format.ParserReadFinish(body, offset)
 }
 
-func (msg *SupportedVersionsSet) Write(body []byte, isServerHello bool) []byte {
+func (msg *SupportedVersions) Write(body []byte, isServerHello bool) []byte {
 	if isServerHello {
 		body = binary.BigEndian.AppendUint16(body, msg.SelectedVersion)
 		return body

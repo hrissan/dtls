@@ -20,7 +20,7 @@ const (
 	// more groups can be defined elsewhere
 )
 
-type SupportedGroupsSet struct {
+type SupportedGroups struct {
 	X25519    bool
 	SECP256R1 bool
 	SECP384R1 bool
@@ -28,7 +28,7 @@ type SupportedGroupsSet struct {
 	X448      bool
 }
 
-func (msg *SupportedGroupsSet) parseInside(body []byte) (err error) {
+func (msg *SupportedGroups) parseInside(body []byte) (err error) {
 	offset := 0
 	for offset < len(body) {
 		var version uint16
@@ -51,7 +51,7 @@ func (msg *SupportedGroupsSet) parseInside(body []byte) (err error) {
 	return nil
 }
 
-func (msg *SupportedGroupsSet) Parse(body []byte) (err error) {
+func (msg *SupportedGroups) Parse(body []byte) (err error) {
 	offset := 0
 	var insideBody []byte
 	if offset, insideBody, err = format.ParserReadUint16Length(body, offset); err != nil {
@@ -63,7 +63,7 @@ func (msg *SupportedGroupsSet) Parse(body []byte) (err error) {
 	return format.ParserReadFinish(body, offset)
 }
 
-func (msg *SupportedGroupsSet) Write(body []byte) []byte {
+func (msg *SupportedGroups) Write(body []byte) []byte {
 	body, mark := format.MarkUint16Offset(body)
 	if msg.X25519 {
 		body = binary.BigEndian.AppendUint16(body, SupportedGroup_X25519)

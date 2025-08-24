@@ -15,3 +15,7 @@ ascii:
 .PHONY: analyze
 analyze:
 	CGO_ENABLED=0 go build -gcflags='-m=1 -json=0,file://bin/analyze' ./...
+
+.PHONY: check
+check:
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.3.1

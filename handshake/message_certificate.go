@@ -46,6 +46,8 @@ func (msg *MsgCertificate) parseCertificates(body []byte) (err error) {
 	return nil
 }
 
+// TODO - writeCertificates
+
 func (msg *MsgCertificate) Parse(body []byte) (err error) {
 	offset := 0
 	var requestContextBody []byte

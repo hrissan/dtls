@@ -10,10 +10,10 @@ import (
 )
 
 // TODO - use rope for all variable memory chunks
-// for now after parsing those slices point to datagram, so must be copied or discarded before next datagram is read
+// for now after parsing those slices point to datagram/message, so must be copied or discarded immediately after parsing
 type MsgCertificateVerify struct {
 	SignatureScheme uint16
-	Signature       []byte
+	Signature       []byte // can be relatively large for RSA, fixed array impractical
 }
 
 func (msg *MsgCertificateVerify) MessageKind() string { return "handshake" }

@@ -17,7 +17,8 @@ import (
 
 func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message, addr netip.AddrPort) (*Connection, error) {
 	var msgClientHello handshake.MsgClientHello
-	if err := msgClientHello.Parse(msg.Body); err != nil {
+	var bindersListLength int
+	if err := msgClientHello.Parse(msg.Body, &bindersListLength); err != nil {
 		return conn, dtlserrors.WarnPlaintextClientHelloParsing
 	}
 	if !t.opts.RoleServer {
@@ -75,7 +76,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	}
 	pskNum, identity, ok := selectPSKIdentity(t.opts, &msgClientHello.Extensions)
 	if ok {
-		fmt.Printf("server PSK selected identity %d (%q)\n", pskNum, identity.Identity)
+		fmt.Printf("server PSK selected identity %d (%q) binders length=%d\n", pskNum, identity.Identity, bindersListLength)
 	}
 
 	// we should check all parameters above, so that we do not create connection for unsupported params

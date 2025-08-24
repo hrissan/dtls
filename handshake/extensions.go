@@ -67,7 +67,7 @@ func (msg *ExtensionsSet) parseCookie(body []byte) (err error) {
 	return format.ParserReadFinish(body, offset)
 }
 
-func (msg *ExtensionsSet) parseInside(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) (err error) {
+func (msg *ExtensionsSet) parseInside(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool, bindersListLength *int) (err error) {
 	offset := 0
 	for offset < len(body) {
 		var extensionType uint16
@@ -126,7 +126,7 @@ func (msg *ExtensionsSet) parseInside(body []byte, isNewSessionTicket bool, isSe
 			}
 			msg.PskExchangeModesSet = true
 		case EXTENSION_PRE_SHARED_KEY:
-			if err := msg.PreSharedKey.Parse(extensionBody, isServerHello); err != nil {
+			if err := msg.PreSharedKey.Parse(extensionBody, isServerHello, bindersListLength); err != nil {
 				return err
 			}
 			msg.PreSharedKeySet = true
@@ -134,18 +134,19 @@ func (msg *ExtensionsSet) parseInside(body []byte, isNewSessionTicket bool, isSe
 			if offset != len(body) {
 				return ErrPreSharedKeyExtensionMustBeLast
 			}
+			return nil
 		}
 	}
 	return nil
 }
 
-func (msg *ExtensionsSet) Parse(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) (err error) {
+func (msg *ExtensionsSet) Parse(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool, bindersListLength *int) (err error) {
 	offset := 0
 	var extensionsBody []byte
 	if offset, extensionsBody, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
-	if err = msg.parseInside(extensionsBody, isNewSessionTicket, isServerHello, isHelloRetryRequest); err != nil {
+	if err = msg.parseInside(extensionsBody, isNewSessionTicket, isServerHello, isHelloRetryRequest, bindersListLength); err != nil {
 		return err
 	}
 	return format.ParserReadFinish(body, offset)

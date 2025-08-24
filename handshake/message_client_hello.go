@@ -27,7 +27,7 @@ type MsgClientHello struct {
 func (msg *MsgClientHello) MessageKind() string { return "handshake" }
 func (msg *MsgClientHello) MessageName() string { return "ClientHello" }
 
-func (msg *MsgClientHello) Parse(body []byte) (err error) {
+func (msg *MsgClientHello) Parse(body []byte, bindersListLength *int) (err error) {
 	offset := 0
 	if offset, err = format.ParserReadUint16Const(body, offset, 0xFEFD, ErrClientHelloLegacyVersion); err != nil {
 		return err
@@ -48,7 +48,7 @@ func (msg *MsgClientHello) Parse(body []byte) (err error) {
 	if offset, err = format.ParserReadUint16Const(body, offset, 0x0100, ErrClientHelloLegacyCompressionMethod); err != nil {
 		return err
 	}
-	return msg.Extensions.Parse(body[offset:], false, false, false)
+	return msg.Extensions.Parse(body[offset:], false, false, false, bindersListLength)
 }
 
 func (msg *MsgClientHello) Write(body []byte) []byte {

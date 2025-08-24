@@ -20,7 +20,7 @@ func (hctx *handshakeContext) receivedFullMessage(conn *Connection, msg handshak
 		return conn.state().OnServerHello(conn, msg, msgParsed)
 	case handshake.MsgTypeEncryptedExtensions:
 		var msgParsed handshake.ExtensionsSet
-		if err := msgParsed.Parse(msg.Body, false, true, false); err != nil {
+		if err := msgParsed.Parse(msg.Body, false, true, false, nil); err != nil {
 			return dtlserrors.ErrExtensionsMessageParsing
 		}
 		fmt.Printf("encrypted extensions parsed: %+v\n", msgParsed)

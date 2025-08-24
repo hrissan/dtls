@@ -21,8 +21,8 @@ type PSKIdentity struct {
 
 	ObfuscatedTicketAge uint32
 
-	// [rfc8446:4.2.11] puts binders in a separate array, with a stupid property that array
-	// sizes can differ. We fix that by moving binder here where it belongs
+	// [rfc8446:4.2.11] puts binders in a separate array, so that identities are included into
+	// early transcript hash
 	Binder     [constants.MaxHashLength]byte
 	BinderSize int
 }
@@ -108,7 +108,7 @@ func (msg *PreSharedKey) writeBinders(body []byte) []byte {
 	return body
 }
 
-func (msg *PreSharedKey) Parse(body []byte, isServerHello bool) (err error) {
+func (msg *PreSharedKey) Parse(body []byte, isServerHello bool, bindersListLength *int) (err error) {
 	offset := 0
 	if isServerHello {
 		if offset, msg.SelectedIdentity, err = format.ParserReadUint16(body, offset); err != nil {
@@ -122,6 +122,9 @@ func (msg *PreSharedKey) Parse(body []byte, isServerHello bool) (err error) {
 	}
 	if err := msg.parseIdentities(insideBody); err != nil {
 		return err
+	}
+	if bindersListLength != nil {
+		*bindersListLength = len(body) - offset
 	}
 	if offset, insideBody, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return err
@@ -141,7 +144,6 @@ func (msg *PreSharedKey) Write(body []byte, isServerHello bool) []byte {
 	body, externalMark = format.MarkUint16Offset(body)
 	body = msg.writeIdentities(body)
 	format.FillUint16Offset(body, externalMark)
-
 	body, externalMark = format.MarkUint16Offset(body)
 	body = msg.writeBinders(body)
 	format.FillUint16Offset(body, externalMark)

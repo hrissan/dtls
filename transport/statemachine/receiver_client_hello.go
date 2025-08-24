@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
@@ -78,6 +79,38 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	if ok {
 		fmt.Printf("server PSK selected identity %d (%q) binders length=%d\n", pskNum, identity.Identity, bindersListLength)
 	}
+	transcriptHasher := sha256.New()
+	{
+		var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte
+		hrrDatagram, msgBody := GenerateStatelessHRR(hrrDatagramStorage[:0], msgClientHello.Extensions.Cookie, params.KeyShareSet)
+		if len(hrrDatagram) > len(hrrDatagramStorage) {
+			panic("Large HRR datagram must not be generated")
+		}
+		hrrHash := sha256.Sum256(hrrDatagram)
+		fmt.Printf("serverHRRHash2: %x\n", hrrHash[:])
+
+		// [rfc8446:4.4.1] replace initial client hello message with its hash if HRR was used
+		syntheticMessage := handshake.Message{
+			MsgType: handshake.MsgTypeMessageHash,
+			MsgSeq:  0, // does not affect transcript hash
+			Body:    params.TranscriptHash[:sha256.Size],
+		}
+		syntheticMessage.AddToHash(transcriptHasher)
+		debugPrintSum(transcriptHasher)
+
+		// then add reconstructed HRR
+		hrrMessage := handshake.Message{
+			MsgType: handshake.MsgTypeServerHello,
+			MsgSeq:  0, // does not affect transcript hash
+			Body:    msgBody,
+		}
+		hrrMessage.AddToHash(transcriptHasher)
+		debugPrintSum(transcriptHasher)
+
+		// then add second client hello
+		msg.AddToHash(transcriptHasher)
+		debugPrintSum(transcriptHasher)
+	}
 
 	// we should check all parameters above, so that we do not create connection for unsupported params
 	if conn == nil {
@@ -90,7 +123,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		conn.handler = ha
 		t.connections[addr] = conn
 	}
-	if err := conn.onClientHello2(t.opts, msg, msgClientHello, params); err != nil {
+	if err := conn.onClientHello2(t.opts, msg, msgClientHello, params, transcriptHasher); err != nil {
 		// TODO - close/replace connection
 		return conn, err
 	}

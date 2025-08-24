@@ -32,9 +32,9 @@ func TryCast[Result Integer, Arg Integer](arg Arg) (Result, error) {
 }
 
 func Cast[Result Integer, Arg Integer](arg Arg) Result {
-	argPositive := arg > 0
+	argPositive := arg >= 0
 	converted := Result(arg)
-	if argPositive != (converted > 0) {
+	if argPositive != (converted >= 0) {
 		panic("integer overflow - loss of sign")
 	}
 	if Arg(converted) != arg {

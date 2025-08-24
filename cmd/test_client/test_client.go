@@ -4,6 +4,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/netip"
 
@@ -26,6 +27,12 @@ func main() {
 	st := stats.NewStatsLogVerbose()
 	rnd := dtlsrand.CryptoRand()
 	opts := options.DefaultTransportOptions(false, rnd, st)
+
+	opts.PSKIdentity = "Client_identity"
+	opts.PSKAppendSecret = func(peerIdentity []byte, scratch []byte) []byte {
+		fmt.Printf("PSK peer identity %s\n", peerIdentity)
+		return append(scratch, 0x1a, 0x2b, 0x3c, 0x4d) // matches wolfssl examples to test interop
+	}
 
 	room := chat.NewClient()
 	t := statemachine.NewTransport(opts, room)

@@ -34,6 +34,9 @@ type TransportOptions struct {
 	Use8BitSeq             bool // We have to support receiving them, so we also implemented sending them
 
 	ServerCertificate tls.Certificate // some shortcut
+
+	PSKIdentity     string
+	PSKAppendSecret func(peerIdentity []byte, scratch []byte) []byte
 }
 
 func DefaultTransportOptions(roleServer bool, rnd dtlsrand.Rand, stats stats.Stats) *TransportOptions {

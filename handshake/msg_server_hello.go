@@ -51,14 +51,7 @@ func (msg *MsgServerHello) Parse(body []byte) (err error) {
 	if offset, err = format.ParserReadByteConst(body, offset, 0, ErrServerHelloLegacyCompressionMethod); err != nil {
 		return err
 	}
-	var extensionsBody []byte
-	if offset, extensionsBody, err = format.ParserReadUint16Length(body, offset); err != nil {
-		return err
-	}
-	if err = msg.Extensions.Parse(extensionsBody, false, true, msg.IsHelloRetryRequest()); err != nil {
-		return err
-	}
-	return format.ParserReadFinish(body, offset)
+	return msg.Extensions.ParseOutside(body[offset:], false, true, msg.IsHelloRetryRequest())
 }
 
 func (msg *MsgServerHello) Write(body []byte) []byte {

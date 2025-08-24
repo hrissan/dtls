@@ -164,6 +164,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 }
 
 func selectPSKIdentity(pskStorage []byte, opts *options.TransportOptions, ext *handshake.ExtensionsSet) (uint16, []byte, handshake.PSKIdentity, bool) {
+	// We do not want to support PSK with no forward secrecy for now.
 	if !ext.PskExchangeModesSet || !ext.PskExchangeModes.ECDHE ||
 		!ext.PreSharedKeySet || opts.PSKAppendSecret == nil {
 		return 0, nil, handshake.PSKIdentity{}, false

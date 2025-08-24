@@ -4,7 +4,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 
 	"github.com/hrissan/dtls/cmd/chat"
@@ -24,11 +23,7 @@ func main() {
 	rnd := dtlsrand.CryptoRand()
 	opts := options.DefaultTransportOptions(true, rnd, st)
 
-	opts.PSKIdentity = "Server_identity"
-	opts.PSKAppendSecret = func(peerIdentity []byte, scratch []byte) []byte {
-		fmt.Printf("PSK peer identity %s\n", peerIdentity)
-		return append(scratch, 0x1a, 0x2b, 0x3c, 0x4d) // matches wolfssl examples to test interop
-	}
+	opts.PSKAppendSecret = chat.PSKAppendSecret
 
 	if err := opts.LoadServerCertificate(
 		"../../wolfssl-examples/certs/server-cert.pem",

@@ -35,8 +35,12 @@ type TransportOptions struct {
 
 	ServerCertificate tls.Certificate // some shortcut
 
-	PSKIdentity     string
-	PSKAppendSecret func(peerIdentity []byte, scratch []byte) []byte // must append secret to scratch and return it, or return nil
+	// Should not
+	PSKClientIdentities []string
+	// Must append secret to scratch and return it, or return nil.
+	// On client, called for each one of PSKClientIdentities set to build pre_shared_key extension.
+	// On server, called for each one of identity sent in pre_shared_key extension.
+	PSKAppendSecret func(clientIdentity []byte, scratch []byte) []byte
 }
 
 func DefaultTransportOptions(roleServer bool, rnd dtlsrand.Rand, stats stats.Stats) *TransportOptions {

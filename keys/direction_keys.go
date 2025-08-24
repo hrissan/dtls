@@ -46,7 +46,6 @@ func (keys *DirectionKeys) ComputeHandshakeKeys(roleServer bool, handshakeSecret
 // TODO - remove allocations
 func ComputeFinished(hasher hash.Hash, HandshakeTrafficSecret []byte, transcriptHash []byte) []byte {
 	finishedKey := hkdf.ExpandLabel(hasher, HandshakeTrafficSecret, "finished", []byte{}, hasher.Size())
-	//transcriptHash := sha256.Sum256(conn.transcript)
 	return hkdf.HMAC(finishedKey, transcriptHash[:], hasher)
 }
 
@@ -59,16 +58,15 @@ func (keys *DirectionKeys) ComputeApplicationTrafficSecret(roleServer bool, mast
 		copy(keys.ApplicationTrafficSecret[:], deriveSecret(hasher, masterSecret[:], "c ap traffic", trHash[:]))
 		fmt.Printf("client2 application traffic secret: %x\n", keys.ApplicationTrafficSecret)
 	}
-	// [rfc8446:7.2]
-	//The next-generation application_traffic_secret is computed as:
-	//
-	//application_traffic_secret_N+1 =
-	//	HKDF-Expand-Label(application_traffic_secret_N,
-	//		"traffic upd", "", Hash.length)
 }
 
 func (keys *DirectionKeys) ComputeNextApplicationTrafficSecret(direction string) {
-	// the next application traffic secret is calculated from the previous one
+	// [rfc8446:7.2]
+	// The next-generation application_traffic_secret is computed as:
+	//
+	// application_traffic_secret_N+1 =
+	//	HKDF-Expand-Label(application_traffic_secret_N,
+	//		"traffic upd", "", Hash.length)
 	hasher := sha256.New()
 	copy(keys.ApplicationTrafficSecret[:], hkdf.ExpandLabel(hasher, keys.ApplicationTrafficSecret[:], "traffic upd", []byte{}, len(keys.ApplicationTrafficSecret)))
 	fmt.Printf("next %s application traffic secret: %x\n", direction, keys.ApplicationTrafficSecret)

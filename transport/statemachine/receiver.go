@@ -53,6 +53,7 @@ func (t *Transport) ProcessDatagram(datagram []byte, addr netip.AddrPort, err er
 				t.opts.Stats.Warning(addr, err)
 			}
 		} else {
+			// TODO - return bool from processDatagramImpl instead, do not take lock 2nd time
 			if conn.hasDataToSend() {
 				// We postpone sending responses until full datagram processed
 				t.snd.RegisterConnectionForSend(conn)

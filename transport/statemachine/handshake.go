@@ -22,6 +22,7 @@ type handshakeContext struct {
 	localRandom  [32]byte
 	x25519Secret *ecdh.PrivateKey // Tons of allocations here. TODO - compute in calculator goroutine
 
+	earlySecret                   [32]byte
 	masterSecret                  [32]byte
 	handshakeTrafficSecretSend    [32]byte // we need this to generate finished message.
 	handshakeTrafficSecretReceive [32]byte // we need this to check peer's finished message.

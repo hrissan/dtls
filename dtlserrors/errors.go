@@ -87,6 +87,7 @@ var ErrCertificateLoadError = NewWarning(-513, "certificate load error")
 var ErrCertificateAlgorithmUnsupported = NewWarning(-514, "certificate algorihtm unsupported")
 var ErrCertificateSignatureInvalid = NewWarning(-515, "certificate signature invalid")
 var ErrFinishedMessageVerificationFailed = NewWarning(-516, "finished message verification failed")
+var ErrPSKBinderVerificationFailed = NewWarning(-516, "psk binder verification failed")
 
 var ErrEncryptedAckMessageHeaderParsing = NewWarning(-516, "encrypted ack message header failed to parsed")
 

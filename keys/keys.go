@@ -87,14 +87,39 @@ func NewGCMCipher(block cipher.Block) cipher.AEAD {
 	return c
 }
 
-func (keys *Keys) ComputeHandshakeKeys(serverRole bool, sharedSecret []byte, trHash []byte) (
-	masterSecret [32]byte, handshakeTrafficSecretSend [32]byte, handshakeTrafficSecretReceive [32]byte) {
+func ComputeEarlySecret(psk []byte, extOrResLabel string) (earlySecret [32]byte, binderKey [32]byte) {
+	// [rfc8446:4.2.11.2] PSK Binder
+	// Derive-Secret(., "ext binder" | "res binder", "") = binder_key
+	// finished_key = HKDF-Expand-Label(binder_key, "finished", "", Hash.length)
 	hasher := sha256.New()
 	emptyHash := sha256.Sum256(nil)
 
 	salt := []byte{}
-	psk := [32]byte{}
-	earlySecret := hkdf.Extract(hasher, salt, psk[:])
+	pskStorage := [32]byte{}
+	if len(psk) == 0 {
+		psk = pskStorage[:]
+	}
+	earlySecretSlice := hkdf.Extract(hasher, salt, psk[:])
+	copy(earlySecret[:], earlySecretSlice)
+
+	if len(extOrResLabel) != 0 { // optimization
+		binderKeySlice := deriveSecret(hasher, earlySecretSlice, extOrResLabel, emptyHash[:])
+		copy(binderKey[:], binderKeySlice)
+	}
+	return
+}
+
+func (keys *Keys) ComputeHandshakeKeys(serverRole bool, earlySecret []byte, sharedSecret []byte, trHash []byte) (
+	masterSecret [32]byte, handshakeTrafficSecretSend [32]byte, handshakeTrafficSecretReceive [32]byte) {
+	hasher := sha256.New()
+	emptyHash := sha256.Sum256(nil)
+
+	//salt := []byte{}
+	//psk := [32]byte{}
+	//earlySecret2 := hkdf.Extract(hasher, salt, psk[:])
+	//if string(earlySecret) != string(earlySecret2) {
+	//	panic("nad")
+	//}
 
 	derivedSecret := deriveSecret(hasher, earlySecret, "derived", emptyHash[:])
 	handshakeSecret := hkdf.Extract(hasher, derivedSecret, sharedSecret)

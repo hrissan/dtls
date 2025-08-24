@@ -13,6 +13,8 @@ import (
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/keys"
+	"github.com/hrissan/dtls/safecast"
 	"github.com/hrissan/dtls/transport/options"
 )
 
@@ -21,6 +23,9 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	var bindersListLength int
 	if err := msgClientHello.Parse(msg.Body, &bindersListLength); err != nil {
 		return conn, dtlserrors.WarnPlaintextClientHelloParsing
+	}
+	if bindersListLength < 0 || bindersListLength >= len(msg.Body) {
+		panic("binder list length parsing invariant")
 	}
 	if !t.opts.RoleServer {
 		t.opts.Stats.ErrorClientReceivedClientHello(addr)
@@ -75,11 +80,10 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	if err != nil {
 		return conn, err
 	}
-	pskNum, identity, ok := selectPSKIdentity(t.opts, &msgClientHello.Extensions)
-	if ok {
-		fmt.Printf("server PSK selected identity %d (%q) binders length=%d\n", pskNum, identity.Identity, bindersListLength)
-	}
 	transcriptHasher := sha256.New()
+	var earlySecret [32]byte
+	pskSelected := false
+	var pskSelectedIdentity uint16
 	{
 		var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte
 		hrrDatagram, msgBody := GenerateStatelessHRR(hrrDatagramStorage[:0], msgClientHello.Extensions.Cookie, params.KeyShareSet)
@@ -107,11 +111,38 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		hrrMessage.AddToHash(transcriptHasher)
 		debugPrintSum(transcriptHasher)
 
-		// then add second client hello
-		msg.AddToHash(transcriptHasher)
+		// then add second client hello, but only up to binders, if they are present
+		msg.AddToHashPartial(transcriptHasher, len(msg.Body)-bindersListLength)
+		debugPrintSum(transcriptHasher)
+
+		var transcriptHashStorage [constants.MaxHashLength]byte
+		transcriptHash := transcriptHasher.Sum(transcriptHashStorage[:0])
+
+		var pskStorage [256]byte
+		pskNum, psk, identity, ok := selectPSKIdentity(pskStorage[:], t.opts, &msgClientHello.Extensions)
+		// [rfc8446:4.2.11]
+		// Servers SHOULD NOT attempt to validate multiple binders;
+		// rather, they SHOULD select a single PSK and validate solely the
+		// binder that corresponds to that PSK
+		if ok {
+			var binderKey [32]byte
+			earlySecret, binderKey = keys.ComputeEarlySecret(psk, "ext binder")
+			mustBeFinished := keys.ComputeFinished(sha256.New(), binderKey[:], transcriptHash)
+			if string(identity.Binder[:identity.BinderSize]) == string(mustBeFinished) {
+				pskSelected = true
+				pskSelectedIdentity = pskNum
+				fmt.Printf("PSK auth selected, identity %d (%q) binders length=%d\n", pskNum, identity.Identity, bindersListLength)
+			}
+		}
+
+		// add hash of binders
+		_, _ = transcriptHasher.Write(msg.Body[len(msg.Body)-bindersListLength:])
 		debugPrintSum(transcriptHasher)
 	}
-
+	if !pskSelected {
+		earlySecret, _ = keys.ComputeEarlySecret(nil, "")
+		fmt.Printf("certificate auth selected\n")
+	}
 	// we should check all parameters above, so that we do not create connection for unsupported params
 	if conn == nil {
 		var ha ConnectionHandler
@@ -123,7 +154,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		conn.handler = ha
 		t.connections[addr] = conn
 	}
-	if err := conn.onClientHello2(t.opts, msg, msgClientHello, params, transcriptHasher); err != nil {
+	if err := conn.onClientHello2(t.opts, earlySecret, pskSelected, pskSelectedIdentity, msgClientHello, params, transcriptHasher); err != nil {
 		// TODO - close/replace connection
 		return conn, err
 	}
@@ -132,19 +163,18 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	return conn, nil
 }
 
-func selectPSKIdentity(opts *options.TransportOptions, ext *handshake.ExtensionsSet) (int, handshake.PSKIdentity, bool) {
+func selectPSKIdentity(pskStorage []byte, opts *options.TransportOptions, ext *handshake.ExtensionsSet) (uint16, []byte, handshake.PSKIdentity, bool) {
 	if !ext.PskExchangeModesSet || !ext.PskExchangeModes.ECDHE ||
 		!ext.PreSharedKeySet || opts.PSKAppendSecret == nil {
-		return 0, handshake.PSKIdentity{}, false
+		return 0, nil, handshake.PSKIdentity{}, false
 	}
 	for num, identity := range ext.PreSharedKey.Identities[:ext.PreSharedKey.IdentitiesSize] {
-		var secretStorage [256]byte
-		secret := opts.PSKAppendSecret(identity.Identity, secretStorage[:0]) // allocates if secret very long
-		if len(secret) != 0 {
-			return num, identity, true
+		psk := opts.PSKAppendSecret(identity.Identity, pskStorage[:0]) // allocates if secret very long
+		if len(psk) != 0 {
+			return safecast.Cast[uint16](num), psk, identity, true // limited to constants.MaxPSKIdentities
 		}
 	}
-	return 0, handshake.PSKIdentity{}, false
+	return 0, nil, handshake.PSKIdentity{}, false
 }
 
 func IsSupportedClientHello(msgParsed *handshake.MsgClientHello) error {

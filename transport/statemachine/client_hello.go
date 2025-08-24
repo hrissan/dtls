@@ -125,7 +125,7 @@ func generateServerCertificateVerify(opts *options.TransportOptions, hctx *hands
 }
 
 func (conn *Connection) onClientHello2(opts *options.TransportOptions,
-	msg handshake.Message, msgClientHello handshake.MsgClientHello,
+	earlySecret [32]byte, pskSelected bool, pskSelectedIdentity uint16, msgClientHello handshake.MsgClientHello,
 	params cookie.Params, transcriptHasher hash.Hash) error {
 
 	if params.Age <= conn.cookieAge {
@@ -162,6 +162,10 @@ func (conn *Connection) onClientHello2(opts *options.TransportOptions,
 	serverHello.Extensions.KeyShareSet = true
 	serverHello.Extensions.KeyShare.X25519PublicKeySet = true
 	copy(serverHello.Extensions.KeyShare.X25519PublicKey[:], hctx.x25519Secret.PublicKey().Bytes())
+
+	serverHello.Extensions.PreSharedKeySet = pskSelected
+	serverHello.Extensions.PreSharedKey.SelectedIdentity = pskSelectedIdentity
+
 	// TODO - get body from the rope
 	serverHelloBody := serverHello.Write(nil)
 	serverHelloMessage := handshake.Message{
@@ -185,27 +189,29 @@ func (conn *Connection) onClientHello2(opts *options.TransportOptions,
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
+
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
-		conn.keys.ComputeHandshakeKeys(true, sharedSecret, handshakeTranscriptHash)
+		conn.keys.ComputeHandshakeKeys(true, earlySecret[:], sharedSecret, handshakeTranscriptHash)
 	conn.keys.SequenceNumberLimitExp = 5 // TODO - set for actual cipher suite. Small value is for testing.
 
 	if err := hctx.PushMessage(conn, generateEncryptedExtensions()); err != nil {
 		return err
 	}
 
-	if err := hctx.PushMessage(conn, generateServerCertificate(opts)); err != nil {
-		return err
-	}
+	if !pskSelected {
+		if err := hctx.PushMessage(conn, generateServerCertificate(opts)); err != nil {
+			return err
+		}
 
-	// TODO - offload to calculator goroutine
-	msgCertificateVerify, err := generateServerCertificateVerify(opts, hctx)
-	if err != nil {
-		return err // TODO - test on this path. Should close connection immediately
+		// TODO - offload to calculator goroutine
+		msgCertificateVerify, err := generateServerCertificateVerify(opts, hctx)
+		if err != nil {
+			return err // TODO - test on this path. Should close connection immediately
+		}
+		if err := hctx.PushMessage(conn, msgCertificateVerify); err != nil {
+			return err
+		}
 	}
-	if err := hctx.PushMessage(conn, msgCertificateVerify); err != nil {
-		return err
-	}
-
 	if err := hctx.PushMessage(conn, hctx.generateFinished(conn)); err != nil {
 		return err
 	}

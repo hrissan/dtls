@@ -2,6 +2,7 @@ package chat
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/hrissan/dtls/transport/statemachine"
@@ -36,13 +37,11 @@ func (conn *Conn) OnReadRecordLocked(recordBody []byte) error {
 	conn.chatRoom.mu.Lock()
 	defer conn.chatRoom.mu.Unlock()
 
-	if string(recordBody) == "upds" {
+	switch strings.TrimSpace(string(recordBody)) {
+	case "upds":
 		conn.DebugKeyUpdateLocked(false)
-		return nil
-	}
-	if string(recordBody) == "updsr" {
+	case "updsr":
 		conn.DebugKeyUpdateLocked(true)
-		return nil
 	}
 	fmt.Printf("chat room mesage from %q, sending to %d buddies: %q\n", conn.AddrLocked(), len(conn.chatRoom.connections), recordBody)
 	for buddy := range conn.chatRoom.connections {

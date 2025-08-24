@@ -10,6 +10,7 @@ import (
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/keys"
 )
 
 type smHandshakeClientExpectServerHello struct {
@@ -51,7 +52,8 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive = conn.keys.ComputeHandshakeKeys(false, sharedSecret, handshakeTranscriptHash)
+	earlySecret, _ := keys.ComputeEarlySecret(nil, "")
+	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive = conn.keys.ComputeHandshakeKeys(false, earlySecret[:], sharedSecret, handshakeTranscriptHash)
 	conn.keys.SequenceNumberLimitExp = 5 // TODO - set for actual cipher suite. Small value is for testing.
 
 	conn.stateID = smIDHandshakeClientExpectServerEE

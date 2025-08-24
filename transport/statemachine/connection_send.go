@@ -52,6 +52,11 @@ func (conn *Connection) constructDatagram(opts *options.TransportOptions, datagr
 }
 
 func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, datagram []byte) (int, bool, error) {
+	// when user calls SignalWriteable, we do not want to take lock and set flag.
+	// instead, connection is registered in sender, and later when constructDatagram
+	// is called once, we must return true from it repeatedly (on non-error paths at least)
+	// until we finally call to OnWriteRecordLocked, and it returns 'no more data'
+
 	var datagramSize int
 	hctx := conn.hctx
 	// we send acks before messages, because peer with receive queue for the single message
@@ -109,15 +114,16 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN != record.Number{}) {
 		// TODO
 	}
-	signalWriteable := false
+	handlerWriteable := false
 	if conn.stateID == smIDPostHandshake { // application data
+		handlerWriteable = true
 		// If we remove "if" below, we put ack for client finished together with
 		// application data into the same datagram. Then wolfSSL_connect will return
 		// err = -441, Application data is available for reading
-		// TODO: contact WolfSSL team
-		if datagramSize > 0 {
-			return datagramSize, true, nil
-		}
+		// TODO: investigate, contact WolfSSL team
+		//if datagramSize > 0 {
+		//	return datagramSize, true, nil
+		//}
 		hdrSize := record.OutgoingCiphertextRecordHeader16
 		hdrSize, insideBody, ok := conn.prepareProtect(datagram[datagramSize:], opts.Use8BitSeq)
 		if ok && len(insideBody) >= constants.MinFragmentBodySize {
@@ -132,10 +138,10 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 				}
 				datagramSize += recordSize
 			}
-			signalWriteable = wr
+			handlerWriteable = wr
 		}
 	}
-	return datagramSize, signalWriteable || conn.hasDataToSendLocked(), nil
+	return datagramSize, handlerWriteable || conn.hasDataToSendLocked(), nil
 }
 
 func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, datagramLeft []byte) (int, error) {

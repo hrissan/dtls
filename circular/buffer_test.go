@@ -4,10 +4,102 @@
 package circular_test
 
 import (
+	"math/rand/v2"
 	"testing"
 
 	"github.com/hrissan/dtls/circular"
 )
+
+var benchmarkSideEffect int
+
+func BenchmarkDiv9(b *testing.B) {
+	dividend := 12345678912341234 + rand.IntN(100)
+	value := benchmarkSideEffect
+	for i := 0; i < b.N; i++ {
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+	}
+	benchmarkSideEffect = value
+}
+
+func BenchmarkDiv129(b *testing.B) {
+	const dividend = 129
+	value := benchmarkSideEffect
+	for i := 0; i < b.N; i++ {
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+		value += (^value) / dividend
+	}
+	benchmarkSideEffect = value
+}
+
+func BenchmarkDiv128(b *testing.B) {
+	const dividend = 128
+	value := benchmarkSideEffect
+	for i := 0; i < b.N; i++ {
+		value += (^value + 191) / dividend
+		value += (^value + 191) / dividend
+		value += (^value + 191) / dividend
+		value += (^value + 191) / dividend
+		value += (^value + 191) / dividend
+		value += (^value + 191) / dividend
+		value += (^value + 191) / dividend
+		value += (^value + 191) / dividend
+		value += (^value + 191) / dividend
+		value += (^value + 191) / dividend
+	}
+	benchmarkSideEffect = value
+}
+
+func BenchmarkDiv128U(b *testing.B) {
+	const dividend = 128
+	value := benchmarkSideEffect
+	for i := 0; i < b.N; i++ {
+		value += int(uint(^value+191) / dividend)
+		value += int(uint(^value+191) / dividend)
+		value += int(uint(^value+191) / dividend)
+		value += int(uint(^value+191) / dividend)
+		value += int(uint(^value+191) / dividend)
+		value += int(uint(^value+191) / dividend)
+		value += int(uint(^value+191) / dividend)
+		value += int(uint(^value+191) / dividend)
+		value += int(uint(^value+191) / dividend)
+		value += int(uint(^value+191) / dividend)
+	}
+	benchmarkSideEffect = value
+}
+
+func BenchmarkDiv128Shift(b *testing.B) {
+	value := benchmarkSideEffect
+	for i := 0; i < b.N; i++ {
+		value += (^value + 191) >> 7
+		value += (^value + 191) >> 7
+		value += (^value + 191) >> 7
+		value += (^value + 191) >> 7
+		value += (^value + 191) >> 7
+		value += (^value + 191) >> 7
+		value += (^value + 191) >> 7
+		value += (^value + 191) >> 7
+		value += (^value + 191) >> 7
+		value += (^value + 191) >> 7
+	}
+	benchmarkSideEffect = value
+}
 
 func FuzzCircularBuffer(f *testing.F) {
 	f.Fuzz(func(t *testing.T, commands []byte) {

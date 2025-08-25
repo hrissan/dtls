@@ -11,7 +11,7 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *Connection) receivedEncryptedAck(opts *options.TransportOptions, recordData []byte) error {
+func (conn *Connection) receivedEncryptedAck(opts *options.TransportOptions, recordData []byte, rn record.Number) error {
 	parser, err := record.NewAckParser(recordData)
 	if err != nil {
 		return dtlserrors.ErrEncryptedAckMessageHeaderParsing
@@ -19,15 +19,18 @@ func (conn *Connection) receivedEncryptedAck(opts *options.TransportOptions, rec
 	fmt.Printf("dtls: got ack record (encrypted) %d bytes from %v, message(hex): %x\n", len(recordData), conn.addr, recordData)
 	var epochSeqOverflowCounter int
 	for {
-		rn, ok := parser.PopFront(&epochSeqOverflowCounter)
+		ackRn, ok := parser.PopFront(&epochSeqOverflowCounter)
 		if !ok {
 			break
 		}
-		if conn.hctx != nil {
-			conn.hctx.sendQueue.Ack(conn, rn)
+		if ackRn.Epoch() > rn.Epoch() { // ack record cannot ack future epochs
+			continue
 		}
-		conn.processKeyUpdateAck(rn)
-		conn.processNewSessionTicketAck(rn)
+		if conn.hctx != nil {
+			conn.hctx.sendQueue.Ack(conn, ackRn)
+		}
+		conn.processKeyUpdateAck(ackRn)
+		conn.processNewSessionTicketAck(ackRn)
 	}
 	if epochSeqOverflowCounter != 0 {
 		opts.Stats.Warning(conn.addr, dtlserrors.WarnAckEpochSeqnumOverflow)

@@ -18,7 +18,13 @@ func (s *BufferExt[T]) Cap(elements []T) int {
 	return len(elements)
 }
 
-func (s *BufferExt[T]) mask(elements []T) uint { return uint(len(elements)) - 1 } // also correct for 0 length
+func (s *BufferExt[T]) mask(elements []T) uint {
+	le := uint(len(elements))
+	if le&(le-1) != 0 { // also correct 'false' for 0 length
+		panic("buffer ext storage must have power of 2 elements")
+	}
+	return le - 1 // also correct for 0 length
+}
 
 // Two parts of circular buffer
 func (s *BufferExt[T]) Slices(elements []T) ([]T, []T) {
@@ -29,13 +35,13 @@ func (s *BufferExt[T]) Slices(elements []T) ([]T, []T) {
 	return elements[s.read_pos&m:], elements[:s.write_pos&m]
 }
 
-func (s *BufferExt[T]) PushBack(elements []T, element T) {
+func (s *BufferExt[T]) PushFront(elements []T, element T) {
 	capacity := len(elements)
 	if s.Len() == capacity {
 		panic("full circular buffer")
 	}
-	elements[s.write_pos&s.mask(elements)] = element
-	s.write_pos++
+	s.read_pos--
+	elements[s.read_pos&s.mask(elements)] = element
 }
 
 func (s *BufferExt[T]) Front(elements []T) T {
@@ -49,6 +55,15 @@ func (s *BufferExt[T]) FrontRef(elements []T) *T {
 	return &elements[s.read_pos&s.mask(elements)]
 }
 
+func (s *BufferExt[T]) PushBack(elements []T, element T) {
+	capacity := len(elements)
+	if s.Len() == capacity {
+		panic("full circular buffer")
+	}
+	elements[s.write_pos&s.mask(elements)] = element
+	s.write_pos++
+}
+
 func (s *BufferExt[T]) Back(elements []T) T {
 	return *s.BackRef(elements)
 }
@@ -58,6 +73,26 @@ func (s *BufferExt[T]) BackRef(elements []T) *T {
 		panic("empty circular buffer")
 	}
 	return &elements[(s.write_pos-1)&s.mask(elements)]
+}
+
+func (s *BufferExt[T]) PopBack(elements []T) T {
+	t, ok := s.TryPopBack(elements)
+	if !ok {
+		panic("empty circular buffer")
+	}
+	return t
+}
+
+func (s *BufferExt[T]) TryPopBack(elements []T) (T, bool) {
+	var empty T
+	if s.write_pos == s.read_pos {
+		return empty, false
+	}
+	s.write_pos--
+	offset := s.write_pos & s.mask(elements)
+	element := elements[offset]
+	elements[offset] = empty // do not have dangling references in unused parts of buffer
+	return element, true
 }
 
 func (s *BufferExt[T]) Index(elements []T, pos int) T {

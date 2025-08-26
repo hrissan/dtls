@@ -56,7 +56,6 @@ func (s *Buffer[T]) Reserve(newCapacity int) {
 	}
 }
 
-// TODO - fuzz all new methods
 func (s *Buffer[T]) PushFront(element T) {
 	capacity := len(s.elements)
 	if s.Len() == capacity {

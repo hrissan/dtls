@@ -13,7 +13,7 @@ type Buffer[T any] struct {
 
 func (s *Buffer[T]) Len() int {
 	return int(s.write_pos - s.read_pos) // diff will always fit int and be >= 0
-}
+} // never overflows int
 
 func (s *Buffer[T]) Cap() int {
 	return len(s.elements)
@@ -48,6 +48,10 @@ func (s *Buffer[T]) reserve(newCapacity int) {
 	s.read_pos = 0
 	s.write_pos = uint(off)
 	s.elements = elements
+
+	if le := uint(len(elements)); le&(le-1) != 0 {
+		panic("buffer storage must have power of 2 elements")
+	}
 }
 
 func (s *Buffer[T]) Reserve(newCapacity int) {

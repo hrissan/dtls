@@ -12,7 +12,7 @@ type BufferExt[T any] struct {
 
 func (s *BufferExt[T]) Len() int {
 	return int(s.write_pos - s.read_pos) // diff will always fit int and be >= 0
-}
+} // never overflows int
 
 func (s *BufferExt[T]) Cap(elements []T) int {
 	return len(elements)
@@ -20,7 +20,7 @@ func (s *BufferExt[T]) Cap(elements []T) int {
 
 func (s *BufferExt[T]) mask(elements []T) uint {
 	le := uint(len(elements))
-	if le&(le-1) != 0 { // also correct 'false' for 0 length
+	if le&(le-1) != 0 { // also correct 'false' for 0 length. Very cheap check, but can be removed
 		panic("buffer ext storage must have power of 2 elements")
 	}
 	return le - 1 // also correct for 0 length

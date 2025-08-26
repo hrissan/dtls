@@ -10,11 +10,14 @@ import (
 )
 
 const (
+	// [rfc8446:4.5.3] AEAD Limits - 2^36 limit for 3 ciphers at the top
 	CypherSuite_TLS_AES_128_GCM_SHA256       = 0x1301
 	CypherSuite_TLS_AES_256_GCM_SHA384       = 0x1302
 	CypherSuite_TLS_CHACHA20_POLY1305_SHA256 = 0x1303
-	CypherSuite_TLS_AES_128_CCM_SHA256       = 0x1304
-	CypherSuite_TLS_AES_128_CCM_8_SHA256     = 0x1305
+
+	// ciphers below are not recommended to be implemented
+	CypherSuite_TLS_AES_128_CCM_SHA256   = 0x1304
+	CypherSuite_TLS_AES_128_CCM_8_SHA256 = 0x1305
 )
 
 type CipherSuitesSet struct {

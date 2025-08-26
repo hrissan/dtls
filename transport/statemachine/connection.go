@@ -22,7 +22,7 @@ import (
 // all other information is in handshakeContext structure and will be reused
 // after handshake finish
 type Connection struct {
-	transport *Transport
+	snd *sender
 	// variables below mu are protected by mu, except where noted
 	mu        sync.Mutex     // TODO - check that mutex is alwasy taken
 	addr      netip.AddrPort // cleared when conn is removed from map, set when added
@@ -51,10 +51,10 @@ type Connection struct {
 	roleServer bool                // TODO - remove
 	stateID    stateMachineStateID // index in global table
 
+	// protected by transport's mu
+	inMap bool
 	// intrusive, must not be changed except by sender, protected by sender mutex
 	inSenderQueue bool
-	// intrusive, must not be changed except by receiver, protected by receiver mutex
-	inReceiverClosingQueue bool
 	// intrusive, must not be changed except by clock, protected by clock mutex
 	timerHeapIndex int
 	// time.Time object is larger and also has complicated comparison,
@@ -69,27 +69,65 @@ func (conn *Connection) AddrLocked() netip.AddrPort {
 	return conn.addr
 }
 
-func (conn *Connection) Shutdown() {
-	// TODO - send stateless encrypted alert and destroy connection
+func (conn *Connection) ShutdownLocked(err error) {
+	if conn.shutdownLockedShouldSignal(err) {
+		conn.SignalWriteable()
+	}
 }
 
-func (conn *Connection) startConnection(tr *Transport, addr netip.AddrPort) error {
+func (conn *Connection) shutdownLockedShouldSignal(err error) bool {
+	if conn.stateID == smIDClosed || conn.stateID == smIDShutdown {
+		return false
+	}
+	// TODO - send stateless encrypted alert and destroy connection
+	conn.stateID = smIDShutdown
+	return true
+}
+
+func (conn *Connection) Shutdown(err error) {
+	conn.mu.Lock()
+	defer conn.mu.Unlock()
+	conn.ShutdownLocked(err)
+}
+
+// so we do not forget to prepare vars for reuse
+func (conn *Connection) resetToClosedLocked() {
+	conn.cookieAge = 0
+	conn.keys = keys.Keys{}
+
+	conn.sentKeyUpdateRN = record.Number{}
+	conn.sentNewSessionTicketRN = record.Number{}
+
+	conn.hctx = nil // TODO - reuse
+	conn.handler = nil
+
+	conn.nextMessageSeqSend = 0
+	conn.nextMessageSeqReceive = 0
+
+	conn.sendNewSessionTicketMessageSeq = 0
+	conn.sendKeyUpdateMessageSeq = 0
+	conn.sendKeyUpdateUpdateRequested = false
+
+	conn.roleServer = false
+	conn.stateID = smIDClosed
+}
+
+func (conn *Connection) startConnection(tr *Transport, handlser ConnectionHandler, addr netip.AddrPort) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if conn.stateID != smIDClosed {
-		panic("connection first must be closed")
+		return ErrConnectionInProgress
 	}
-	// TODO - take from pool, limit # of outstanding handshakes
-	hctx := newHandshakeContext(sha256.New())
+	hctx := newHandshakeContext(sha256.New()) // TODO - take from pool
 	tr.opts.Rnd.ReadMust(hctx.localRandom[:])
 	// We'd like to postpone ECC until HRR, but wolfssl requires key_share in the first client_hello
 	// TODO - offload to separate goroutine
 	// TODO - contact wolfssl team?
 	hctx.ComputeKeyShare(tr.opts.Rnd)
 
-	// TODO - take from pool, limit # of connections
-	conn.transport = tr
+	conn.snd = tr.snd
 	conn.addr = addr
+	conn.handler = handlser
 	conn.roleServer = false
 	conn.stateID = smIDHandshakeClientExpectServerHRR
 	conn.hctx = hctx
@@ -97,8 +135,8 @@ func (conn *Connection) startConnection(tr *Transport, addr netip.AddrPort) erro
 	clientHelloMsg := hctx.generateClientHello(false, cookie.Cookie{})
 
 	if err := hctx.PushMessage(conn, clientHelloMsg); err != nil {
-		// If you start returning nil, err from this function, do not forget to return conn and hctx to the pool
-		panic("push message for client hello must always succeed")
+		conn.hctx = nil // TODO - reuse
+		return err
 	}
 	return nil
 }

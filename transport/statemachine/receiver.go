@@ -66,10 +66,13 @@ func (t *Transport) ProcessDatagram(datagram []byte, addr netip.AddrPort, err er
 }
 
 func (t *Transport) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*Connection, error) {
-	// receiving goroutine owns rc.connections
-	t.connPoolMu.Lock()
+	// We look up on each datagram unconditionally to simplify logic in this function and functions it calls.
+	// If conn is nil, on server the only place where it can be added is receivedClientHello.
+	// on client the only place where it can be added is StartConnection.
+	// We could have transport which plays both roles at once, but we need to track connections separately.
+	t.mu.Lock()
 	conn := t.connections[addr]
-	t.connPoolMu.Unlock()
+	t.mu.Unlock()
 
 	recordOffset := 0                  // Multiple DTLS records MAY be placed in a single datagram [rfc9147:4.3]
 	for recordOffset < len(datagram) { // read records one by one
@@ -131,25 +134,31 @@ func (t *Transport) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 	return conn, nil
 }
 
-var ErrConnectionInProgress = errors.New("connection is in progress")
+var ErrConnectionInProgress = errors.New("client connection is in progress")
+var ErrRegisterConnectionTwice = errors.New("client connection is registered in transport twice")
 
-func (t *Transport) StartConnection(addr netip.AddrPort) (*Connection, error) {
-	// TODO - race with access to t.connections
-	t.connPoolMu.Lock()
-	defer t.connPoolMu.Unlock()
-	conn := t.connections[addr]
-	if conn != nil {
-		return nil, ErrConnectionInProgress // for now will wait for previous handshake timeout first
-	} // TODO - if this is long going handshake, clear and start again?
-
-	// TODO - reuse in pool?
-	var ha ConnectionHandler
-	conn, ha = t.handler.OnNewConnection()
-	conn.handler = ha
-	if err := conn.startConnection(t, addr); err != nil {
-		return conn, err
+func (t *Transport) StartConnection(conn *Connection, handler ConnectionHandler, addr netip.AddrPort) error {
+	if t.opts.RoleServer { // TODO - combined in/out transport
+		return ErrServerCannotStartConnection
 	}
-	t.connections[addr] = conn
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	otherConn := t.connections[addr]
+	if otherConn != nil {
+		if conn == otherConn {
+			return ErrRegisterConnectionTwice
+		}
+		otherConn.Lock()
+		otherClosed := otherConn.stateID == smIDClosed
+		otherConn.Unlock()
+		if !otherClosed {
+			return ErrConnectionInProgress
+		}
+	}
+	if err := conn.startConnection(t, handler, addr); err != nil {
+		return err
+	}
+	t.connections[addr] = conn // replace otherConn or simply add
 	t.snd.RegisterConnectionForSend(conn)
-	return conn, nil
+	return nil
 }

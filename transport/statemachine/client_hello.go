@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"hash"
+	"net/netip"
 
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/cookie"
@@ -124,20 +125,25 @@ func generateServerCertificateVerify(opts *options.TransportOptions, hctx *hands
 	}, nil
 }
 
-func (conn *Connection) onClientHello2(opts *options.TransportOptions,
-	earlySecret [32]byte, pskSelected bool, pskSelectedIdentity uint16, msgClientHello handshake.MsgClientHello,
-	params cookie.Params, transcriptHasher hash.Hash) error {
+func (conn *Connection) onClientHello2(opts *options.TransportOptions, addr netip.AddrPort,
+	earlySecret [32]byte, pskSelected bool, pskSelectedIdentity uint16,
+	msgClientHello handshake.MsgClientHello, params cookie.Params, transcriptHasher hash.Hash) error {
+	conn.Lock()
+	defer conn.Unlock()
 
-	if params.Age <= conn.cookieAge {
-		return nil
+	if conn.stateID != smIDClosed {
+		panic("new connection or connection from the pool is not in closed state")
 	}
+	conn.addr = addr
+	conn.roleServer = true
+
+	// TODO - cookie age
+	// if params.Age <= conn.cookieAge {
+	//	return nil
+	// }
 	// Attacker cannot control age for addr, so will not be able to disrupt connection by sending
 	// rogue packets. But they can disrupt connection if they can respond with valid cookie.
 	// Big TODO - parallel handshake and fully working connection until we verify client identity
-	if conn.stateID != smIDClosed {
-		// TODO - close connection here, and start a new one.
-		return nil
-	}
 
 	hctx := newHandshakeContext(transcriptHasher)
 	conn.hctx = hctx
@@ -174,7 +180,7 @@ func (conn *Connection) onClientHello2(opts *options.TransportOptions,
 	}
 
 	if err := hctx.PushMessage(conn, serverHelloMessage); err != nil {
-		return err
+		panic("pushing ServerHello must never fail")
 	}
 
 	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte

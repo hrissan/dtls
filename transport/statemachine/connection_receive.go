@@ -31,7 +31,7 @@ func (conn *Connection) receivedCiphertextRecord(opts *options.TransportOptions,
 		return conn.receivedAlert(true, recordBody)
 	case record.RecordTypeAck:
 		// does not depend on conn.state()
-		return conn.receivedEncryptedAck(opts, recordBody)
+		return conn.receivedEncryptedAck(opts, recordBody, rn)
 	case record.RecordTypeApplicationData:
 		// TODO - allow or drop based on early data state
 		return conn.receivedApplicationData(recordBody)

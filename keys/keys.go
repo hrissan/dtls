@@ -27,7 +27,11 @@ type Keys struct {
 	SendAcks      replay.Window
 	SendAcksEpoch uint16 // we do not want to lose acks immediately  when switching epoch
 
-	NewReceiveKeys SymmetricKeys // always correspond to Receive.Symmetric.Epoch + 1
+	// Idea: we have storage 2 sets of keys, keep previous epoch keys for replay window length.
+	// But then we need also 2 replay windows, and 2 SendAcks structs.
+
+	// always correspond to Receive.Symmetric.Epoch + 1 if NewReceiveKeysSet is set
+	NewReceiveKeys SymmetricKeys
 
 	FailedDeprotectionCounter               uint64
 	FailedDeprotectionCounterNewReceiveKeys uint64 // separate counter for NewReceiveKeys

@@ -131,6 +131,10 @@ Elliptic Curve Cryptography (ECC) Cipher Suites for Transport Layer Security (TL
 
 Transport Layer Security (TLS) Extensions: Extension Definitions https://www.rfc-editor.org/rfc/rfc6066
 
+ChaCha20 and Poly1305 for IETF Protocols https://www.rfc-editor.org/rfc/rfc8439#section-2.8
+
+AEAD Cipher Suites - An Interface and Algorithms for Authenticated Encryption https://www.rfc-editor.org/rfc/rfc5116#section-5
+
 # for now, tested against wolfssl
 
 Howto test with Wolfssl.
@@ -177,7 +181,9 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 * Support retransmissions, actually start/stop retransmission timers based on connection state
 
-* PSK handshake
+* PSK handshake, client side.
+
+* (Not planned, we want forward secrecy) PSK-only key exchange mode.
 
 * NewSessionTicket and resuming sessions support for both server and client
 
@@ -197,13 +203,17 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 * Support SNI extension
 
+* Support Application-Layer Protocol Negotiation Extension
+  https://datatracker.ietf.org/doc/html/rfc7301
+  Would be great to select our RPC protocol version, and do not invent our own header
+
 * Fuzz all data structures
 
 * Fuzz incoming path
 
 * Server + client connections together with packet loss and reordering
 
-* Make handshake state machine explicit
+* Make handshake state machine more explicit
 
 * Rearrange/refactor code
 
@@ -229,7 +239,7 @@ we should mostly ignore it.
 
 * Use rope for all variable memory chunks
 
-* use actual types for various objects (type Flight byte, instead of simply byte, etc.)
+* use actual types for various objects (type CipherSuite, etc. Instead of uint16.)
 
 * limit max number of parallel handshakes, clear items by LRU
 

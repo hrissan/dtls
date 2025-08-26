@@ -144,21 +144,19 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		fmt.Printf("certificate auth selected\n")
 	}
 	// we should check all parameters above, so that we do not create connection for unsupported params
-	if conn == nil {
-		var ha ConnectionHandler
-		conn, ha = t.handler.OnNewConnection()
-		conn.transport = t
-		conn.addr = addr
-		conn.roleServer = true
-		conn.stateID = smIDClosed // explicit 0
-		conn.handler = ha
-		t.connections[addr] = conn
+	if conn != nil {
+		return conn, nil // TODO - for now do not replace existing connections
 	}
-	if err := conn.onClientHello2(t.opts, earlySecret, pskSelected, pskSelectedIdentity, msgClientHello, params, transcriptHasher); err != nil {
-		// TODO - close/replace connection
-		return conn, err
+	// only receiver adds connections to the map, so if there were none for address
+	// at the start of processDatagramImpl, there should be none here.
+	conn = t.addToMapFromPool(addr)
+	// From here, connection must not skip "shutting down" state to be correctly added to the pool again
+	if err := conn.onClientHello2(t.opts, addr,
+		earlySecret, pskSelected, pskSelectedIdentity,
+		msgClientHello, params, transcriptHasher); err != nil {
+		conn.Unlock()
+		panic("must be never")
 	}
-
 	t.snd.RegisterConnectionForSend(conn)
 	return conn, nil
 }

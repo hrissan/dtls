@@ -5,7 +5,6 @@ package statemachine
 
 import (
 	"crypto/ecdh"
-	"fmt"
 	"hash"
 	"math"
 
@@ -39,7 +38,6 @@ type handshakeContext struct {
 	CanDeliveryMessages bool
 
 	serverUsedHRR bool // we must store this to validate state transition
-	currentFlight byte // both send and receive
 
 	// We need more than 1 message, otherwise we will lose them, while
 	// handshake is in a state of waiting finish of offloaded calculations.
@@ -79,19 +77,6 @@ func (hctx *handshakeContext) ComputeKeyShare(rnd dtlsrand.Rand) {
 		panic("curve25519.X25519 failed")
 	}
 	hctx.x25519Secret = priv
-}
-
-func (hctx *handshakeContext) ReceivedFlight(conn *Connection, flight byte) (newFlight bool) {
-	if flight <= hctx.currentFlight {
-		return false
-	}
-	hctx.currentFlight = flight
-	fmt.Printf("received next flight, clearing send queue\n")
-	// implicit ack of all previous flights
-	hctx.sendQueue.Clear()
-
-	conn.keys.SendAcks.Reset()
-	return true
 }
 
 func (hctx *handshakeContext) receivedNextFlight(conn *Connection) {

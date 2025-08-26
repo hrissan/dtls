@@ -4,9 +4,9 @@
 package main
 
 import (
-	"log"
-	"net/netip"
+	"fmt"
 
+	"github.com/hrissan/dtls"
 	"github.com/hrissan/dtls/cmd/chat"
 	"github.com/hrissan/dtls/dtlsrand"
 	"github.com/hrissan/dtls/transport/options"
@@ -30,14 +30,25 @@ func main() {
 	opts.PSKClientIdentities = []string{chat.PSKClientIdentity}
 	opts.PSKAppendSecret = chat.PSKAppendSecret
 
-	room := chat.NewClient()
-	t := statemachine.NewTransport(opts, room)
+	t := statemachine.NewTransport(opts, nil)
+	// client := chat.NewClient(t)
 
-	peerAddr, err := netip.ParseAddrPort("127.0.0.1:11111")
-	if err != nil {
-		log.Panic("dtls: cannot parse peer address: ", err)
-	}
-	_, _ = t.StartConnection(peerAddr)
+	//peerAddr, err := netip.ParseAddrPort("127.0.0.1:11111")
+	//if err != nil {
+	//	log.Panic("dtls: cannot parse peer address: ", err)
+	//}
+	// go client.GoStart(t, peerAddr)
 
 	t.GoRunUDP(socket)
+
+	dtlsConn, err := dtls.Dial(t, "udp", "127.0.0.1:11111")
+	chat.Check(err)
+	defer func() {
+		chat.Check(dtlsConn.Close())
+	}()
+
+	fmt.Println("Connected; type 'exit' to shutdown gracefully")
+
+	// Simulate a chat session
+	chat.Chat(dtlsConn)
 }

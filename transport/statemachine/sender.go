@@ -12,7 +12,6 @@ import (
 
 	"github.com/hrissan/dtls/circular"
 	"github.com/hrissan/dtls/constants"
-	"github.com/hrissan/dtls/transport/options"
 )
 
 // [rfc9147:4.4]
@@ -26,7 +25,7 @@ type outgoingHRR struct {
 }
 
 type sender struct {
-	opts *options.TransportOptions
+	t *Transport
 
 	mu       sync.Mutex
 	cond     *sync.Cond
@@ -40,16 +39,16 @@ type sender struct {
 	wantToWriteQueue circular.Buffer[*Connection]
 }
 
-func newSender(opts *options.TransportOptions) *sender {
+func newSender(t *Transport) *sender {
 	snd := &sender{
-		opts: opts,
+		t: t,
 	}
 	snd.cond = sync.NewCond(&snd.mu)
 
-	if opts.Preallocate {
-		snd.helloRetryQueue.Reserve(opts.MaxHelloRetryQueueSize)
-		snd.helloRetryPool = make([]*[constants.MaxOutgoingHRRDatagramLength]byte, 0, opts.MaxHelloRetryQueueSize)
-		snd.wantToWriteQueue.Reserve(opts.MaxConnections)
+	if t.opts.Preallocate {
+		snd.helloRetryQueue.Reserve(t.opts.MaxHelloRetryQueueSize)
+		snd.helloRetryPool = make([]*[constants.MaxOutgoingHRRDatagramLength]byte, 0, t.opts.MaxHelloRetryQueueSize)
+		snd.wantToWriteQueue.Reserve(t.opts.MaxConnections)
 	}
 	return snd
 }
@@ -62,7 +61,7 @@ func (snd *sender) Close() {
 	snd.cond.Broadcast()
 }
 
-// blocks until socket is closed (externally)
+// blocks until sender.Close() is closed or socket is Closed (externally), whichever comes first
 func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 	datagram := make([]byte, 65536)
 	snd.mu.Lock()
@@ -88,8 +87,9 @@ func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 		var addr netip.AddrPort
 		datagramSize := 0
 		addToSendQueue := false
+		closed := false
 		if conn != nil {
-			addr, datagramSize, addToSendQueue = conn.constructDatagram(snd.opts, datagram[:MinimumPMTUv4])
+			addr, datagramSize, addToSendQueue, closed = conn.constructDatagram(snd.t.opts, datagram[:MinimumPMTUv4])
 			if datagramSize == 0 && addToSendQueue {
 				panic("constructDatagram invariant violation")
 			}
@@ -98,6 +98,10 @@ func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 					addToSendQueue = true // otherwise state machine deadlock
 				}
 			}
+		}
+		if closed {
+			addToSendQueue = false
+			snd.t.removeConnection(conn, addr)
 		}
 		snd.mu.Lock()
 		if hrr.data != nil {
@@ -114,29 +118,29 @@ func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 
 // returns false if socket closed
 func (snd *sender) sendDatagram(socket *net.UDPConn, data []byte, addr netip.AddrPort) bool {
-	snd.opts.Stats.SocketWriteDatagram(data, addr)
+	snd.t.opts.Stats.SocketWriteDatagram(data, addr)
 	n, err := socket.WriteToUDPAddrPort(data, addr)
 	if err != nil {
 		if errors.Is(err, net.ErrClosed) {
 			return false
 		}
-		snd.opts.Stats.SocketWriteError(n, addr, err)
-		time.Sleep(snd.opts.SocketWriteErrorDelay)
+		snd.t.opts.Stats.SocketWriteError(n, addr, err)
+		time.Sleep(snd.t.opts.SocketWriteErrorDelay)
 	}
 	return true
 }
 
 // returns nil if hello retry queue is at max capacity
-func (t *sender) PopHelloRetryDatagramStorage() *[constants.MaxOutgoingHRRDatagramLength]byte {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.helloRetryQueue.Len() >= t.opts.MaxHelloRetryQueueSize {
+func (snd *sender) PopHelloRetryDatagramStorage() *[constants.MaxOutgoingHRRDatagramLength]byte {
+	snd.mu.Lock()
+	defer snd.mu.Unlock()
+	if snd.helloRetryQueue.Len() >= snd.t.opts.MaxHelloRetryQueueSize {
 		return nil
 	}
-	if pos := len(t.helloRetryPool) - 1; pos >= 0 {
-		result := t.helloRetryPool[pos]
-		t.helloRetryPool[pos] = nil // do not leave alias
-		t.helloRetryPool = t.helloRetryPool[:pos]
+	if pos := len(snd.helloRetryPool) - 1; pos >= 0 {
+		result := snd.helloRetryPool[pos]
+		snd.helloRetryPool[pos] = nil // do not leave alias
+		snd.helloRetryPool = snd.helloRetryPool[:pos]
 		return result
 	}
 	return &[constants.MaxOutgoingHRRDatagramLength]byte{}

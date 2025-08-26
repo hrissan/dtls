@@ -35,21 +35,23 @@ func (hctx *handshakeContext) generateFinished(conn *Connection) handshake.Messa
 type stateMachineStateID byte
 
 const (
-	smIDClosed                                stateMachineStateID = 0 // must be 0 for correct default state
-	smIDClientSentHello                       stateMachineStateID = 1
-	smIDHandshakeServerExpectClientHello2     stateMachineStateID = 2
-	smIDHandshakeServerExpectFinished         stateMachineStateID = 3
-	smIDHandshakeClientExpectServerHRR        stateMachineStateID = 4
-	smIDHandshakeClientExpectServerHello      stateMachineStateID = 5
-	smIDHandshakeClientExpectServerEE         stateMachineStateID = 6
-	smIDHandshakeClientExpectServerCert       stateMachineStateID = 7
-	smIDHandshakeClientExpectServerCertVerify stateMachineStateID = 8
-	smIDHandshakeClientExpectServerFinished   stateMachineStateID = 9
-	smIDPostHandshake                         stateMachineStateID = 10
+	smIDClosed                                stateMachineStateID = iota // must be 0 for correct default state
+	smIDShutdown                              stateMachineStateID = iota
+	smIDClientSentHello                       stateMachineStateID = iota
+	smIDHandshakeServerExpectClientHello2     stateMachineStateID = iota
+	smIDHandshakeServerExpectFinished         stateMachineStateID = iota
+	smIDHandshakeClientExpectServerHRR        stateMachineStateID = iota
+	smIDHandshakeClientExpectServerHello      stateMachineStateID = iota
+	smIDHandshakeClientExpectServerEE         stateMachineStateID = iota
+	smIDHandshakeClientExpectServerCert       stateMachineStateID = iota
+	smIDHandshakeClientExpectServerCertVerify stateMachineStateID = iota
+	smIDHandshakeClientExpectServerFinished   stateMachineStateID = iota
+	smIDPostHandshake                         stateMachineStateID = iota
 )
 
 var stateMachineStates = [...]StateMachine{
 	smIDClosed:                                &smClosed{},
+	smIDShutdown:                              &smClosed{},
 	smIDClientSentHello:                       &smClientSentHello1{},
 	smIDHandshakeServerExpectClientHello2:     &smHandshakeServerExpectClientHello2{},
 	smIDHandshakeServerExpectFinished:         &smHandshakeServerExpectFinished{},

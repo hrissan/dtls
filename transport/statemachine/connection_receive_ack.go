@@ -19,18 +19,19 @@ func (conn *Connection) receivedEncryptedAck(opts *options.TransportOptions, rec
 	fmt.Printf("dtls: got ack record (encrypted) %d bytes from %v, message(hex): %x\n", len(recordData), conn.addr, recordData)
 	var epochSeqOverflowCounter int
 	for {
-		ackRn, ok := parser.PopFront(&epochSeqOverflowCounter)
+		beingAckedRn, ok := parser.PopFront(&epochSeqOverflowCounter)
 		if !ok {
 			break
 		}
-		if ackRn.Epoch() > rn.Epoch() { // ack record cannot ack future epochs
+		// [rfc9147:7.1] During the handshake, ACK records MUST be sent with an epoch which is equal to or higher
+		if rn.Epoch() < beingAckedRn.Epoch() && beingAckedRn.Epoch() < 3 { // ack record cannot ack future epochs
 			continue
 		}
 		if conn.hctx != nil {
-			conn.hctx.sendQueue.Ack(conn, ackRn)
+			conn.hctx.sendQueue.Ack(conn, beingAckedRn)
 		}
-		conn.processKeyUpdateAck(ackRn)
-		conn.processNewSessionTicketAck(ackRn)
+		conn.processKeyUpdateAck(beingAckedRn)
+		conn.processNewSessionTicketAck(beingAckedRn)
 	}
 	if epochSeqOverflowCounter != 0 {
 		opts.Stats.Warning(conn.addr, dtlserrors.WarnAckEpochSeqnumOverflow)

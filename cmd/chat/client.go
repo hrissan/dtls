@@ -2,17 +2,61 @@ package chat
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"strings"
-
-	"github.com/hrissan/dtls/transport/statemachine"
 )
+
+// Check is a helper to throw errors in the examples.
+func Check(err error) {
+	var netError net.Error
+	if errors.As(err, &netError) && netError.Temporary() { //nolint:staticcheck
+		fmt.Printf("Warning: %v\n", err)
+	} else if err != nil {
+		fmt.Printf("error: %v\n", err)
+		panic(err)
+	}
+}
+
+// Chat simulates a simple text chat session over the connection.
+func Chat(conn io.ReadWriter) {
+	go func() {
+		b := make([]byte, 128)
+
+		for {
+			n, err := conn.Read(b)
+			Check(err)
+			fmt.Printf("Got message: %s\n", string(b[:n]))
+		}
+	}()
+
+	reader := bufio.NewReader(os.Stdin)
+
+	for {
+		text, err := reader.ReadString('\n')
+		Check(err)
+
+		if strings.TrimSpace(text) == "exit" {
+			return
+		}
+
+		_, err = conn.Write([]byte(text))
+		Check(err)
+	}
+}
+
+/*
 
 type ClientConn struct {
 	statemachine.Connection
 
+	chatClient *Client
+
 	messagesToSend []string
+	shouldBeClosed bool
 }
 
 func (conn *ClientConn) OnConnectLocked() {
@@ -22,10 +66,16 @@ func (conn *ClientConn) OnConnectLocked() {
 
 func (conn *ClientConn) OnDisconnectLocked(err error) {
 	fmt.Printf("chat client disconnected\n")
-	os.Exit(0)
 }
 
-func (conn *ClientConn) OnWriteRecordLocked(recordBody []byte) (recordSize int, send bool, signalWriteable bool) {
+func (conn *ClientConn) OnStartConnectionFailed(err error) {
+	fmt.Printf("chat client connection unsuccessful with error: %v\n", err)
+	time.AfterFunc(time.Second*5, func() {
+		if err :=conn.chatClient.t.StartConnection()
+	})
+}
+
+func (conn *ClientConn) OnWriteRecordLocked(recordBody []byte) (recordSize int, send bool, signalWriteable bool, err error) {
 	return onWriteMessages(&conn.messagesToSend, recordBody)
 }
 
@@ -56,33 +106,33 @@ func (conn *ClientConn) run() {
 	}
 }
 
-func (conn *ClientConn) addMessage(msg string) {
+func (conn *ClientConn) close() {
 	conn.Lock()
 	defer conn.Unlock()
-	if msg == "updc" {
-		conn.DebugKeyUpdateLocked(false)
-		return
-	}
-	if msg == "updcr" {
-		conn.DebugKeyUpdateLocked(true)
-		return
-	}
-
-	conn.messagesToSend = append(conn.messagesToSend, msg)
-	fmt.Printf("chat client message from keyboard: %q\n", msg)
-
+	conn.shouldBeClosed = true
 	conn.SignalWriteable()
 }
 
 // transport handler
 type Client struct {
+	mu              sync.Mutex
+	t               *statemachine.Transport
+	connectedClient *ClientConn
 }
 
-func NewClient() *Client {
-	return &Client{}
+func NewClient(t *statemachine.Transport) *Client {
+	return &Client{t: t}
 }
 
 func (ch *Client) OnNewConnection() (*statemachine.Connection, statemachine.ConnectionHandler) {
-	conn := &ClientConn{}
+	conn := &ClientConn{chatClient: ch}
 	return &conn.Connection, conn
 }
+
+func (conn *Client) GoStart(t *statemachine.Transport, addr netip.AddrPortNum) {
+	for {
+		t.StartConnection()
+	}
+}
+
+*/

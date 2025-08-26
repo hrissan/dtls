@@ -27,7 +27,7 @@ type ConnectionHandler interface {
 	// Application sets moreData if it still has more data to send.
 	// Application can set send = false, and moreData = true only in case it did not want
 	// to send short record (application may prefer to send longer record on the next call).
-	OnWriteRecordLocked(recordBody []byte) (recordSize int, send bool, signalWriteable bool)
+	OnWriteRecordLocked(recordBody []byte) (recordSize int, send bool, signalWriteable bool, err error)
 
 	// every record sent will be delivered as is. Sent empty records are delivered as empty records.
 	// record points to buffer inside transport and must not be retained.

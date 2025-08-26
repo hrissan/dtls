@@ -19,8 +19,6 @@ package intrusive
 // but we do not want to use unsafe here.
 // BTW: storing interface values would take the same 2 pointers, plus be slower due to interface calls.
 
-const healthChecks = false
-
 type pair[T any] struct {
 	ptr        *T
 	heap_index *int

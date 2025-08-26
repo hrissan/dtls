@@ -113,7 +113,7 @@ func FuzzCircularBuffer(f *testing.F) {
 			if string(append(append([]byte{}, a...), b...)) != string(mirror) {
 				t.FailNow()
 			}
-			if cb.Len() != 0 && cb.Front() != mirror[0] {
+			if cb.Len() != 0 && (cb.Front() != mirror[0] || cb.Back() != mirror[len(mirror)-1]) {
 				t.FailNow()
 			}
 			for offset, value := range mirror {
@@ -123,9 +123,15 @@ func FuzzCircularBuffer(f *testing.F) {
 			}
 			switch c {
 			case 0:
+				cb.Clear()
+				mirror = mirror[:0]
+			case 1:
 				cb.PushBack(byte(i))
 				mirror = append(mirror, byte(i))
-			case 1:
+			case 2:
+				cb.PushFront(byte(i))
+				mirror = append([]byte{byte(i)}, mirror...)
+			case 3:
 				if cb.Len() != 0 {
 					value1 := cb.PopFront()
 					value2 := mirror[0]
@@ -134,9 +140,15 @@ func FuzzCircularBuffer(f *testing.F) {
 						t.FailNow()
 					}
 				}
-			case 2:
-				cb.Clear()
-				mirror = mirror[:0]
+			case 4:
+				if cb.Len() != 0 {
+					value1 := cb.PopBack()
+					value2 := mirror[len(mirror)-1]
+					mirror = mirror[:len(mirror)-1]
+					if value1 != value2 {
+						t.FailNow()
+					}
+				}
 			default:
 				cb.Reserve(int(c)) // widening
 			}

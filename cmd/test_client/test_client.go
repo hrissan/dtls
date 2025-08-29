@@ -39,16 +39,20 @@ func main() {
 	//}
 	// go client.GoStart(t, peerAddr)
 
-	t.GoRunUDP(socket)
+	go func() {
+		dtlsConn, err := dtls.Dial(t, "udp4", "127.0.0.1:11111")
+		chat.Check(err)
+		defer func() {
+			chat.Check(dtlsConn.Close())
+		}()
 
-	dtlsConn, err := dtls.Dial(t, "udp", "127.0.0.1:11111")
-	chat.Check(err)
-	defer func() {
-		chat.Check(dtlsConn.Close())
+		fmt.Println("Connected; type 'exit' to shutdown gracefully")
+
+		// Simulate a chat session
+		chat.Chat(dtlsConn)
+
+		t.Shutdown()
 	}()
 
-	fmt.Println("Connected; type 'exit' to shutdown gracefully")
-
-	// Simulate a chat session
-	chat.Chat(dtlsConn)
+	t.GoRunUDP(socket)
 }

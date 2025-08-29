@@ -46,7 +46,9 @@ func (conn *Connection) constructDatagram(opts *options.TransportOptions, datagr
 	var err error
 
 	datagramSize, addToSendQueue, err = conn.constructDatagramLocked(opts, datagram)
-	if err != nil && conn.shutdownLockedShouldSignal(err) {
+	// TODO - return dtls.Error from constructDatagramLocked so we can get to alert without cast
+	// and cannot return some other error type
+	if err != nil && conn.shutdownLockedShouldSignal(record.Alert{Level: record.AlerLevelFatal, Description: 22}) {
 		fmt.Printf("seq overflow or another serious problem in connection to: %v\n", addr)
 		addToSendQueue = true
 	}

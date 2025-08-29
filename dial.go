@@ -3,6 +3,7 @@ package dtls
 import (
 	"context"
 	"net"
+	"net/netip"
 	"time"
 
 	"github.com/hrissan/dtls/transport/statemachine"
@@ -13,12 +14,16 @@ func Dial(t *statemachine.Transport, network, address string) (*Conn, error) {
 }
 
 func DialTimeout(t *statemachine.Transport, network, address string, timeout time.Duration) (*Conn, error) {
+	netipAddr, err := netip.ParseAddrPort(address)
+	if err != nil {
+		return nil, err
+	}
 	netAddr, err := net.ResolveUDPAddr(network, address)
 	if err != nil {
 		return nil, err
 	}
 	conn := newConn(netAddr, netAddr)
-	err = t.StartConnection(&conn.tc, conn, netAddr.AddrPort())
+	err = t.StartConnection(&conn.tc, conn, netipAddr)
 	if err != nil {
 		return nil, err
 	}

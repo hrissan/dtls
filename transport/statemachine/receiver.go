@@ -15,6 +15,7 @@ import (
 )
 
 var ErrServerCannotStartConnection = errors.New("server can not start connection")
+var ErrTransportClosing = errors.New("transport is shutting down")
 
 // blocks until socket is closed (externally)
 func (t *Transport) goRunReceiverUDP(socket *net.UDPConn) {
@@ -22,7 +23,10 @@ func (t *Transport) goRunReceiverUDP(socket *net.UDPConn) {
 	for {
 		n, addr, err := socket.ReadFromUDPAddrPort(datagram)
 		if n != 0 { // do not check for an error here
-			t.ProcessDatagram(datagram[:n], addr, err)
+			shutdown := t.ProcessDatagram(datagram[:n], addr, err)
+			if shutdown { // stop processing of datagrams
+				return
+			}
 		}
 		if err != nil {
 			if errors.Is(err, net.ErrClosed) {
@@ -33,16 +37,19 @@ func (t *Transport) goRunReceiverUDP(socket *net.UDPConn) {
 	}
 }
 
-func (t *Transport) ProcessDatagram(datagram []byte, addr netip.AddrPort, err error) {
+func (t *Transport) ProcessDatagram(datagram []byte, addr netip.AddrPort, err error) (shutdown bool) {
 	t.opts.Stats.SocketReadDatagram(datagram, addr)
 	if err != nil {
 		t.opts.Stats.SocketReadError(len(datagram), addr, err)
 	}
 	if len(datagram) == 0 {
-		return
+		return false
 	}
 
 	conn, err := t.processDatagramImpl(datagram, addr)
+	if err == ErrTransportClosing {
+		return true
+	}
 	if conn != nil {
 		if err != nil {
 			// TODO - return *dtlserrors.Error instead of error, so we cannot
@@ -63,6 +70,7 @@ func (t *Transport) ProcessDatagram(datagram []byte, addr netip.AddrPort, err er
 		t.opts.Stats.Warning(addr, err)
 		// TODO - alert is must here, otherwise client will not know we forgot their connection
 	}
+	return false
 }
 
 func (t *Transport) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*Connection, error) {
@@ -72,7 +80,11 @@ func (t *Transport) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 	// We could have transport which plays both roles at once, but we need to track connections separately.
 	t.mu.Lock()
 	conn := t.connMap[addr]
+	shutdown := t.shutdown
 	t.mu.Unlock()
+	if shutdown {
+		return nil, ErrTransportClosing
+	}
 
 	recordOffset := 0                  // Multiple DTLS records MAY be placed in a single datagram [rfc9147:4.3]
 	for recordOffset < len(datagram) { // read records one by one
@@ -141,24 +153,9 @@ func (t *Transport) StartConnection(conn *Connection, handler ConnectionHandler,
 	if t.opts.RoleServer { // TODO - combined in/out transport
 		return ErrServerCannotStartConnection
 	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	otherConn := t.connMap[addr]
-	if otherConn != nil {
-		if conn == otherConn {
-			return ErrRegisterConnectionTwice
-		}
-		otherConn.Lock()
-		otherClosed := otherConn.stateID == smIDClosed
-		otherConn.Unlock()
-		if !otherClosed {
-			return ErrConnectionInProgress
-		}
-	}
 	if err := conn.startConnection(t, handler, addr); err != nil {
 		return err
 	}
-	t.connMap[addr] = conn // replace otherConn or simply add
 	t.snd.RegisterConnectionForSend(conn)
 	return nil
 }

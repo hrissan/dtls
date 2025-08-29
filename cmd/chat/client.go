@@ -28,6 +28,9 @@ func Chat(conn io.ReadWriter) {
 
 		for {
 			n, err := conn.Read(b)
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
 			Check(err)
 			fmt.Printf("Got message: %s\n", string(b[:n]))
 		}
@@ -44,6 +47,9 @@ func Chat(conn io.ReadWriter) {
 		}
 
 		_, err = conn.Write([]byte(text))
+		if errors.Is(err, net.ErrClosed) {
+			return
+		}
 		Check(err)
 	}
 }

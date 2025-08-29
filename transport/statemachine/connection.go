@@ -70,25 +70,26 @@ func (conn *Connection) AddrLocked() netip.AddrPort {
 	return conn.addr
 }
 
-func (conn *Connection) ShutdownLocked(err error) {
-	if conn.shutdownLockedShouldSignal(err) {
+func (conn *Connection) ShutdownLocked(alert record.Alert) {
+	if conn.shutdownLockedShouldSignal(alert) {
 		conn.SignalWriteable()
 	}
 }
 
-func (conn *Connection) shutdownLockedShouldSignal(err error) bool {
+func (conn *Connection) shutdownLockedShouldSignal(alert record.Alert) bool {
 	if conn.stateID == smIDClosed || conn.stateID == smIDShutdown {
 		return false
 	}
-	// TODO - send stateless encrypted alert and destroy connection
+	conn.sendAlert = alert
 	conn.stateID = smIDShutdown
 	return true
 }
 
-func (conn *Connection) Shutdown(err error) {
+// must not touch transport mutex, otherwise deadlock
+func (conn *Connection) Shutdown(alert record.Alert) {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
-	conn.ShutdownLocked(err)
+	conn.ShutdownLocked(alert)
 }
 
 // so we do not forget to prepare vars for reuse
@@ -123,7 +124,7 @@ func (conn *Connection) resetToClosedLocked(returnToPool bool) {
 	conn.handler.OnDisconnectLocked(nil)
 }
 
-func (conn *Connection) startConnection(tr *Transport, handlser ConnectionHandler, addr netip.AddrPort) error {
+func (conn *Connection) startConnection(tr *Transport, handler ConnectionHandler, addr netip.AddrPort) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if conn.stateID != smIDClosed {
@@ -137,9 +138,12 @@ func (conn *Connection) startConnection(tr *Transport, handlser ConnectionHandle
 	hctx.ComputeKeyShare(tr.opts.Rnd)
 
 	conn.tr = tr
-	conn.addr = addr
-	conn.handler = handlser
+	conn.handler = handler
+
 	conn.stateID = smIDHandshakeClientExpectServerHRR
+	conn.addr = addr
+	conn.tr.addToMap(conn, addr)
+
 	conn.hctx = hctx
 
 	clientHelloMsg := hctx.generateClientHello(false, cookie.Cookie{})

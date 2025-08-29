@@ -54,10 +54,11 @@ func newSender(t *Transport) *sender {
 }
 
 // socket must be closed by socket owner (externally)
-func (snd *sender) Close() {
+func (snd *sender) Shutdown() {
 	snd.mu.Lock()
 	defer snd.mu.Unlock()
 	snd.shutdown = true
+	snd.helloRetryQueue.Clear()
 	snd.cond.Broadcast()
 }
 
@@ -69,44 +70,39 @@ func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 		if !(snd.shutdown || snd.helloRetryQueue.Len() != 0 || snd.wantToWriteQueue.Len() != 0) {
 			snd.cond.Wait()
 		}
+		quit := snd.shutdown && snd.wantToWriteQueue.Len() == 0
 		// if we wish, we can make different ratio between sending from different queues
 		hrr, _ := snd.helloRetryQueue.TryPopFront()
 		conn, _ := snd.wantToWriteQueue.TryPopFront()
 		if conn != nil {
 			conn.inSenderQueue = false
 		}
-		sendShutdown := snd.shutdown
 		snd.mu.Unlock()
-		if sendShutdown {
+		if quit {
 			return
 		}
 		if hrr.data != nil {
 			_ = snd.sendDatagram(socket, (*hrr.data)[:hrr.size], hrr.addr)
-			// do not add stateless packet back to queue on error, we'll generate it again on next ClientHello
+			// drop stateless datagram on error, we'll generate it again on next ClientHello
 		}
-		var addr netip.AddrPort
-		datagramSize := 0
 		addToSendQueue := false
 		if conn != nil {
-			addr, datagramSize, addToSendQueue = conn.constructDatagram(snd.t.opts, datagram[:MinimumPMTUv4])
-			if datagramSize == 0 && addToSendQueue {
+			addr, datagramSize, add := conn.constructDatagram(snd.t.opts, datagram[:MinimumPMTUv4])
+			if datagramSize == 0 && add {
 				panic("constructDatagram invariant violation")
 			}
 			if datagramSize != 0 {
-				if !snd.sendDatagram(socket, datagram[:datagramSize], addr) {
-					addToSendQueue = true // otherwise state machine deadlock
-				}
+				_ = snd.sendDatagram(socket, datagram[:datagramSize], addr)
+				// drop datagram on error, we rely on timers to generate it again
 			}
+			addToSendQueue = add
 		}
 		snd.mu.Lock()
 		if hrr.data != nil {
 			snd.helloRetryPool = append(snd.helloRetryPool, hrr.data)
 		}
 		if addToSendQueue {
-			if !conn.inSenderQueue {
-				conn.inSenderQueue = true
-				snd.wantToWriteQueue.PushBack(conn)
-			}
+			_ = snd.registerConnectionForSendLocked(conn)
 		}
 	}
 }
@@ -150,17 +146,27 @@ func (snd *sender) SendHelloRetryDatagram(data *[constants.MaxOutgoingHRRDatagra
 	}
 	snd.mu.Lock()
 	defer snd.mu.Unlock()
-	snd.helloRetryQueue.PushBack(outgoingHRR{data: data, size: size, addr: addr})
-	snd.cond.Signal()
+	if snd.shutdown {
+		snd.helloRetryPool = append(snd.helloRetryPool, data)
+	} else {
+		snd.helloRetryQueue.PushBack(outgoingHRR{data: data, size: size, addr: addr})
+		snd.cond.Signal()
+	}
 }
 
 func (snd *sender) RegisterConnectionForSend(conn *Connection) {
 	snd.mu.Lock()
 	defer snd.mu.Unlock()
-	if conn.inSenderQueue {
-		return
+	if snd.registerConnectionForSendLocked(conn) {
+		snd.cond.Signal()
+	}
+}
+
+func (snd *sender) registerConnectionForSendLocked(conn *Connection) bool {
+	if conn.inSenderQueue || snd.shutdown {
+		return false
 	}
 	conn.inSenderQueue = true
 	snd.wantToWriteQueue.PushBack(conn)
-	snd.cond.Signal()
+	return true
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/hrissan/dtls/circular"
 	"github.com/hrissan/dtls/cookie"
+	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/transport/options"
 )
 
@@ -35,6 +36,7 @@ type Transport struct {
 	connMap            map[netip.AddrPort]*Connection
 	connPool           circular.Buffer[*Connection]
 	createdConnections int // some are in pool, others are somewhere else
+	shutdown           bool
 
 	// TODO - limit on max number of parallel handshakes, clear items by LRU
 }
@@ -48,32 +50,41 @@ func NewTransport(opts *options.TransportOptions, handler TransportHandler) *Tra
 	t.cookieState.SetRand(opts.Rnd)
 	if opts.Preallocate {
 		t.connMap = make(map[netip.AddrPort]*Connection, opts.MaxConnections)
-		t.connPool.Reserve(opts.MaxConnections)
+		if t.opts.RoleServer {
+			t.connPool.Reserve(opts.MaxConnections)
+		}
 	} else {
 		t.connMap = map[netip.AddrPort]*Connection{}
 	}
 	return t
 }
 
-// socket must be closed by socket owner (externally)
 func (t *Transport) Options() *options.TransportOptions {
 	return t.opts
 }
 
-// socket must be closed by socket owner (externally)
-func (t *Transport) Close() {
-	t.snd.Close()
-}
-
-// blocks until socket is closed (externally)
+// blocks until socket is closed by Shutdown()
 func (t *Transport) GoRunUDP(socket *net.UDPConn) {
-	ch := make(chan struct{})
+	ch := make(chan struct{}, 1)
 	go func() {
 		t.snd.GoRunUDP(socket)
+		// on shutdown, sender first sends all alerts, then exits goroutine
+		_ = socket.Close() // so receiver also exits
 		ch <- struct{}{}
 	}()
 	t.goRunReceiverUDP(socket)
 	<-ch
+}
+
+// send notify to all connections, close socket
+func (t *Transport) Shutdown() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.shutdown = true
+	for _, conn := range t.connMap {
+		conn.Shutdown(record.Alert{Level: record.AlerLevelFatal, Description: 0}) // close_notify
+	}
+	t.snd.Shutdown()
 }
 
 func (t *Transport) getFromPool() *Connection {
@@ -128,6 +139,10 @@ func (t *Transport) removeFromMap(conn *Connection, addr netip.AddrPort, returnT
 	}
 	delete(t.connMap, addr)
 	if returnToPool {
-		t.connPool.PushBack(conn)
+		if t.opts.RoleServer { // For now, reuse connections on server only
+			t.connPool.PushBack(conn)
+		} else {
+			t.createdConnections--
+		}
 	}
 }

@@ -4,6 +4,6 @@
 package statemachine
 
 // TODO - remove
-type smHandshakeServerExpectClientHello2 struct {
+type smHandshakeServerCalcServerHello2 struct {
 	smHandshake
 }

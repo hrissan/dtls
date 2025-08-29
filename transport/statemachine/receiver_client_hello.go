@@ -6,6 +6,7 @@ package statemachine
 import (
 	"crypto/sha256"
 	"fmt"
+	"hash"
 	"net/netip"
 	"time"
 
@@ -144,21 +145,42 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		fmt.Printf("certificate auth selected\n")
 	}
 	// we should check all parameters above, so that we do not create connection for unsupported params
-	if conn != nil {
-		return conn, nil // TODO - for now do not replace existing connections
-	}
-	// only receiver adds connections to the map, so if there were none for address
-	// at the start of processDatagramImpl, there should be none here.
-	conn = t.addToMapFromPool(addr)
-	// From here, connection must not skip "shutting down" state to be correctly added to the pool again
-	if err := conn.onClientHello2(t.opts, addr,
+	conn, err = t.finishReceivedClientHello(conn, addr,
 		earlySecret, pskSelected, pskSelectedIdentity,
-		msgClientHello, params, transcriptHasher); err != nil {
-		conn.Unlock()
-		panic("must be never")
+		msgClientHello, params, transcriptHasher)
+	if conn != nil {
+		t.snd.RegisterConnectionForSend(conn)
 	}
-	t.snd.RegisterConnectionForSend(conn)
 	return conn, nil
+}
+
+func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrPort,
+	earlySecret [32]byte, pskSelected bool, pskSelectedIdentity uint16,
+	msgClientHello handshake.MsgClientHello, params cookie.Params, transcriptHasher hash.Hash) (*Connection, error) {
+	if conn != nil {
+		// Connection could switch to closed state and be removed from the map,
+		// while we were holding it, iterating through records. This is rare.
+		conn.Lock()
+		if conn.stateID != smIDClosed {
+			defer conn.Unlock()
+			return conn, conn.onClientHello2Locked(t.opts, addr,
+				earlySecret, pskSelected, pskSelectedIdentity,
+				msgClientHello, params, transcriptHasher)
+		}
+		conn.Unlock()
+		// We cannot resurrect it, because we cannot remove it from random location in the pool,
+		// so we forget this one, and get a new one from the pool.
+		conn = nil
+	}
+	conn = t.getFromPool()
+	if conn == nil { // TODO - print rare warning, too many connections
+		return nil, nil
+	}
+	conn.Lock()
+	defer conn.Unlock()
+	return conn, conn.onClientHello2Locked(t.opts, addr,
+		earlySecret, pskSelected, pskSelectedIdentity,
+		msgClientHello, params, transcriptHasher)
 }
 
 func selectPSKIdentity(pskStorage []byte, opts *options.TransportOptions, ext *handshake.ExtensionsSet) (uint16, []byte, handshake.PSKIdentity, bool) {

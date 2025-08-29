@@ -19,32 +19,22 @@ type Transport struct {
 	cookieState cookie.CookieState
 	snd         *sender
 
-	// Connections are either in the map, or in the pool.
-	// New connections behave exactly as those from the pool
-	// So, connection starts in the pool in "closed" state.
-	// Then, when receiver receives ClientHello2, it will skip it if connection
-	// is in the map already (for now, we'll learn how to replace connections soon).
-	// But if connection is not in the map, it will put it into the map, and change
-	// connection state to anything, except "shutting down" or "closed".
-	// Then connection will live in the map until it's shutdown method will eb called,
-	// then connection will change state to the "shutting down" and register in the sender.
-	// Sender then will trigger, call OnDisconnect method (setting state to "closed"),
-	// then sender will move connection from the map into the pool.
+	// Each connection is either
+	// 1. closed, not in map, in the pool
+	// 2. closed, not in map, will be added to the pool very soon by sender
+	// 3. !closed, in the map, not in the pool
+	// To make this possible, order of locks is
+	// transport.Lock() // normal lookup of connection (per datagram)
+	// conn.Lock(), transport.Lock()  // for adding/removing to the map and adding to the pool
+	// transport.Lock() // for removing from the pool
 	//
-	// [in pool, closed] -> (receiver processing ClientHello) ->
-	// [in map, running] -> (shutdown) ->
-	// [in map, shutdown] -> (sender's OnDisconnect) ->
-	// [in map, closed] -> (sender moving to pool) -> [in pool, closed]
-	//
-	// also we have sub path, when replacing connection with ClientHello2
-	// [in map, running] -> (receiver calling OnDisconnect) ->
-	// [in map, closed] -> (receiver continuing ClientHello) -> [in map, running]
 
 	// ClientHello with correct cookie and larger timestamp replaces
 	// previous handshake or established connection here [rfc9147:5.11].
-	mu          sync.Mutex
-	connections map[netip.AddrPort]*Connection
-	connPool    circular.Buffer[*Connection]
+	mu                 sync.Mutex
+	connMap            map[netip.AddrPort]*Connection
+	connPool           circular.Buffer[*Connection]
+	createdConnections int // some are in pool, others are somewhere else
 
 	// TODO - limit on max number of parallel handshakes, clear items by LRU
 }
@@ -57,10 +47,10 @@ func NewTransport(opts *options.TransportOptions, handler TransportHandler) *Tra
 	t.snd = newSender(t)
 	t.cookieState.SetRand(opts.Rnd)
 	if opts.Preallocate {
-		t.connections = make(map[netip.AddrPort]*Connection, opts.MaxConnections)
+		t.connMap = make(map[netip.AddrPort]*Connection, opts.MaxConnections)
 		t.connPool.Reserve(opts.MaxConnections)
 	} else {
-		t.connections = map[netip.AddrPort]*Connection{}
+		t.connMap = map[netip.AddrPort]*Connection{}
 	}
 	return t
 }
@@ -86,45 +76,58 @@ func (t *Transport) GoRunUDP(socket *net.UDPConn) {
 	<-ch
 }
 
-func (t *Transport) removeConnection(conn *Connection, addr netip.AddrPort) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.connections[addr] != conn {
-		panic("closed connections reuse invariant violated")
+func (t *Transport) getFromPool() *Connection {
+	conn, ok := t.getFromPoolLocked()
+	if !ok {
+		return nil
 	}
-	t.connections[addr] = nil
-	t.connPool.PushBack(conn)
+	if conn != nil {
+		return conn
+	}
+	var ha ConnectionHandler
+	conn, ha = t.handler.OnNewConnection()
+	// no race setting handler and snd, because connection is a new one
+	conn.handler = ha
+	conn.tr = t
+	return conn
 }
 
-func (t *Transport) returnToPool(conn *Connection, addr netip.AddrPort) {
+func (t *Transport) getFromPoolLocked() (*Connection, bool) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if !conn.inMap {
-		return
+	conn, ok := t.connPool.TryPopBack()
+	if ok {
+		return conn, true
 	}
-	conn.inMap = false
-	t.connections[addr] = nil
-	t.connPool.PushBack(conn)
+	if t.createdConnections >= t.opts.MaxConnections {
+		return nil, false
+	}
+	t.createdConnections++
+	return nil, true // will be created without lock
 }
 
-func (t *Transport) addToMapFromPool(addr netip.AddrPort) *Connection {
+// call under connection's mutex to maintain state invariant that
+// closed connections are not in the map, while !closed are in the map
+func (t *Transport) addToMap(conn *Connection, addr netip.AddrPort) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if _, ok := t.connections[addr]; ok {
+	if _, ok := t.connMap[addr]; ok {
 		panic("connection magically appeared in the map")
 	}
-	conn, ok := t.connPool.TryPopBack()
-	if !ok {
-		var ha ConnectionHandler
-		conn, ha = t.handler.OnNewConnection()
-		// no race setting handler and snd, because connection is the new one
-		conn.handler = ha
-		conn.snd = t.snd
+	t.connMap[addr] = conn
+}
+
+// call under connection's mutex to maintain state invariant that
+// closed connections are not in the map, while !closed are in the map
+func (t *Transport) removeFromMap(conn *Connection, addr netip.AddrPort, returnToPool bool) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	c2, ok := t.connMap[addr]
+	if !ok || c2 != conn {
+		panic("connection magically replaced in the map")
 	}
-	if conn.inMap {
-		panic("new connection or connection from the pool must not be in the map")
+	delete(t.connMap, addr)
+	if returnToPool {
+		t.connPool.PushBack(conn)
 	}
-	conn.inMap = true
-	t.connections[addr] = conn
-	return conn
 }

@@ -17,7 +17,7 @@ import (
 )
 
 func (conn *Connection) SignalWriteable() {
-	conn.snd.RegisterConnectionForSend(conn)
+	conn.tr.snd.RegisterConnectionForSend(conn)
 }
 
 func (conn *Connection) hasDataToSend() bool {
@@ -39,22 +39,22 @@ func (conn *Connection) hasDataToSendLocked() bool {
 }
 
 // must not write over len(datagram), returns part of datagram filled
-func (conn *Connection) constructDatagram(opts *options.TransportOptions, datagram []byte) (addr netip.AddrPort, datagramSize int, addToSendQueue bool, closed bool) {
+func (conn *Connection) constructDatagram(opts *options.TransportOptions, datagram []byte) (addr netip.AddrPort, datagramSize int, addToSendQueue bool) {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	addr = conn.addr
 	var err error
+
 	datagramSize, addToSendQueue, err = conn.constructDatagramLocked(opts, datagram)
 	if err != nil && conn.shutdownLockedShouldSignal(err) {
 		fmt.Printf("seq overflow or another serious problem in connection to: %v\n", addr)
 		addToSendQueue = true
 	}
-	if conn.stateID == smIDShutdown {
-		conn.handler.OnDisconnectLocked(err)
-		// TODO - append alert to datagram
-		conn.stateID = smIDClosed
+	if conn.stateID == smIDShutdown && conn.sendAlert == (record.Alert{}) {
+		// wait in this state until constructDatagramLocked writes (often encrypted) alert
+		conn.resetToClosedLocked(true)
+		addToSendQueue = false
 	}
-	closed = conn.stateID == smIDClosed
 	return
 }
 
@@ -121,6 +121,18 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN != record.Number{}) {
 		// TODO
 	}
+	if conn.sendAlert.Level != 0 {
+		if recordSize, err := conn.constructDatagramAlert(opts, datagram[datagramSize:], conn.sendAlert); err != nil {
+			return 0, false, err
+		} else {
+			datagramSize += recordSize
+		}
+		conn.sendAlert = record.Alert{}
+		//uncomment to separate datagram by record type
+		//if datagramSize != 0 {
+		//	return datagramSize, true, nil
+		//}
+	}
 	if conn.stateID != smIDPostHandshake { // application data
 		return datagramSize, conn.hasDataToSendLocked(), nil
 	}
@@ -131,7 +143,6 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	//if datagramSize > 0 {
 	//	return datagramSize, true, nil
 	//}
-	hdrSize := record.OutgoingCiphertextRecordHeader16
 	hdrSize, insideBody, ok := conn.prepareProtect(datagram[datagramSize:], opts.Use8BitSeq)
 	if !ok || len(insideBody) < constants.MinFragmentBodySize {
 		return datagramSize, true, nil
@@ -162,7 +173,6 @@ func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, da
 	if acksSize == 0 {
 		return 0, nil
 	}
-	hdrSize := record.OutgoingCiphertextRecordHeader16
 	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq)
 	if !ok || len(insideBody) < record.AckHeaderSize+record.AckElementSize { // not a single one fits
 		return 0, nil
@@ -191,6 +201,23 @@ func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, da
 		panic("error calculating space for acks")
 	}
 	recordSize, _, err := conn.protectRecord(record.RecordTypeAck, datagramLeft, hdrSize, offset)
+	if err != nil {
+		return 0, err
+	}
+	return recordSize, nil
+}
+
+func (conn *Connection) constructDatagramAlert(opts *options.TransportOptions, datagramLeft []byte, alert record.Alert) (int, error) {
+	if conn.keys.Send.Symmetric.Epoch == 0 {
+		// TODO - unencrypted alert
+		return 0, nil
+	}
+	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq)
+	if !ok || len(insideBody) < record.AlertSize {
+		return 0, nil
+	}
+	_ = alert.Write(insideBody[:0])
+	recordSize, _, err := conn.protectRecord(record.RecordTypeAlert, datagramLeft, hdrSize, record.AlertSize)
 	if err != nil {
 		return 0, err
 	}

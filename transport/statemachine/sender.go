@@ -87,9 +87,8 @@ func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 		var addr netip.AddrPort
 		datagramSize := 0
 		addToSendQueue := false
-		closed := false
 		if conn != nil {
-			addr, datagramSize, addToSendQueue, closed = conn.constructDatagram(snd.t.opts, datagram[:MinimumPMTUv4])
+			addr, datagramSize, addToSendQueue = conn.constructDatagram(snd.t.opts, datagram[:MinimumPMTUv4])
 			if datagramSize == 0 && addToSendQueue {
 				panic("constructDatagram invariant violation")
 			}
@@ -98,10 +97,6 @@ func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 					addToSendQueue = true // otherwise state machine deadlock
 				}
 			}
-		}
-		if closed {
-			addToSendQueue = false
-			snd.t.removeConnection(conn, addr)
 		}
 		snd.mu.Lock()
 		if hrr.data != nil {

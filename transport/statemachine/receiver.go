@@ -71,7 +71,7 @@ func (t *Transport) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 	// on client the only place where it can be added is StartConnection.
 	// We could have transport which plays both roles at once, but we need to track connections separately.
 	t.mu.Lock()
-	conn := t.connections[addr]
+	conn := t.connMap[addr]
 	t.mu.Unlock()
 
 	recordOffset := 0                  // Multiple DTLS records MAY be placed in a single datagram [rfc9147:4.3]
@@ -143,7 +143,7 @@ func (t *Transport) StartConnection(conn *Connection, handler ConnectionHandler,
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	otherConn := t.connections[addr]
+	otherConn := t.connMap[addr]
 	if otherConn != nil {
 		if conn == otherConn {
 			return ErrRegisterConnectionTwice
@@ -158,7 +158,7 @@ func (t *Transport) StartConnection(conn *Connection, handler ConnectionHandler,
 	if err := conn.startConnection(t, handler, addr); err != nil {
 		return err
 	}
-	t.connections[addr] = conn // replace otherConn or simply add
+	t.connMap[addr] = conn // replace otherConn or simply add
 	t.snd.RegisterConnectionForSend(conn)
 	return nil
 }

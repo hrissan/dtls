@@ -56,7 +56,6 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 		}
 		return len(da), msg.Header.FragmentInfo, rn, nil
 	}
-	hdrSize := record.OutgoingCiphertextRecordHeader16
 	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq)
 	if !ok || len(insideBody) <= handshake.FragmentHeaderSize {
 		return

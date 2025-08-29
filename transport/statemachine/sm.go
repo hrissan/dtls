@@ -38,7 +38,7 @@ const (
 	smIDClosed                                stateMachineStateID = iota // must be 0 for correct default state
 	smIDShutdown                              stateMachineStateID = iota
 	smIDClientSentHello                       stateMachineStateID = iota
-	smIDHandshakeServerExpectClientHello2     stateMachineStateID = iota
+	smIDHandshakeServerCalcServerHello2       stateMachineStateID = iota
 	smIDHandshakeServerExpectFinished         stateMachineStateID = iota
 	smIDHandshakeClientExpectServerHRR        stateMachineStateID = iota
 	smIDHandshakeClientExpectServerHello      stateMachineStateID = iota
@@ -53,7 +53,7 @@ var stateMachineStates = [...]StateMachine{
 	smIDClosed:                                &smClosed{},
 	smIDShutdown:                              &smClosed{},
 	smIDClientSentHello:                       &smClientSentHello1{},
-	smIDHandshakeServerExpectClientHello2:     &smHandshakeServerExpectClientHello2{},
+	smIDHandshakeServerCalcServerHello2:       &smHandshakeServerCalcServerHello2{},
 	smIDHandshakeServerExpectFinished:         &smHandshakeServerExpectFinished{},
 	smIDHandshakeClientExpectServerHRR:        &smHandshakeClientExpectServerHRR{},
 	smIDHandshakeClientExpectServerHello:      &smHandshakeClientExpectServerHello{},

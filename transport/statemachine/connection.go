@@ -9,7 +9,6 @@ import (
 	"math"
 	"net/netip"
 	"sync"
-	"time"
 
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
@@ -22,12 +21,17 @@ import (
 // all other information is in handshakeContext structure and will be reused
 // after handshake finish
 type Connection struct {
-	snd *sender
+	// variables are arranged in a way to reduce sizeof()
+	tr      *Transport
+	handler ConnectionHandler
+
 	// variables below mu are protected by mu, except where noted
-	mu        sync.Mutex     // TODO - check that mutex is alwasy taken
-	addr      netip.AddrPort // cleared when conn is removed from map, set when added
-	cookieAge time.Duration
-	keys      keys.Keys
+	mu   sync.Mutex     // TODO - check that mutex is alwasy taken
+	addr netip.AddrPort // cleared when conn is removed from map, set when added
+	keys keys.Keys
+
+	// connection with newer cookie replaces previous one
+	cookieTimestampUnixNano int64
 
 	// We do not support received messages of this kind to be fragmented,
 	// because we do not want to allocate memory for reassembly,
@@ -36,8 +40,7 @@ type Connection struct {
 	sentKeyUpdateRN        record.Number // if != 0, already sent, on resend overwrite rn
 	sentNewSessionTicketRN record.Number // if != 0, already sent, on resend overwrite rn
 
-	hctx    *handshakeContext // handshakeContext content is also protected by mutex above
-	handler ConnectionHandler
+	hctx *handshakeContext // handshakeContext content is also protected by mutex above
 
 	// Messages are protocol above records, these counters do not reset for connection lifetime.
 	// If any reaches 2^16, connection will be closed by both peers.
@@ -48,11 +51,9 @@ type Connection struct {
 	sendKeyUpdateMessageSeq        uint16 // != 0 if set
 	sendKeyUpdateUpdateRequested   bool   // fully defines content of KeyUpdate we are sending
 
-	roleServer bool                // TODO - remove
-	stateID    stateMachineStateID // index in global table
+	sendAlert record.Alert // if Level == 0, do not need to send an alert
 
-	// protected by transport's mu
-	inMap bool
+	stateID stateMachineStateID // index in global table
 	// intrusive, must not be changed except by sender, protected by sender mutex
 	inSenderQueue bool
 	// intrusive, must not be changed except by clock, protected by clock mutex
@@ -91,15 +92,22 @@ func (conn *Connection) Shutdown(err error) {
 }
 
 // so we do not forget to prepare vars for reuse
-func (conn *Connection) resetToClosedLocked() {
-	conn.cookieAge = 0
+func (conn *Connection) resetToClosedLocked(returnToPool bool) {
+	if conn.stateID == smIDClosed {
+		return
+	}
+	conn.stateID = smIDClosed
+
+	conn.tr.removeFromMap(conn, conn.addr, returnToPool)
+	conn.addr = netip.AddrPort{}
+
 	conn.keys = keys.Keys{}
+	conn.cookieTimestampUnixNano = 0
 
 	conn.sentKeyUpdateRN = record.Number{}
 	conn.sentNewSessionTicketRN = record.Number{}
 
 	conn.hctx = nil // TODO - reuse
-	conn.handler = nil
 
 	conn.nextMessageSeqSend = 0
 	conn.nextMessageSeqReceive = 0
@@ -108,8 +116,11 @@ func (conn *Connection) resetToClosedLocked() {
 	conn.sendKeyUpdateMessageSeq = 0
 	conn.sendKeyUpdateUpdateRequested = false
 
-	conn.roleServer = false
-	conn.stateID = smIDClosed
+	conn.sendAlert = record.Alert{}
+
+	// for now, call exactly once for each !closed -> closed change
+	// TODO - call only if we called OnConnectLocked
+	conn.handler.OnDisconnectLocked(nil)
 }
 
 func (conn *Connection) startConnection(tr *Transport, handlser ConnectionHandler, addr netip.AddrPort) error {
@@ -125,10 +136,9 @@ func (conn *Connection) startConnection(tr *Transport, handlser ConnectionHandle
 	// TODO - contact wolfssl team?
 	hctx.ComputeKeyShare(tr.opts.Rnd)
 
-	conn.snd = tr.snd
+	conn.tr = tr
 	conn.addr = addr
 	conn.handler = handlser
-	conn.roleServer = false
 	conn.stateID = smIDHandshakeClientExpectServerHRR
 	conn.hctx = hctx
 

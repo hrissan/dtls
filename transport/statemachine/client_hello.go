@@ -125,25 +125,23 @@ func generateServerCertificateVerify(opts *options.TransportOptions, hctx *hands
 	}, nil
 }
 
-func (conn *Connection) onClientHello2(opts *options.TransportOptions, addr netip.AddrPort,
+func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, addr netip.AddrPort,
 	earlySecret [32]byte, pskSelected bool, pskSelectedIdentity uint16,
 	msgClientHello handshake.MsgClientHello, params cookie.Params, transcriptHasher hash.Hash) error {
-	conn.Lock()
-	defer conn.Unlock()
 
 	if conn.stateID != smIDClosed {
-		panic("new connection or connection from the pool is not in closed state")
+		// Attacker cannot control age for addr, so will not be able to disrupt connection by sending
+		// rogue packets. But they can disrupt connection if they can respond with valid cookie.
+		// Big TODO - parallel handshake and fully working connection until we verify client identity
+		if params.TimestampUnixNano <= conn.cookieTimestampUnixNano {
+			return nil // simply ignore
+		}
+		conn.resetToClosedLocked(false)
 	}
+	conn.stateID = smIDHandshakeServerCalcServerHello2
 	conn.addr = addr
-	conn.roleServer = true
-
-	// TODO - cookie age
-	// if params.Age <= conn.cookieAge {
-	//	return nil
-	// }
-	// Attacker cannot control age for addr, so will not be able to disrupt connection by sending
-	// rogue packets. But they can disrupt connection if they can respond with valid cookie.
-	// Big TODO - parallel handshake and fully working connection until we verify client identity
+	conn.cookieTimestampUnixNano = params.TimestampUnixNano
+	conn.tr.addToMap(conn, addr)
 
 	hctx := newHandshakeContext(transcriptHasher)
 	conn.hctx = hctx

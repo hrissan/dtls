@@ -136,7 +136,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 			var binderKey [32]byte
 			earlySecret, binderKey = keys.ComputeEarlySecret(psk, "ext binder")
 			mustBeFinished := keys.ComputeFinished(sha256.New(), binderKey[:], transcriptHash)
-			if string(identity.Binder[:identity.BinderSize]) == string(mustBeFinished) {
+			if string(identity.Binder) == string(mustBeFinished) {
 				pskSelected = true
 				pskSelectedIdentity = pskNum
 				fmt.Printf("PSK auth selected, identity %d (%q) binders length=%d\n", pskNum, identity.Identity, bindersListLength)

@@ -16,6 +16,8 @@ var ErrPSKTooManyIdentities = fmt.Errorf("too many identities, only %d is suppor
 var ErrPSKBindersMismatch = errors.New("there must be equal number of identities and binders")
 var ErrPSKBinderTooLong = errors.New("binder length is larger than implementation supports")
 
+// for now after parsing those slices point to datagram/message,
+// so must be copied or discarded immediately after parsing
 type PSKIdentity struct {
 	Identity []byte // points to external buffer, must be copied/discarded after parsing
 
@@ -23,8 +25,7 @@ type PSKIdentity struct {
 
 	// [rfc8446:4.2.11] puts binders in a separate array, so that identities are included into
 	// early transcript hash
-	Binder     [constants.MaxHashLength]byte
-	BinderSize int
+	Binder []byte // points to external buffer, must be copied/discarded after parsing
 }
 
 type PreSharedKey struct {
@@ -82,15 +83,11 @@ func (msg *PreSharedKey) parseBinders(body []byte) (err error) {
 		if offset, binder, err = format.ParserReadByteLength(body, offset); err != nil {
 			return err
 		}
-		if len(binder) > constants.MaxHashLength {
-			return ErrPSKBinderTooLong
-		}
 		if binderNum >= msg.IdentitiesSize {
 			return ErrPSKBindersMismatch
 		}
 		identity := &msg.Identities[binderNum] // no overflow due to check above
-		identity.BinderSize = len(binder)
-		copy(identity.Binder[:], binder)
+		identity.Binder = binder
 	}
 	if binderNum != msg.IdentitiesSize {
 		return ErrPSKBindersMismatch
@@ -102,7 +99,7 @@ func (msg *PreSharedKey) writeBinders(body []byte) []byte {
 	var mark int
 	for _, identity := range msg.Identities {
 		body, mark = format.MarkByteOffset(body)
-		body = append(body, identity.Binder[:identity.BinderSize]...)
+		body = append(body, identity.Binder...)
 		format.FillByteOffset(body, mark)
 	}
 	return body

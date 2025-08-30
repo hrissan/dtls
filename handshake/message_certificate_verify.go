@@ -9,8 +9,8 @@ import (
 	"github.com/hrissan/dtls/format"
 )
 
-// TODO - use rope for all variable memory chunks
-// for now after parsing those slices point to datagram/message, so must be copied or discarded immediately after parsing
+// for now after parsing those slices point to datagram/message,
+// so must be copied or discarded immediately after parsing
 type MsgCertificateVerify struct {
 	SignatureScheme uint16
 	Signature       []byte // can be relatively large for RSA, fixed array impractical

@@ -26,6 +26,10 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	if msgParsed.IsHelloRetryRequest() {
 		return nil // garbage or attack, ignore. TODO - return some error?s
 	}
+	if conn.keys.SuiteID != msgParsed.CipherSuite {
+		return dtlserrors.ErrClientHelloUnsupportedParams
+	}
+
 	// ServerHello can have messageSeq 0 or 1, depending on whether server used HRR
 	if !hctx.serverUsedHRR && msg.MsgSeq != 0 {
 		fmt.Printf("ServerHello after ServerHelloRetryRequest has msgSeq != 1\n")

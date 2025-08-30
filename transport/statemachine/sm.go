@@ -22,9 +22,8 @@ func (hctx *handshakeContext) generateFinished(conn *Connection) handshake.Messa
 	mustBeFinished := keys.ComputeFinished(sha256.New(), hctx.handshakeTrafficSecretSend[:], finishedTranscriptHash)
 
 	msg := handshake.MsgFinished{
-		VerifyDataLength: len(mustBeFinished),
+		VerifyData: mustBeFinished,
 	}
-	copy(msg.VerifyData[:], mustBeFinished)
 	messageBody := msg.Write(nil) // TODO - reuse message bodies in a rope
 	return handshake.Message{
 		MsgType: handshake.MsgTypeFinished,

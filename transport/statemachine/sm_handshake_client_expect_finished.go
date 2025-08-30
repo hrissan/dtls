@@ -25,7 +25,7 @@ func (*smHandshakeClientExpectFinished) OnFinished(conn *Connection, msg handsha
 	finishedTranscriptHash := hctx.transcriptHasher.Sum(finishedTranscriptHashStorage[:0])
 
 	mustBeFinished := keys.ComputeFinished(sha256.New(), hctx.handshakeTrafficSecretReceive[:], finishedTranscriptHash)
-	if string(msgParsed.VerifyData[:msgParsed.VerifyDataLength]) != string(mustBeFinished) {
+	if string(msgParsed.VerifyData) != string(mustBeFinished) {
 		return dtlserrors.ErrFinishedMessageVerificationFailed
 	}
 	fmt.Printf("finished message verify ok: %+v\n", msgParsed)

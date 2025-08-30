@@ -13,8 +13,8 @@ type fragment struct {
 }
 
 type Assembler struct {
-	holes [constants.MaxAssemblerHoles]fragment // no overlaps, no empty holes, no holes touching
-	num   int
+	holes [constants.MaxAssemblerHoles]fragment // No overlaps, no empty holes, no holes touching
+	num   int                                   // Change to byte? Then allow empty holes.
 }
 
 func (h *fragment) isEmpty() bool {

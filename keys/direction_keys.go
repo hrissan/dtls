@@ -5,19 +5,17 @@ package keys
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	"fmt"
 	"hash"
 
-	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/hkdf"
-	"github.com/hrissan/dtls/record"
 )
 
 type DirectionKeys struct {
 	ApplicationTrafficSecret [32]byte // we need to keep this for key update
 
-	Symmetric SymmetricKeys
+	Symmetric ciphersuite.SymmetricKeys
 
 	// total size ~100 plus 240 (no seq encryption) or 480 (seq encryption)
 	// but crypto.Block in standard golang's crypto contains both encrypting and decrypting halves,
@@ -70,49 +68,4 @@ func (keys *DirectionKeys) ComputeNextApplicationTrafficSecret(direction string)
 	hasher := sha256.New()
 	copy(keys.ApplicationTrafficSecret[:], hkdf.ExpandLabel(hasher, keys.ApplicationTrafficSecret[:], "traffic upd", []byte{}, len(keys.ApplicationTrafficSecret)))
 	fmt.Printf("next %s application traffic secret: %x\n", direction, keys.ApplicationTrafficSecret)
-}
-
-// contentType is the first non-zero byte from the end
-func findPaddingOffsetContentType(data []byte) (paddingOffset int, contentType byte) {
-	offset := len(data)
-	for ; offset > 16; offset -= 16 { // poor man's SIMD
-		slice := data[offset-16 : offset]
-		val1 := binary.LittleEndian.Uint64(slice)
-		val2 := binary.LittleEndian.Uint64(slice[8:])
-		if (val1 | val2) != 0 {
-			break
-		}
-	}
-	for ; offset > 0; offset-- {
-		b := data[offset-1]
-		if b != 0 {
-			return offset - 1, b
-		}
-	}
-	return -1, 0
-}
-
-// Warning - decrypts in place, seqNumData and body can be garbage after unsuccessfull decryption
-func (keys *SymmetricKeys) Deprotect(hdr record.Ciphertext, encryptSN bool, expectedSN uint64) (decrypted []byte, seq uint64, contentType byte, err error) {
-	if encryptSN {
-		if err := keys.EncryptSequenceNumbers(hdr.SeqNum, hdr.Body); err != nil {
-			return nil, 0, 0, err
-		}
-	}
-	gcm := keys.Write
-	iv := keys.WriteIV // copy, otherwise disaster
-	decryptedSeqData, seq := hdr.ClosestSequenceNumber(hdr.SeqNum, expectedSN)
-	fmt.Printf("decrypted SN: %d, closest: %d\n", decryptedSeqData, seq)
-
-	FillIVSequence(iv[:], seq)
-	decrypted, err = gcm.Open(hdr.Body[:0], iv[:], hdr.Body, hdr.Header)
-	if err != nil {
-		return nil, seq, 0, dtlserrors.WarnAEADDeprotectionFailed
-	}
-	paddingOffset, contentType := findPaddingOffsetContentType(decrypted) // [rfc8446:5.4]
-	if paddingOffset < 0 {
-		// TODO - send alert
-		return nil, seq, 0, dtlserrors.ErrCipherTextAllZeroPadding
-	}
-	return decrypted[:paddingOffset], seq, contentType, nil
 }

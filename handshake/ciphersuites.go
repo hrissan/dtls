@@ -6,18 +6,8 @@ package handshake
 import (
 	"encoding/binary"
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/format"
-)
-
-const (
-	// [rfc8446:4.5.3] AEAD Limits - 2^36 limit for 3 ciphers at the top
-	CypherSuite_TLS_AES_128_GCM_SHA256       = 0x1301
-	CypherSuite_TLS_AES_256_GCM_SHA384       = 0x1302
-	CypherSuite_TLS_CHACHA20_POLY1305_SHA256 = 0x1303
-
-	// ciphers below are not recommended to be implemented
-	CypherSuite_TLS_AES_128_CCM_SHA256   = 0x1304
-	CypherSuite_TLS_AES_128_CCM_8_SHA256 = 0x1305
 )
 
 type CipherSuitesSet struct {
@@ -36,16 +26,16 @@ func (msg *CipherSuitesSet) Parse(body []byte) (err error) {
 		if offset, cipherSuite, err = format.ParserReadUint16(body, offset); err != nil {
 			return err
 		}
-		switch cipherSuite { // skip unknown
-		case CypherSuite_TLS_AES_128_GCM_SHA256:
+		switch ciphersuite.ID(cipherSuite) { // skip unknown
+		case ciphersuite.TLS_AES_128_GCM_SHA256:
 			msg.HasCypherSuite_TLS_AES_128_GCM_SHA256 = true
-		case CypherSuite_TLS_AES_256_GCM_SHA384:
+		case ciphersuite.TLS_AES_256_GCM_SHA384:
 			msg.HasCypherSuite_TLS_AES_256_GCM_SHA384 = true
-		case CypherSuite_TLS_CHACHA20_POLY1305_SHA256:
+		case ciphersuite.TLS_CHACHA20_POLY1305_SHA256:
 			msg.HasCypherSuite_TLS_CHACHA20_POLY1305_SHA256 = true
-		case CypherSuite_TLS_AES_128_CCM_SHA256:
+		case ciphersuite.TLS_AES_128_CCM_SHA256:
 			msg.HasCypherSuite_TLS_AES_128_CCM_SHA256 = true
-		case CypherSuite_TLS_AES_128_CCM_8_SHA256:
+		case ciphersuite.TLS_AES_128_CCM_8_SHA256:
 			msg.HasCypherSuite_TLS_AES_128_CCM_8_SHA256 = true
 		}
 	}
@@ -54,19 +44,19 @@ func (msg *CipherSuitesSet) Parse(body []byte) (err error) {
 
 func (msg *CipherSuitesSet) Write(body []byte) []byte {
 	if msg.HasCypherSuite_TLS_AES_128_GCM_SHA256 {
-		body = binary.BigEndian.AppendUint16(body, CypherSuite_TLS_AES_128_GCM_SHA256)
+		body = binary.BigEndian.AppendUint16(body, uint16(ciphersuite.TLS_AES_128_GCM_SHA256))
 	}
 	if msg.HasCypherSuite_TLS_AES_256_GCM_SHA384 {
-		body = binary.BigEndian.AppendUint16(body, CypherSuite_TLS_AES_256_GCM_SHA384)
+		body = binary.BigEndian.AppendUint16(body, uint16(ciphersuite.TLS_AES_256_GCM_SHA384))
 	}
 	if msg.HasCypherSuite_TLS_CHACHA20_POLY1305_SHA256 {
-		body = binary.BigEndian.AppendUint16(body, CypherSuite_TLS_CHACHA20_POLY1305_SHA256)
+		body = binary.BigEndian.AppendUint16(body, uint16(ciphersuite.TLS_CHACHA20_POLY1305_SHA256))
 	}
 	if msg.HasCypherSuite_TLS_AES_128_CCM_SHA256 {
-		body = binary.BigEndian.AppendUint16(body, CypherSuite_TLS_AES_128_CCM_SHA256)
+		body = binary.BigEndian.AppendUint16(body, uint16(ciphersuite.TLS_AES_128_CCM_SHA256))
 	}
 	if msg.HasCypherSuite_TLS_AES_128_CCM_8_SHA256 {
-		body = binary.BigEndian.AppendUint16(body, CypherSuite_TLS_AES_128_CCM_8_SHA256)
+		body = binary.BigEndian.AppendUint16(body, uint16(ciphersuite.TLS_AES_128_CCM_8_SHA256))
 	}
 	return body
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"unsafe" // must be the only "unsafe" we have.
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/keys"
 )
 
@@ -25,5 +26,5 @@ Symmetric Keys:   %d (For TLS_AES_128_GCM_SHA256)
 		unsafe.Sizeof(Connection{}),
 		unsafe.Sizeof(keys.Keys{}),
 		unsafe.Sizeof(keys.DirectionKeys{}),
-		unsafe.Sizeof(keys.SymmetricKeys{}))
+		unsafe.Sizeof(ciphersuite.SymmetricKeys{}))
 }

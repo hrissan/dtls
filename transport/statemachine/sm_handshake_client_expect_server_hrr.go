@@ -4,6 +4,7 @@
 package statemachine
 
 import (
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
@@ -47,6 +48,7 @@ func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg han
 	}
 	// server decided to skip HRR, this is tricky SM switch, we should carefully test it
 	conn.hctx.serverUsedHRR = false
+	conn.keys.SuiteID = ciphersuite.TLS_AES_128_GCM_SHA256
 	conn.stateID = smIDHandshakeClientExpectServerHello
 	return conn.state().OnServerHello(conn, msg, msgParsed)
 }

@@ -6,15 +6,16 @@ package statemachine
 import (
 	"math"
 
+	"github.com/hrissan/dtls/ciphersuite"
+	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
-	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
 )
 
 // [rfc9147:4.5.3] we check against AEAD limit, initiate key update well before
 // reaching limit, and close connection if limit reached
 func (conn *Connection) checkReceiveLimits() error {
-	receiveLimit := conn.keys.SequenceNumberLimit()
+	receiveLimit := min(conn.keys.SequenceNumberLimit(), constants.MaxProtectionLimitReceive)
 	if conn.keys.FailedDeprotectionCounterNewReceiveKeys >= receiveLimit {
 		return dtlserrors.ErrReceiveRecordSeqOverflowNextEpoch
 	}
@@ -86,8 +87,8 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 	}
 	conn.keys.ExpectReceiveEpochUpdate = false
 
-	receiver.Symmetric = conn.keys.NewReceiveKeys   // epoch is also copied
-	conn.keys.NewReceiveKeys = keys.SymmetricKeys{} // remove alias
+	receiver.Symmetric = conn.keys.NewReceiveKeys          // epoch is also copied
+	conn.keys.NewReceiveKeys = ciphersuite.SymmetricKeys{} // remove alias
 	conn.keys.NewReceiveKeysSet = false
 
 	conn.keys.ReceiveNextSegmentSequence.Reset()

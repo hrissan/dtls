@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/format"
 )
 
@@ -18,7 +19,7 @@ type MsgServerHello struct {
 	// ProtocolVersion is checked but not stored
 	Random [32]byte
 	// legacy_session_id is checked but not stored
-	CipherSuite uint16
+	CipherSuite ciphersuite.ID
 	// legacy_compression_methods is checked but not stored
 	Extensions ExtensionsSet
 }
@@ -45,9 +46,11 @@ func (msg *MsgServerHello) Parse(body []byte) (err error) {
 	if offset, err = format.ParserReadByteConst(body, offset, 0, ErrServerHelloLegacySession); err != nil {
 		return err
 	}
-	if offset, msg.CipherSuite, err = format.ParserReadUint16(body, offset); err != nil {
+	var cipherSuite uint16
+	if offset, cipherSuite, err = format.ParserReadUint16(body, offset); err != nil {
 		return err
 	}
+	msg.CipherSuite = ciphersuite.ID(cipherSuite)
 	if offset, err = format.ParserReadByteConst(body, offset, 0, ErrServerHelloLegacyCompressionMethod); err != nil {
 		return err
 	}
@@ -58,7 +61,7 @@ func (msg *MsgServerHello) Write(body []byte) []byte {
 	body = binary.BigEndian.AppendUint16(body, 0xFEFD)
 	body = append(body, msg.Random[:]...)
 	body = append(body, 0) // legacy_session_id
-	body = binary.BigEndian.AppendUint16(body, msg.CipherSuite)
+	body = binary.BigEndian.AppendUint16(body, uint16(msg.CipherSuite))
 	body = append(body, 0) // legacy_compression_methods
 	body = msg.Extensions.Write(body, false, true, msg.IsHelloRetryRequest())
 	return body

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlsrand"
 )
@@ -25,6 +26,7 @@ func TestRoundTrip(t *testing.T) {
 		TranscriptHash:    sha256.Sum256([]byte("test")),
 		TimestampUnixNano: now.UnixNano(),
 		KeyShareSet:       true,
+		CipherSuite:       ciphersuite.TLS_CHACHA20_POLY1305_SHA256,
 		Age:               time.Second,
 	}
 	ck := state.CreateCookie(params, addr)

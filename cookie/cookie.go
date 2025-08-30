@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/dtlsrand"
@@ -35,8 +36,9 @@ type Params struct {
 	// those values are signed, so server can trust them after validation
 	TranscriptHash    [constants.MaxHashLength]byte
 	TimestampUnixNano int64
-	KeyShareSet       bool
-	Age               time.Duration // set during validation
+	KeyShareSet       bool           // we must remember to generate exactly same HRR for transcript
+	CipherSuite       ciphersuite.ID // we must remember to generate exactly same HRR for transcript
+	Age               time.Duration  // set during validation
 }
 
 var ErrCookieDataTooLong = errors.New("cookie data is too long")
@@ -92,6 +94,11 @@ func (c *CookieState) CreateCookie(params Params, addr netip.AddrPort) Cookie {
 	} else {
 		cookie.AppendByteMust(0)
 	}
+	{
+		var suiteBytes [2]byte
+		binary.BigEndian.PutUint16(suiteBytes[:], uint16(params.CipherSuite))
+		cookie.AppendMust(suiteBytes[:])
+	}
 	cookie.AppendMust(params.TranscriptHash[:])
 
 	hash := c.getScratchHash(cookie.GetValue(), addr)
@@ -103,12 +110,13 @@ func (c *CookieState) CreateCookie(params Params, addr netip.AddrPort) Cookie {
 func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time.Time, cookieValidDuration time.Duration) (_ Params, err error) {
 	var params Params
 	data := cookie.GetValue()
-	if len(data) != saltLength+8+1+constants.MaxHashLength+cookieHashLength {
+	if len(data) != saltLength+8+1+2+constants.MaxHashLength+cookieHashLength {
 		return
 	}
 	params.TimestampUnixNano = int64(binary.BigEndian.Uint64(data[saltLength:]))
 	params.KeyShareSet = data[saltLength+8] != 0
-	copy(params.TranscriptHash[:], data[saltLength+8+1:])
+	params.CipherSuite = ciphersuite.ID(binary.BigEndian.Uint16(data[saltLength+8+1:]))
+	copy(params.TranscriptHash[:], data[saltLength+8+3:])
 
 	unixNanoNow := now.UnixNano()
 	if params.TimestampUnixNano > unixNanoNow { // cookie from the future
@@ -120,9 +128,9 @@ func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time
 	}
 
 	var mustBeHash [cookieHashLength]byte
-	copy(mustBeHash[:], data[saltLength+8+1+constants.MaxHashLength:])
+	copy(mustBeHash[:], data[saltLength+8+3+constants.MaxHashLength:])
 
-	hash := c.getScratchHash(data[:saltLength+8+1+constants.MaxHashLength], addr)
+	hash := c.getScratchHash(data[:saltLength+8+3+constants.MaxHashLength], addr)
 	if hash != mustBeHash {
 		// important to return empty params, so we accidentally do not use them if forgot to check ok
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
@@ -133,7 +141,7 @@ func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time
 func (c *CookieState) getScratchHash(cookieHashedBytes []byte, addr netip.AddrPort) [cookieHashLength]byte {
 	scratch := make([]byte, 0, MaxCookieSize+cookieHashLength) // allocate on stack
 	scratch = append(scratch, cookieHashedBytes...)
-	b := addr.Addr().As16()
+	b := addr.Addr().As16() // TODO - remember exact IP address type
 	scratch = append(scratch, b[:]...)
 	scratch = binary.BigEndian.AppendUint16(scratch, addr.Port())
 	if len(scratch) > MaxCookieSize+cookieHashLength {

@@ -4,11 +4,10 @@
 package keys
 
 import (
-	"crypto/aes"
-	"crypto/cipher"
 	"crypto/sha256"
 	"hash"
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/hkdf"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/replay"
@@ -31,7 +30,7 @@ type Keys struct {
 	// But then we need also 2 replay windows, and 2 SendAcks structs.
 
 	// always correspond to Receive.Symmetric.Epoch + 1 if NewReceiveKeysSet is set
-	NewReceiveKeys SymmetricKeys
+	NewReceiveKeys ciphersuite.SymmetricKeys
 
 	FailedDeprotectionCounter               uint64
 	FailedDeprotectionCounterNewReceiveKeys uint64 // separate counter for NewReceiveKeys
@@ -45,9 +44,11 @@ type Keys struct {
 	RequestedReceiveEpochUpdate bool
 	// calculate NewReceiveKeys only once
 	NewReceiveKeysSet bool
-	// when we protect or deprotect 3/4 of 2^exp packets, we ask for KeyUpdate
-	// if peer does not respond quickly. and we reach 2^exp, we close connection for good
-	SequenceNumberLimitExp byte
+	SuiteID           ciphersuite.ID
+}
+
+func (keys *Keys) Suite() ciphersuite.Suite {
+	return ciphersuite.GetSuite(keys.SuiteID)
 }
 
 func (keys *Keys) AddAck(rn record.Number) {
@@ -65,30 +66,7 @@ func (keys *Keys) AddAck(rn record.Number) {
 }
 
 func (keys *Keys) SequenceNumberLimit() uint64 {
-	limitExp := keys.SequenceNumberLimitExp
-	if limitExp < 5 {
-		panic("do not set limitExp < 5 even for tests, as sequence reaches hard limit before key update protocol finished")
-	}
-	if limitExp > 63 { // some cipher suite might declare very high limit, we have no problem with that
-		limitExp = 63
-	}
-	return min(record.MaxSeq, uint64(1)<<limitExp) // safe due to check above
-}
-
-func NewAesCipher(key []byte) cipher.Block {
-	c, err := aes.NewCipher(key)
-	if err != nil {
-		panic("aes.NewCipher fails " + err.Error())
-	}
-	return c
-}
-
-func NewGCMCipher(block cipher.Block) cipher.AEAD {
-	c, err := cipher.NewGCM(block)
-	if err != nil {
-		panic("cipher.NewGCM fails " + err.Error())
-	}
-	return c
+	return min(keys.Suite().ProtectionLimit(), record.MaxSeq)
 }
 
 func ComputeEarlySecret(psk []byte, extOrResLabel string) (earlySecret [32]byte, binderKey [32]byte) {

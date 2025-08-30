@@ -4,6 +4,7 @@
 package statemachine
 
 import (
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
@@ -75,7 +76,7 @@ func IsSupportedServerHello(msgParsed *handshake.MsgServerHello) error {
 	if msgParsed.Extensions.SupportedVersions.SelectedVersion != handshake.DTLS_VERSION_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
-	if msgParsed.CipherSuite != handshake.CypherSuite_TLS_AES_128_GCM_SHA256 {
+	if msgParsed.CipherSuite != ciphersuite.TLS_AES_128_GCM_SHA256 {
 		return dtlserrors.ErrParamsSupportCiphersuites
 	}
 	return nil

@@ -11,6 +11,7 @@ import (
 	"hash"
 	"net/netip"
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
@@ -28,15 +29,14 @@ func debugPrintSum(hasher hash.Hash) {
 }
 
 // we must generate the same server hello, because we are stateless, but this message is in transcript
-// TODO - pass selected parameters here from receiver
-func GenerateStatelessHRR(datagram []byte, ck cookie.Cookie, keyShareSet bool) ([]byte, []byte) {
+func GenerateStatelessHRR(params cookie.Params, datagram []byte, ck cookie.Cookie) ([]byte, []byte) {
 	helloRetryRequest := handshake.MsgServerHello{
-		CipherSuite: handshake.CypherSuite_TLS_AES_128_GCM_SHA256,
+		CipherSuite: params.CipherSuite,
 	}
 	helloRetryRequest.SetHelloRetryRequest()
 	helloRetryRequest.Extensions.SupportedVersionsSet = true
 	helloRetryRequest.Extensions.SupportedVersions.SelectedVersion = handshake.DTLS_VERSION_13
-	if keyShareSet {
+	if params.KeyShareSet {
 		helloRetryRequest.Extensions.KeyShareSet = true
 		helloRetryRequest.Extensions.KeyShare.HRRSelectedGroup = handshake.SupportedGroup_X25519
 	}
@@ -139,6 +139,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 		conn.resetToClosedLocked(false)
 	}
 	conn.stateID = smIDHandshakeServerCalcServerHello2
+	conn.keys.SuiteID = ciphersuite.TLS_AES_128_GCM_SHA256
 	conn.addr = addr
 	conn.cookieTimestampUnixNano = params.TimestampUnixNano
 	conn.tr.addToMap(conn, addr)
@@ -160,7 +161,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 
 	serverHello := handshake.MsgServerHello{
 		Random:      hctx.localRandom,
-		CipherSuite: handshake.CypherSuite_TLS_AES_128_GCM_SHA256,
+		CipherSuite: ciphersuite.TLS_AES_128_GCM_SHA256,
 	}
 	serverHello.Extensions.SupportedVersionsSet = true
 	serverHello.Extensions.SupportedVersions.SelectedVersion = handshake.DTLS_VERSION_13
@@ -197,7 +198,6 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
 		conn.keys.ComputeHandshakeKeys(true, hctx.earlySecret[:], sharedSecret, handshakeTranscriptHash)
-	conn.keys.SequenceNumberLimitExp = 5 // TODO - set for actual cipher suite. Small value is for testing.
 
 	if err := hctx.PushMessage(conn, generateEncryptedExtensions()); err != nil {
 		return err

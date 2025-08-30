@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
-	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/safecast"
 	"github.com/hrissan/dtls/transport/options"
@@ -94,7 +94,7 @@ func (conn *Connection) constructPlaintextRecord(datagramLeft []byte, msg handsh
 
 // returns seq number to use
 func (conn *Connection) checkSendLimit() (uint64, error) {
-	sendLimit := conn.keys.SequenceNumberLimit()
+	sendLimit := min(conn.keys.SequenceNumberLimit(), constants.MaxProtectionLimitSend)
 	if conn.keys.SendNextSegmentSequence >= sendLimit {
 		return 0, dtlserrors.ErrSendRecordSeqOverflow
 	}
@@ -140,7 +140,7 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, hdrS
 
 	gcm := send.Symmetric.Write
 	iv := send.Symmetric.WriteIV
-	keys.FillIVSequence(iv[:], seq)
+	ciphersuite.FillIVSequence(iv[:], seq)
 
 	// format of our encrypted record is fixed.
 	// Saving 1 byte for the sequence number seems very niche.

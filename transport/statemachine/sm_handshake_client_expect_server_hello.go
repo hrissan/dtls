@@ -54,7 +54,6 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	}
 	earlySecret, _ := keys.ComputeEarlySecret(nil, "")
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive = conn.keys.ComputeHandshakeKeys(false, earlySecret[:], sharedSecret, handshakeTranscriptHash)
-	conn.keys.SequenceNumberLimitExp = 5 // TODO - set for actual cipher suite. Small value is for testing.
 
 	conn.stateID = smIDHandshakeClientExpectServerEE
 	fmt.Printf("processed server hello\n")

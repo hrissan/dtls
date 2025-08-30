@@ -10,6 +10,7 @@ import (
 	"net/netip"
 	"time"
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
@@ -34,7 +35,8 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	}
 	// rc.opts.Stats.ClientHelloMessage(msg.Header, msgClientHello, addr)
 
-	if err := IsSupportedClientHello(&msgClientHello); err != nil {
+	suiteID, err := IsSupportedClientHello(&msgClientHello)
+	if err != nil {
 		return conn, err
 	}
 	// ClientHello is stateless, so we cannot check record sequence number.
@@ -45,12 +47,13 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		if msg.MsgSeq != 0 {
 			return conn, dtlserrors.ErrClientHelloUnsupportedParams
 		}
-		transcriptHasher := sha256.New()
+		transcriptHasher := ciphersuite.GetSuite(suiteID).NewHasher() // allocation
 		msg.AddToHash(transcriptHasher)
 
 		params := cookie.Params{
 			TimestampUnixNano: time.Now().UnixNano(),
 			KeyShareSet:       !msgClientHello.Extensions.KeyShare.X25519PublicKeySet,
+			CipherSuite:       suiteID,
 		}
 		transcriptHasher.Sum(params.TranscriptHash[:0])
 
@@ -61,11 +64,11 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		if hrrStorage == nil {
 			return conn, dtlserrors.ErrServerHelloRetryRequestQueueFull
 		}
-		hrrDatagram, _ := GenerateStatelessHRR((*hrrStorage)[:0], ck, params.KeyShareSet)
+		hrrDatagram, _ := GenerateStatelessHRR(params, (*hrrStorage)[:0], ck)
 		if len(hrrDatagram) > len(*hrrStorage) {
 			panic("Large HRR datagram must not be generated")
 		}
-		hrrHash := sha256.Sum256(hrrDatagram)
+		hrrHash := sha256.Sum256(hrrDatagram) // for debug only
 		fmt.Printf("serverHRRHash1: %x\n", hrrHash[:])
 		t.snd.SendHelloRetryDatagram(hrrStorage, len(hrrDatagram), addr)
 		return conn, nil
@@ -81,17 +84,21 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	if err != nil {
 		return conn, err
 	}
-	transcriptHasher := sha256.New()
+	if params.CipherSuite != suiteID {
+		// [rfc8446:4.1.2] In that case, the client MUST send the same ClientHello without modification
+		return conn, dtlserrors.ErrClientHelloUnsupportedParams
+	}
+	transcriptHasher := ciphersuite.GetSuite(suiteID).NewHasher() // allocation
 	var earlySecret [32]byte
 	pskSelected := false
 	var pskSelectedIdentity uint16
 	{
 		var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte
-		hrrDatagram, msgBody := GenerateStatelessHRR(hrrDatagramStorage[:0], msgClientHello.Extensions.Cookie, params.KeyShareSet)
+		hrrDatagram, msgBody := GenerateStatelessHRR(params, hrrDatagramStorage[:0], msgClientHello.Extensions.Cookie)
 		if len(hrrDatagram) > len(hrrDatagramStorage) {
 			panic("Large HRR datagram must not be generated")
 		}
-		hrrHash := sha256.Sum256(hrrDatagram)
+		hrrHash := sha256.Sum256(hrrDatagram) // for debug only
 		fmt.Printf("serverHRRHash2: %x\n", hrrHash[:])
 
 		// [rfc8446:4.4.1] replace initial client hello message with its hash if HRR was used
@@ -198,21 +205,19 @@ func selectPSKIdentity(pskStorage []byte, opts *options.TransportOptions, ext *h
 	return 0, nil, handshake.PSKIdentity{}, false
 }
 
-func IsSupportedClientHello(msgParsed *handshake.MsgClientHello) error {
+func IsSupportedClientHello(msgParsed *handshake.MsgClientHello) (ciphersuite.ID, error) {
 	if !msgParsed.Extensions.SupportedVersions.DTLS_13 {
-		return dtlserrors.ErrParamsSupportOnlyDTLS13
+		return 0, dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
 	if !msgParsed.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 {
-
-		return dtlserrors.ErrParamsSupportCiphersuites
+		return 0, dtlserrors.ErrParamsSupportCiphersuites
 	}
 	if !msgParsed.Extensions.SupportedGroups.X25519 {
-		return dtlserrors.ErrParamsSupportKeyShare
+		return 0, dtlserrors.ErrParamsSupportKeyShare
 	}
-
 	if msgParsed.Extensions.PreSharedKeySet && !msgParsed.Extensions.PskExchangeModesSet {
 		// [rfc8446:4.2.9]
-		return dtlserrors.ErrPskKeyRequiresPskModes
+		return 0, dtlserrors.ErrPskKeyRequiresPskModes
 	}
-	return nil
+	return ciphersuite.TLS_AES_128_GCM_SHA256, nil
 }

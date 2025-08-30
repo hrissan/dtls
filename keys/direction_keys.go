@@ -4,9 +4,7 @@
 package keys
 
 import (
-	"crypto/sha256"
 	"fmt"
-	"hash"
 
 	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/hkdf"
@@ -22,52 +20,55 @@ type DirectionKeys struct {
 	// so without unsafe tricks our direction keys total size is ~100 plus 480 (no seq encryption) or 960 (seq encryption)
 }
 
-func (keys *DirectionKeys) ComputeHandshakeKeys(roleServer bool, handshakeSecret []byte, trHash []byte) (handshakeTrafficSecret [32]byte) {
+func (keys *DirectionKeys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleServer bool, handshakeSecret []byte, trHash []byte) (handshakeTrafficSecret [32]byte) {
 	if keys.Symmetric.Epoch != 0 {
 		panic("handshake keys state machine violation")
 	}
 
-	hasher := sha256.New()
+	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret)
 	if roleServer {
-		copy(handshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "s hs traffic", trHash[:]))
+		copy(handshakeTrafficSecret[:], deriveSecret(hmacHandshakeSecret, "s hs traffic", trHash[:]))
 		fmt.Printf("server2 handshake traffic secret: %x\n", handshakeTrafficSecret)
 	} else {
-		copy(handshakeTrafficSecret[:], deriveSecret(hasher, handshakeSecret, "c hs traffic", trHash[:]))
+		copy(handshakeTrafficSecret[:], deriveSecret(hmacHandshakeSecret, "c hs traffic", trHash[:]))
 		fmt.Printf("client2 handshake traffic secret: %x\n", handshakeTrafficSecret)
 	}
-	keys.Symmetric.ComputeKeys(handshakeTrafficSecret[:])
+	keys.Symmetric.ComputeKeys(suite, handshakeTrafficSecret[:])
 
 	keys.Symmetric.Epoch = 2
 	return handshakeTrafficSecret
 }
 
 // TODO - remove allocations
-func ComputeFinished(hasher hash.Hash, HandshakeTrafficSecret []byte, transcriptHash ciphersuite.Hash) ciphersuite.Hash {
-	finishedKey := hkdf.ExpandLabel(hasher, HandshakeTrafficSecret, "finished", []byte{}, hasher.Size())
+func ComputeFinished(suite ciphersuite.Suite, HandshakeTrafficSecret []byte, transcriptHash ciphersuite.Hash) ciphersuite.Hash {
+	hmacHandshakeTrafficSecret := suite.NewHMAC(HandshakeTrafficSecret)
+	finishedKey := hkdf.ExpandLabel(hmacHandshakeTrafficSecret, "finished", []byte{}, hmacHandshakeTrafficSecret.Size())
 	var result ciphersuite.Hash
-	result.SetValue(hkdf.HMAC(finishedKey, transcriptHash.GetValue(), hasher))
+	hmacFinishedKey := suite.NewHMAC(finishedKey)
+	hmacFinishedKey.Write(transcriptHash.GetValue())
+	result.SetSum(hmacFinishedKey)
 	return result
 }
 
-func (keys *DirectionKeys) ComputeApplicationTrafficSecret(roleServer bool, masterSecret []byte, trHash []byte) {
-	hasher := sha256.New()
+func (keys *DirectionKeys) ComputeApplicationTrafficSecret(suite ciphersuite.Suite, roleServer bool, masterSecret []byte, trHash []byte) {
+	hmacMasterSecret := suite.NewHMAC(masterSecret)
 	if roleServer {
-		copy(keys.ApplicationTrafficSecret[:], deriveSecret(hasher, masterSecret[:], "s ap traffic", trHash[:]))
+		copy(keys.ApplicationTrafficSecret[:], deriveSecret(hmacMasterSecret, "s ap traffic", trHash[:]))
 		fmt.Printf("server2 application traffic secret: %x\n", keys.ApplicationTrafficSecret)
 	} else {
-		copy(keys.ApplicationTrafficSecret[:], deriveSecret(hasher, masterSecret[:], "c ap traffic", trHash[:]))
+		copy(keys.ApplicationTrafficSecret[:], deriveSecret(hmacMasterSecret, "c ap traffic", trHash[:]))
 		fmt.Printf("client2 application traffic secret: %x\n", keys.ApplicationTrafficSecret)
 	}
 }
 
-func (keys *DirectionKeys) ComputeNextApplicationTrafficSecret(direction string) {
+func (keys *DirectionKeys) ComputeNextApplicationTrafficSecret(suite ciphersuite.Suite, direction string) {
 	// [rfc8446:7.2]
 	// The next-generation application_traffic_secret is computed as:
 	//
 	// application_traffic_secret_N+1 =
 	//	HKDF-Expand-Label(application_traffic_secret_N,
 	//		"traffic upd", "", Hash.length)
-	hasher := sha256.New()
-	copy(keys.ApplicationTrafficSecret[:], hkdf.ExpandLabel(hasher, keys.ApplicationTrafficSecret[:], "traffic upd", []byte{}, len(keys.ApplicationTrafficSecret)))
+	hmacApplicationTrafficSecret := suite.NewHMAC(keys.ApplicationTrafficSecret[:])
+	copy(keys.ApplicationTrafficSecret[:], hkdf.ExpandLabel(hmacApplicationTrafficSecret, "traffic upd", []byte{}, len(keys.ApplicationTrafficSecret)))
 	fmt.Printf("next %s application traffic secret: %x\n", direction, keys.ApplicationTrafficSecret)
 }

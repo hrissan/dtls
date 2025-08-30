@@ -145,6 +145,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	hctx := newHandshakeContext(transcriptHasher)
 	conn.hctx = hctx
 
+	suite := conn.keys.Suite()
 	// formally this is the next flight, but as there were no state, do not call it
 	// hctx.receivedNextFlight(conn)
 
@@ -195,7 +196,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	}
 
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
-		conn.keys.ComputeHandshakeKeys(true, hctx.earlySecret, sharedSecret, handshakeTranscriptHash.GetValue())
+		conn.keys.ComputeHandshakeKeys(suite, true, hctx.earlySecret, sharedSecret, handshakeTranscriptHash.GetValue())
 
 	if err := hctx.PushMessage(conn, generateEncryptedExtensions()); err != nil {
 		return err
@@ -220,7 +221,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	}
 
 	handshakeTranscriptHash.SetSum(hctx.transcriptHasher)
-	conn.keys.ComputeApplicationTrafficSecret(true, hctx.masterSecret[:], handshakeTranscriptHash.GetValue())
+	conn.keys.ComputeApplicationTrafficSecret(suite, true, hctx.masterSecret[:], handshakeTranscriptHash.GetValue())
 	conn.stateID = smIDHandshakeServerExpectFinished
 	return nil
 }

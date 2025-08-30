@@ -75,9 +75,9 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 	if !conn.keys.NewReceiveKeysSet {
 		conn.keys.NewReceiveKeysSet = true
 		conn.keys.NewReceiveKeys.Epoch = receiver.Symmetric.Epoch + 1
-		conn.keys.NewReceiveKeys.ComputeKeys(receiver.ApplicationTrafficSecret[:])
+		conn.keys.NewReceiveKeys.ComputeKeys(conn.keys.Suite(), receiver.ApplicationTrafficSecret[:])
 		conn.keys.FailedDeprotectionCounterNewReceiveKeys = 0
-		receiver.ComputeNextApplicationTrafficSecret("receive")
+		receiver.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "receive")
 	}
 	recordBody, seq, contentType, err := conn.keys.NewReceiveKeys.Deprotect(hdr, !conn.keys.DoNotEncryptSequenceNumbers, 0)
 	if err != nil {

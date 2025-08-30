@@ -56,8 +56,9 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	earlySecret, _ := keys.ComputeEarlySecret(nil, "")
-	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive = conn.keys.ComputeHandshakeKeys(false, earlySecret, sharedSecret, handshakeTranscriptHash.GetValue())
+	earlySecret, _ := keys.ComputeEarlySecret(conn.keys.Suite(), nil, "")
+	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
+		conn.keys.ComputeHandshakeKeys(conn.keys.Suite(), false, earlySecret, sharedSecret, handshakeTranscriptHash.GetValue())
 
 	conn.stateID = smIDHandshakeClientExpectServerEE
 	fmt.Printf("processed server hello\n")

@@ -135,8 +135,8 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		// binder that corresponds to that PSK
 		if ok {
 			var binderKey ciphersuite.Hash
-			earlySecret, binderKey = keys.ComputeEarlySecret(psk, "ext binder")
-			mustBeFinished := keys.ComputeFinished(suite.NewHasher(), binderKey.GetValue(), transcriptHash)
+			earlySecret, binderKey = keys.ComputeEarlySecret(suite, psk, "ext binder")
+			mustBeFinished := keys.ComputeFinished(suite, binderKey.GetValue(), transcriptHash)
 			if string(identity.Binder) == string(mustBeFinished.GetValue()) {
 				pskSelected = true
 				pskSelectedIdentity = pskNum
@@ -149,7 +149,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		debugPrintSum(transcriptHasher)
 	}
 	if !pskSelected {
-		earlySecret, _ = keys.ComputeEarlySecret(nil, "")
+		earlySecret, _ = keys.ComputeEarlySecret(suite, nil, "")
 		fmt.Printf("certificate auth selected\n")
 	}
 	// we should check all parameters above, so that we do not create connection for unsupported params

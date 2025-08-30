@@ -6,7 +6,6 @@ package ciphersuite
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 
@@ -22,12 +21,12 @@ type SymmetricKeys struct {
 	Epoch   uint16 // here to save sizeof due to alignment
 }
 
-func (keys *SymmetricKeys) ComputeKeys(secret []byte) {
+func (keys *SymmetricKeys) ComputeKeys(suite Suite, secret []byte) {
 	const keySize = 16 // TODO - should depend on cipher suite
-	hasher := sha256.New()
-	writeKey := hkdf.ExpandLabel(hasher, secret, "key", []byte{}, keySize)
-	copy(keys.WriteIV[:], hkdf.ExpandLabel(hasher, secret, "iv", []byte{}, len(keys.WriteIV)))
-	snKey := hkdf.ExpandLabel(hasher, secret, "sn", []byte{}, keySize)
+	hmacSecret := suite.NewHMAC(secret)
+	writeKey := hkdf.ExpandLabel(hmacSecret, "key", []byte{}, keySize)
+	copy(keys.WriteIV[:], hkdf.ExpandLabel(hmacSecret, "iv", []byte{}, len(keys.WriteIV)))
+	snKey := hkdf.ExpandLabel(hmacSecret, "sn", []byte{}, keySize)
 
 	keys.Write = NewGCMCipher(NewAesCipher(writeKey))
 	keys.SN = NewAesCipher(snKey)

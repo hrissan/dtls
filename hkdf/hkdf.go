@@ -26,20 +26,22 @@ func Extract(hasher hash.Hash, salt, keymaterial []byte) []byte {
 	return HMAC(salt, keymaterial, hasher)
 }
 
-func Expand(hasher hash.Hash, keymaterial, info []byte, outlength int) []byte {
-	n := (outlength + hasher.Size() + 1) / hasher.Size()
+func Expand(hmacSecret hash.Hash, info []byte, outlength int) []byte {
+	n := (outlength + hmacSecret.Size() + 1) / hmacSecret.Size()
 	result := []byte{}
 	T := []byte{}
 	for i := 1; i <= n; i++ {
 		T = append(T, info...)
 		T = append(T, byte(i)) // truncate
-		T = HMAC(keymaterial, T, hasher)
+		hmacSecret.Reset()
+		hmacSecret.Write(T)
+		T = hmacSecret.Sum(T[:0])
 		result = append(result, T...)
 	}
 	return result[:outlength]
 }
 
-func ExpandLabel(hasher hash.Hash, secret []byte, label string, context []byte, length int) []byte {
+func ExpandLabel(hmacSecret hash.Hash, label string, context []byte, length int) []byte {
 	if length < 0 || length > math.MaxUint16 {
 		panic("invalid expand label result length")
 	}
@@ -50,5 +52,5 @@ func ExpandLabel(hasher hash.Hash, secret []byte, label string, context []byte, 
 	hkdflabel = append(hkdflabel, label...)
 	hkdflabel = append(hkdflabel, safecast.Cast[byte](len(context)))
 	hkdflabel = append(hkdflabel, context...)
-	return Expand(hasher, secret, hkdflabel, length)
+	return Expand(hmacSecret, hkdflabel, length)
 }

@@ -73,8 +73,7 @@ func ComputeEarlySecret(suite ciphersuite.Suite, psk []byte, extOrResLabel strin
 	// finished_key = HKDF-Expand-Label(binder_key, "finished", "", Hash.length)
 	emptyHash := suite.EmptyHash()
 
-	salt := []byte{}
-	hmacSalt := suite.NewHMAC(salt)
+	hmacSalt := suite.NewHMAC(nil) // empty salt
 
 	if len(psk) != 0 {
 		earlySecret = ciphersuite.Extract(hmacSalt, psk)

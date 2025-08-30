@@ -39,9 +39,9 @@ func (keys *DirectionKeys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleSer
 }
 
 // TODO - remove allocations
-func ComputeFinished(suite ciphersuite.Suite, HandshakeTrafficSecret []byte, transcriptHash ciphersuite.Hash) ciphersuite.Hash {
-	hmacHandshakeTrafficSecret := suite.NewHMAC(HandshakeTrafficSecret)
-	finishedKey := ciphersuite.ExpandLabel(hmacHandshakeTrafficSecret, "finished", []byte{}, hmacHandshakeTrafficSecret.Size())
+func ComputeFinished(suite ciphersuite.Suite, HandshakeTrafficSecret ciphersuite.Hash, transcriptHash ciphersuite.Hash) ciphersuite.Hash {
+	hmacHandshakeTrafficSecret := suite.NewHMAC(HandshakeTrafficSecret.GetValue())
+	finishedKey := ciphersuite.ExpandLabel(hmacHandshakeTrafficSecret, "finished", nil, hmacHandshakeTrafficSecret.Size())
 	var result ciphersuite.Hash
 	hmacFinishedKey := suite.NewHMAC(finishedKey)
 	hmacFinishedKey.Write(transcriptHash.GetValue())
@@ -68,6 +68,6 @@ func (keys *DirectionKeys) ComputeNextApplicationTrafficSecret(suite ciphersuite
 	//	HKDF-Expand-Label(application_traffic_secret_N,
 	//		"traffic upd", "", Hash.length)
 	hmacApplicationTrafficSecret := suite.NewHMAC(keys.ApplicationTrafficSecret.GetValue())
-	keys.ApplicationTrafficSecret.SetValue(ciphersuite.ExpandLabel(hmacApplicationTrafficSecret, "traffic upd", []byte{}, keys.ApplicationTrafficSecret.Len()))
+	keys.ApplicationTrafficSecret.SetValue(ciphersuite.ExpandLabel(hmacApplicationTrafficSecret, "traffic upd", nil, keys.ApplicationTrafficSecret.Len()))
 	fmt.Printf("next %s application traffic secret: %x\n", direction, keys.ApplicationTrafficSecret)
 }

@@ -136,7 +136,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		if ok {
 			var binderKey ciphersuite.Hash
 			earlySecret, binderKey = keys.ComputeEarlySecret(suite, psk, "ext binder")
-			mustBeFinished := keys.ComputeFinished(suite, binderKey.GetValue(), transcriptHash)
+			mustBeFinished := keys.ComputeFinished(suite, binderKey, transcriptHash)
 			if string(identity.Binder) == string(mustBeFinished.GetValue()) {
 				pskSelected = true
 				pskSelectedIdentity = pskNum

@@ -18,7 +18,7 @@ func (hctx *handshakeContext) generateFinished(conn *Connection) handshake.Messa
 	var finishedTranscriptHash ciphersuite.Hash
 	finishedTranscriptHash.SetSum(hctx.transcriptHasher)
 
-	mustBeFinished := keys.ComputeFinished(suite, hctx.handshakeTrafficSecretSend.GetValue(), finishedTranscriptHash)
+	mustBeFinished := keys.ComputeFinished(suite, hctx.handshakeTrafficSecretSend, finishedTranscriptHash)
 
 	msg := handshake.MsgFinished{
 		VerifyData: mustBeFinished.GetValue(),

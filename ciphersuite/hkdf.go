@@ -24,8 +24,8 @@ func Extract(hmacSalt hash.Hash, keymaterial []byte) (result Hash) {
 
 func Expand(hmacSecret hash.Hash, info []byte, outlength int) []byte {
 	n := (outlength + hmacSecret.Size() + 1) / hmacSecret.Size()
-	result := []byte{}
-	T := []byte{}
+	var result []byte
+	var T []byte
 	for i := 1; i <= n; i++ {
 		T = append(T, info...)
 		T = append(T, byte(i)) // truncate

@@ -22,31 +22,30 @@ func HKDFExtract(hmacSalt hash.Hash, keymaterial []byte) (result Hash) {
 	return
 }
 
-func HKDFExpand(hmacSecret hash.Hash, info []byte, outlength int) []byte {
-	n := (outlength + hmacSecret.Size() + 1) / hmacSecret.Size()
-	var result []byte
-	var T []byte
-	for i := 1; i <= n; i++ {
-		T = append(T, info...)
-		T = append(T, byte(i)) // truncate
+func HKDFExpand(dst []byte, hmacSecret hash.Hash, info []byte) {
+	offset := 0
+	hmacSecret.Reset()
+	var ha Hash
+	for i := 1; offset < len(dst); i++ {
+		hmacSecret.Write(info)
+		hmacSecret.Write([]byte{byte(i)}) // truncate
+		ha.SetSum(hmacSecret)
+		offset += copy(dst[offset:], ha.GetValue())
 		hmacSecret.Reset()
-		hmacSecret.Write(T)
-		T = hmacSecret.Sum(T[:0])
-		result = append(result, T...)
+		hmacSecret.Write(ha.GetValue())
 	}
-	return result[:outlength]
 }
 
-func HKDFExpandLabel(hmacSecret hash.Hash, label string, context []byte, length int) []byte {
-	if length < 0 || length > math.MaxUint16 {
+func HKDFExpandLabel(dst []byte, hmacSecret hash.Hash, label string, context []byte) {
+	if len(dst) > math.MaxUint16 {
 		panic("invalid expand label result length")
 	}
 	hkdflabel := make([]byte, 0, 128)
-	hkdflabel = binary.BigEndian.AppendUint16(hkdflabel, uint16(length)) // safe due to check above
+	hkdflabel = binary.BigEndian.AppendUint16(hkdflabel, uint16(len(dst))) // safe due to check above
 	hkdflabel = append(hkdflabel, safecast.Cast[byte](len(label)+6))
 	hkdflabel = append(hkdflabel, "dtls13"...)
 	hkdflabel = append(hkdflabel, label...)
 	hkdflabel = append(hkdflabel, safecast.Cast[byte](len(context)))
 	hkdflabel = append(hkdflabel, context...)
-	return HKDFExpand(hmacSecret, hkdflabel, length)
+	HKDFExpand(dst, hmacSecret, hkdflabel)
 }

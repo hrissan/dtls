@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/hrissan/dtls/ciphersuite"
-	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/dtlsrand"
 	"github.com/hrissan/dtls/format"
@@ -149,16 +148,15 @@ func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time
 	if offset, transcriptHashLen, err = format.ParserReadByte(data, offset); err != nil {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
-	var transcriptHash [constants.MaxHashLength]byte
-	if int(transcriptHashLen) > len(transcriptHash) {
+	if int(transcriptHashLen) > params.TranscriptHash.Cap() {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
-	if offset, err = format.ParserReadFixedBytes(data, offset, transcriptHash[:transcriptHashLen]); err != nil {
+	params.TranscriptHash.SetZero(int(transcriptHashLen))
+	if offset, err = format.ParserReadFixedBytes(data, offset, params.TranscriptHash.GetValue()); err != nil {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
-	params.TranscriptHash.SetValue(transcriptHash[:transcriptHashLen])
 
-	hash := c.getScratchHash(data[:offset], addr)
+	actualHash := c.getScratchHash(data[:offset], addr)
 
 	var mustBeHash [cookieHashLength]byte
 	if offset, err = format.ParserReadFixedBytes(data, offset, mustBeHash[:]); err != nil {
@@ -176,7 +174,7 @@ func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time
 	if params.Age >= cookieValidDuration {
 		return Params{}, dtlserrors.ErrClientHelloCookieAge
 	}
-	if hash != mustBeHash {
+	if actualHash != mustBeHash {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
 	return params, nil

@@ -23,12 +23,14 @@ type SymmetricKeys struct {
 func (keys *SymmetricKeys) ComputeKeys(suite Suite, secret Hash) {
 	const keySize = 16 // TODO - should depend on cipher suite
 	hmacSecret := suite.NewHMAC(secret.GetValue())
-	writeKey := HKDFExpandLabel(hmacSecret, "key", nil, keySize)
-	copy(keys.WriteIV[:], HKDFExpandLabel(hmacSecret, "iv", nil, len(keys.WriteIV)))
-	snKey := HKDFExpandLabel(hmacSecret, "sn", nil, keySize)
+	var writeKey [keySize]byte
+	HKDFExpandLabel(writeKey[:], hmacSecret, "key", nil)
+	HKDFExpandLabel(keys.WriteIV[:], hmacSecret, "iv", nil)
+	var snKey [keySize]byte
+	HKDFExpandLabel(snKey[:], hmacSecret, "sn", nil)
 
-	keys.Write = NewGCMCipher(NewAesCipher(writeKey))
-	keys.SN = NewAesCipher(snKey)
+	keys.Write = NewGCMCipher(NewAesCipher(writeKey[:]))
+	keys.SN = NewAesCipher(snKey[:])
 }
 
 func (keys *SymmetricKeys) EncryptSequenceNumbers(seqNum []byte, cipherText []byte) error {

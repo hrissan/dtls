@@ -121,6 +121,7 @@ func (keys *Keys) ComputeApplicationTrafficSecret(suite ciphersuite.Suite, serve
 }
 
 func deriveSecret(hmacSecret hash.Hash, label string, sum ciphersuite.Hash) (result ciphersuite.Hash) {
-	result.SetValue(ciphersuite.HKDFExpandLabel(hmacSecret, label, sum.GetValue(), sum.Len()))
+	result.SetZero(sum.Len())
+	ciphersuite.HKDFExpandLabel(result.GetValue(), hmacSecret, label, sum.GetValue())
 	return result
 }

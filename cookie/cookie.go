@@ -8,7 +8,9 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
+	"hash"
 	"net/netip"
+	"sync"
 	"time"
 
 	"github.com/hrissan/dtls/ciphersuite"
@@ -23,8 +25,10 @@ const cookieHashLength = sha256.Size
 const saltLength = 16 // arguably, this is enough
 
 type CookieState struct {
-	cookieSecret [32]byte      // [rfc9147:5.1]
-	rnd          dtlsrand.Rand // for salt
+	// [rfc9147:5.1]
+	mu         sync.Mutex // we want to reuse hasher below
+	hmacHasher hash.Hash
+	rnd        dtlsrand.Rand // for salt
 }
 
 const MaxCookieSize = 256
@@ -76,7 +80,13 @@ func (c *Cookie) AppendByteMust(data byte) {
 
 func (c *CookieState) SetRand(rnd dtlsrand.Rand) {
 	c.rnd = rnd
-	rnd.ReadMust(c.cookieSecret[:])
+
+	var cookieSecret [32]byte
+	rnd.ReadMust(cookieSecret[:])
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.hmacHasher = hmac.New(sha256.New, cookieSecret[:])
 }
 
 func (c *CookieState) CreateCookie(params Params, addr netip.AddrPort) Cookie {
@@ -182,9 +192,14 @@ func (c *CookieState) getScratchHash(cookieHashedBytes []byte, addr netip.AddrPo
 	if len(scratch) > 2*MaxCookieSize {
 		panic("please increase maxScratchSize")
 	}
-	hm := hmac.New(sha256.New, c.cookieSecret[:])
-	hm.Write(scratch)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.hmacHasher.Reset()
+	c.hmacHasher.Write(scratch)
+
 	var result [cookieHashLength]byte
-	_ = hm.Sum(result[:0])
+	_ = c.hmacHasher.Sum(result[:0])
 	return result
 }

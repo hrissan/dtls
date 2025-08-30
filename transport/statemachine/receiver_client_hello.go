@@ -88,7 +88,8 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		// [rfc8446:4.1.2] In that case, the client MUST send the same ClientHello without modification
 		return conn, dtlserrors.ErrClientHelloUnsupportedParams
 	}
-	transcriptHasher := ciphersuite.GetSuite(suiteID).NewHasher() // allocation
+	suite := ciphersuite.GetSuite(suiteID)
+	transcriptHasher := suite.NewHasher()
 	var earlySecret [32]byte
 	pskSelected := false
 	var pskSelectedIdentity uint16
@@ -135,7 +136,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		if ok {
 			var binderKey [32]byte
 			earlySecret, binderKey = keys.ComputeEarlySecret(psk, "ext binder")
-			mustBeFinished := keys.ComputeFinished(sha256.New(), binderKey[:], transcriptHash)
+			mustBeFinished := keys.ComputeFinished(suite.NewHasher(), binderKey[:], transcriptHash)
 			if string(identity.Binder) == string(mustBeFinished.GetValue()) {
 				pskSelected = true
 				pskSelectedIdentity = pskNum

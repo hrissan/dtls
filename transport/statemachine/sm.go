@@ -4,8 +4,6 @@
 package statemachine
 
 import (
-	"crypto/sha256"
-
 	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/keys"
@@ -15,11 +13,12 @@ import (
 
 // TODO - move out
 func (hctx *handshakeContext) generateFinished(conn *Connection) handshake.Message {
+	suite := conn.keys.Suite()
 	// [rfc8446:4.4.4] - finished
 	var finishedTranscriptHash ciphersuite.Hash
 	finishedTranscriptHash.SetSum(hctx.transcriptHasher)
 
-	mustBeFinished := keys.ComputeFinished(sha256.New(), hctx.handshakeTrafficSecretSend[:], finishedTranscriptHash)
+	mustBeFinished := keys.ComputeFinished(suite.NewHasher(), hctx.handshakeTrafficSecretSend[:], finishedTranscriptHash)
 
 	msg := handshake.MsgFinished{
 		VerifyData: mustBeFinished.GetValue(),

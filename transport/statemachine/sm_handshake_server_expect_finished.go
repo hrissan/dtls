@@ -4,7 +4,6 @@
 package statemachine
 
 import (
-	"crypto/sha256"
 	"fmt"
 
 	"github.com/hrissan/dtls/ciphersuite"
@@ -19,12 +18,13 @@ type smHandshakeServerExpectFinished struct {
 
 func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handshake.Message, msgParsed handshake.MsgFinished) error {
 	hctx := conn.hctx
+	suite := conn.keys.Suite()
 	hctx.receivedNextFlight(conn)
 	// [rfc8446:4.4.4] - finished
 	var finishedTranscriptHash ciphersuite.Hash
 	finishedTranscriptHash.SetSum(hctx.transcriptHasher)
 
-	mustBeFinished := keys.ComputeFinished(sha256.New(), hctx.handshakeTrafficSecretReceive[:], finishedTranscriptHash)
+	mustBeFinished := keys.ComputeFinished(suite.NewHasher(), hctx.handshakeTrafficSecretReceive[:], finishedTranscriptHash)
 	if string(msgParsed.VerifyData) != string(mustBeFinished.GetValue()) {
 		return dtlserrors.ErrFinishedMessageVerificationFailed
 	}

@@ -89,6 +89,7 @@ func (sq *sendQueue) ConstructDatagram(conn *Connection, opts *options.Transport
 		if fragmentLength == 0 { // fully acked since we reset our iterator
 			sq.messageOffset++
 			sq.fragmentOffset = 0
+			// return datagramSize, nil uncomment to put ServerHello into separate datagram for wireshark
 			continue
 		}
 		recordSize, fragmentInfo, rn, err := conn.constructRecord(opts, datagram[datagramSize:],

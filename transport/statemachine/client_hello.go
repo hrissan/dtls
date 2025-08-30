@@ -137,7 +137,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 		conn.resetToClosedLocked(false)
 	}
 	conn.stateID = smIDHandshakeServerCalcServerHello2
-	conn.keys.SuiteID = ciphersuite.TLS_AES_128_GCM_SHA256
+	conn.keys.SuiteID = params.CipherSuite
 	conn.addr = addr
 	conn.cookieTimestampUnixNano = params.TimestampUnixNano
 	conn.tr.addToMap(conn, addr)
@@ -160,7 +160,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 
 	serverHello := handshake.MsgServerHello{
 		Random:      hctx.localRandom,
-		CipherSuite: ciphersuite.TLS_AES_128_GCM_SHA256,
+		CipherSuite: params.CipherSuite,
 	}
 	serverHello.Extensions.SupportedVersionsSet = true
 	serverHello.Extensions.SupportedVersions.SelectedVersion = handshake.DTLS_VERSION_13

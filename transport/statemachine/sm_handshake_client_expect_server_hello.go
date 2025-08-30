@@ -7,7 +7,7 @@ import (
 	"crypto/ecdh"
 	"fmt"
 
-	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/keys"
@@ -44,8 +44,8 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	}
 	msg.AddToHash(hctx.transcriptHasher)
 
-	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
-	handshakeTranscriptHash := hctx.transcriptHasher.Sum(handshakeTranscriptHashStorage[:0])
+	var handshakeTranscriptHash ciphersuite.Hash
+	handshakeTranscriptHash.SetSum(hctx.transcriptHasher)
 
 	// TODO - move to calculator goroutine
 	remotePublic, err := ecdh.X25519().NewPublicKey(msgParsed.Extensions.KeyShare.X25519PublicKey[:])
@@ -57,7 +57,7 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 		panic("curve25519.X25519 failed")
 	}
 	earlySecret, _ := keys.ComputeEarlySecret(nil, "")
-	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive = conn.keys.ComputeHandshakeKeys(false, earlySecret[:], sharedSecret, handshakeTranscriptHash)
+	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive = conn.keys.ComputeHandshakeKeys(false, earlySecret[:], sharedSecret, handshakeTranscriptHash.GetValue())
 
 	conn.stateID = smIDHandshakeClientExpectServerEE
 	fmt.Printf("processed server hello\n")

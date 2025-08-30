@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	"github.com/hrissan/dtls/ciphersuite"
-	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/keys"
@@ -33,10 +32,10 @@ func (*smHandshakeClientExpectFinished) OnFinished(conn *Connection, msg handsha
 	// server finished is not part of traffic secret transcript
 	msg.AddToHash(hctx.transcriptHasher)
 
-	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
-	handshakeTranscriptHash := hctx.transcriptHasher.Sum(handshakeTranscriptHashStorage[:0])
+	var handshakeTranscriptHash ciphersuite.Hash
+	handshakeTranscriptHash.SetSum(hctx.transcriptHasher)
 
-	conn.keys.ComputeApplicationTrafficSecret(false, hctx.masterSecret[:], handshakeTranscriptHash)
+	conn.keys.ComputeApplicationTrafficSecret(false, hctx.masterSecret[:], handshakeTranscriptHash.GetValue())
 	conn.stateID = smIDPostHandshake
 
 	// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here

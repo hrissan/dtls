@@ -6,6 +6,7 @@
 package hkdf_test
 
 import (
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"reflect"
@@ -32,7 +33,8 @@ func TestVec1(t *testing.T) {
 	h := sha256.New()
 	prk := hkdf.Extract(h, salt, ikm)
 	equals(t, eprk, prk)
-	okm := hkdf.Expand(h, prk, info, L)
+	hmacPrk := hmac.New(sha256.New, prk)
+	okm := hkdf.Expand(hmacPrk, info, L)
 	equals(t, eokm, okm)
 }
 
@@ -64,7 +66,8 @@ func TestVec2(t *testing.T) {
 	h := sha256.New()
 	prk := hkdf.Extract(h, salt, ikm)
 	equals(t, eprk, prk)
-	okm := hkdf.Expand(h, prk, info, L)
+	hmacPrk := hmac.New(sha256.New, prk)
+	okm := hkdf.Expand(hmacPrk, info, L)
 	equals(t, eokm, okm)
 }
 
@@ -80,6 +83,7 @@ func TestVec3(t *testing.T) {
 	h := sha256.New()
 	prk := hkdf.Extract(h, salt, ikm)
 	equals(t, eprk, prk)
-	okm := hkdf.Expand(h, prk, info, L)
+	hmacPrk := hmac.New(sha256.New, prk)
+	okm := hkdf.Expand(hmacPrk, info, L)
 	equals(t, eokm, okm)
 }

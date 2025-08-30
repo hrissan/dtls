@@ -99,14 +99,14 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 	derivedSecret := deriveSecret(hmacEarlySecret, "derived", emptyHash[:])
 	handshakeSecret := hkdf.Extract(hasher, derivedSecret, sharedSecret)
 
-	handshakeTrafficSecretSend = keys.Send.ComputeHandshakeKeys(suite, serverRole, handshakeSecret, trHash)
+	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret) // TODO - use above
+
+	handshakeTrafficSecretSend = keys.Send.ComputeHandshakeKeys(suite, serverRole, hmacHandshakeSecret, trHash)
 	keys.SendNextSegmentSequence = 0
 
-	handshakeTrafficSecretReceive = keys.Receive.ComputeHandshakeKeys(suite, !serverRole, handshakeSecret, trHash)
+	handshakeTrafficSecretReceive = keys.Receive.ComputeHandshakeKeys(suite, !serverRole, hmacHandshakeSecret, trHash)
 	keys.ReceiveNextSegmentSequence.Reset()
 	keys.ExpectReceiveEpochUpdate = true
-
-	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret) // TODO - use above
 
 	derivedSecret = deriveSecret(hmacHandshakeSecret, "derived", emptyHash[:])
 	zeros := [32]byte{}

@@ -5,6 +5,7 @@ package keys
 
 import (
 	"fmt"
+	"hash"
 
 	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/hkdf"
@@ -20,12 +21,11 @@ type DirectionKeys struct {
 	// so without unsafe tricks our direction keys total size is ~100 plus 480 (no seq encryption) or 960 (seq encryption)
 }
 
-func (keys *DirectionKeys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleServer bool, handshakeSecret []byte, trHash []byte) (handshakeTrafficSecret [32]byte) {
+func (keys *DirectionKeys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleServer bool, hmacHandshakeSecret hash.Hash, trHash []byte) (handshakeTrafficSecret [32]byte) {
 	if keys.Symmetric.Epoch != 0 {
 		panic("handshake keys state machine violation")
 	}
 
-	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret)
 	if roleServer {
 		copy(handshakeTrafficSecret[:], deriveSecret(hmacHandshakeSecret, "s hs traffic", trHash[:]))
 		fmt.Printf("server2 handshake traffic secret: %x\n", handshakeTrafficSecret)

@@ -32,7 +32,7 @@ func (keys *DirectionKeys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleSer
 		handshakeTrafficSecret = deriveSecret(hmacHandshakeSecret, "c hs traffic", trHash)
 		fmt.Printf("client2 handshake traffic secret: %x\n", handshakeTrafficSecret)
 	}
-	keys.Symmetric.ComputeKeys(suite, handshakeTrafficSecret)
+	suite.ComputeSymmetricKeys(&keys.Symmetric, handshakeTrafficSecret)
 
 	keys.Symmetric.Epoch = 2
 	return handshakeTrafficSecret

@@ -24,14 +24,17 @@ func (s *impl_TLS_AES_128_GCM_SHA256) NewHMAC(key []byte) hash.Hash {
 	return hmac.New(sha256.New, key)
 }
 
-func (s *impl_TLS_AES_128_GCM_SHA256) ComputeSymmetricKeys(k *SymmetricKeys, secret []byte) {
-	panic("TODO")
-}
+func (s *impl_TLS_AES_128_GCM_SHA256) ComputeSymmetricKeys(keys *SymmetricKeys, secret Hash) {
+	const keySize = 16
+	hmacSecret := s.NewHMAC(secret.GetValue())
+	var writeKey [keySize]byte
+	HKDFExpandLabel(writeKey[:], hmacSecret, "key", nil)
+	HKDFExpandLabel(keys.WriteIV[:], hmacSecret, "iv", nil)
+	var snKey [keySize]byte
+	HKDFExpandLabel(snKey[:], hmacSecret, "sn", nil)
 
-func (s *impl_TLS_AES_128_GCM_SHA256) ZeroHash() Hash {
-	var h Hash
-	h.SetValue(make([]byte, sha256.Size))
-	return h
+	keys.Write = NewGCMCipher(NewAesCipher(writeKey[:]))
+	keys.SN = NewAesCipher(snKey[:])
 }
 
 var emptySha256Hash = sha256.Sum256(nil)

@@ -20,19 +20,6 @@ type SymmetricKeys struct {
 	Epoch   uint16 // here to save sizeof due to alignment
 }
 
-func (keys *SymmetricKeys) ComputeKeys(suite Suite, secret Hash) {
-	const keySize = 16 // TODO - should depend on cipher suite
-	hmacSecret := suite.NewHMAC(secret.GetValue())
-	var writeKey [keySize]byte
-	HKDFExpandLabel(writeKey[:], hmacSecret, "key", nil)
-	HKDFExpandLabel(keys.WriteIV[:], hmacSecret, "iv", nil)
-	var snKey [keySize]byte
-	HKDFExpandLabel(snKey[:], hmacSecret, "sn", nil)
-
-	keys.Write = NewGCMCipher(NewAesCipher(writeKey[:]))
-	keys.SN = NewAesCipher(snKey[:])
-}
-
 func (keys *SymmetricKeys) EncryptSequenceNumbers(seqNum []byte, cipherText []byte) error {
 	var mask [32]byte // Some space good for many ciphers, TODO - check constant mush earlier
 	if len(cipherText) < keys.SN.BlockSize() {

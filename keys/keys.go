@@ -78,7 +78,8 @@ func ComputeEarlySecret(suite ciphersuite.Suite, psk []byte, extOrResLabel strin
 	if len(psk) != 0 {
 		earlySecret = ciphersuite.HKDFExtract(hmacSalt, psk)
 	} else {
-		zeroHash := suite.ZeroHash()
+		var zeroHash ciphersuite.Hash
+		zeroHash.SetZero(hmacSalt.Size())
 		earlySecret = ciphersuite.HKDFExtract(hmacSalt, zeroHash.GetValue())
 	}
 
@@ -110,8 +111,9 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 
 	derivedSecret = deriveSecret(hmacHandshakeSecret, "derived", emptyHash)
 	hmacderivedSecret = suite.NewHMAC(derivedSecret.GetValue())
-	zeros := suite.ZeroHash()
-	masterSecret = ciphersuite.HKDFExtract(hmacderivedSecret, zeros.GetValue())
+	var zeroHash ciphersuite.Hash
+	zeroHash.SetZero(hmacderivedSecret.Size())
+	masterSecret = ciphersuite.HKDFExtract(hmacderivedSecret, zeroHash.GetValue())
 	return
 }
 

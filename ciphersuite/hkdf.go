@@ -13,8 +13,6 @@ import (
 	"github.com/hrissan/dtls/safecast"
 )
 
-// TODO - remove allocations
-
 func HKDFExtract(hmacSalt hash.Hash, keymaterial []byte) (result Hash) {
 	hmacSalt.Reset()
 	hmacSalt.Write(keymaterial)

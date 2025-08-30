@@ -69,7 +69,7 @@ func (keys *Keys) SequenceNumberLimit() uint64 {
 	return min(keys.Suite().ProtectionLimit(), record.MaxSeq)
 }
 
-func ComputeEarlySecret(psk []byte, extOrResLabel string) (earlySecret [32]byte, binderKey [32]byte) {
+func ComputeEarlySecret(psk []byte, extOrResLabel string) (earlySecret ciphersuite.Hash, binderKey ciphersuite.Hash) {
 	// [rfc8446:4.2.11.2] PSK Binder
 	// Derive-Secret(., "ext binder" | "res binder", "") = binder_key
 	// finished_key = HKDF-Expand-Label(binder_key, "finished", "", Hash.length)
@@ -81,12 +81,10 @@ func ComputeEarlySecret(psk []byte, extOrResLabel string) (earlySecret [32]byte,
 	if len(psk) == 0 {
 		psk = pskStorage[:]
 	}
-	earlySecretSlice := hkdf.Extract(hasher, salt, psk[:])
-	copy(earlySecret[:], earlySecretSlice)
+	earlySecret.SetValue(hkdf.Extract(hasher, salt, psk[:]))
 
 	if len(extOrResLabel) != 0 { // optimization
-		binderKeySlice := deriveSecret(hasher, earlySecretSlice, extOrResLabel, emptyHash[:])
-		copy(binderKey[:], binderKeySlice)
+		binderKey.SetValue(deriveSecret(hasher, earlySecret.GetValue(), extOrResLabel, emptyHash[:]))
 	}
 	return
 }

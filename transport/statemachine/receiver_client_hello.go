@@ -90,7 +90,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	}
 	suite := ciphersuite.GetSuite(suiteID)
 	transcriptHasher := suite.NewHasher()
-	var earlySecret [32]byte
+	var earlySecret ciphersuite.Hash
 	pskSelected := false
 	var pskSelectedIdentity uint16
 	{
@@ -134,9 +134,9 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		// rather, they SHOULD select a single PSK and validate solely the
 		// binder that corresponds to that PSK
 		if ok {
-			var binderKey [32]byte
+			var binderKey ciphersuite.Hash
 			earlySecret, binderKey = keys.ComputeEarlySecret(psk, "ext binder")
-			mustBeFinished := keys.ComputeFinished(suite.NewHasher(), binderKey[:], transcriptHash)
+			mustBeFinished := keys.ComputeFinished(suite.NewHasher(), binderKey.GetValue(), transcriptHash)
 			if string(identity.Binder) == string(mustBeFinished.GetValue()) {
 				pskSelected = true
 				pskSelectedIdentity = pskNum
@@ -163,7 +163,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 }
 
 func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrPort,
-	earlySecret [32]byte, pskSelected bool, pskSelectedIdentity uint16,
+	earlySecret ciphersuite.Hash, pskSelected bool, pskSelectedIdentity uint16,
 	msgClientHello handshake.MsgClientHello, params cookie.Params, transcriptHasher hash.Hash) (*Connection, error) {
 	if conn != nil {
 		// Connection could switch to closed state and be removed from the map,

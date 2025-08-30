@@ -124,7 +124,7 @@ func generateServerCertificateVerify(opts *options.TransportOptions, conn *Conne
 }
 
 func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, addr netip.AddrPort,
-	earlySecret [32]byte, pskSelected bool, pskSelectedIdentity uint16,
+	earlySecret ciphersuite.Hash, pskSelected bool, pskSelectedIdentity uint16,
 	msgClientHello handshake.MsgClientHello, params cookie.Params, transcriptHasher hash.Hash) error {
 
 	if conn.stateID != smIDClosed {
@@ -195,7 +195,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	}
 
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
-		conn.keys.ComputeHandshakeKeys(true, hctx.earlySecret[:], sharedSecret, handshakeTranscriptHash.GetValue())
+		conn.keys.ComputeHandshakeKeys(true, hctx.earlySecret.GetValue(), sharedSecret, handshakeTranscriptHash.GetValue())
 
 	if err := hctx.PushMessage(conn, generateEncryptedExtensions()); err != nil {
 		return err

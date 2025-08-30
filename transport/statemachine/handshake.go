@@ -8,6 +8,7 @@ import (
 	"hash"
 	"math"
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/circular"
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
@@ -20,7 +21,7 @@ type handshakeContext struct {
 	localRandom  [32]byte
 	x25519Secret *ecdh.PrivateKey // Tons of allocations here. TODO - compute in calculator goroutine
 
-	earlySecret                   [32]byte
+	earlySecret                   ciphersuite.Hash
 	masterSecret                  [32]byte
 	handshakeTrafficSecretSend    [32]byte // we need this to generate finished message.
 	handshakeTrafficSecretReceive [32]byte // we need this to check peer's finished message.

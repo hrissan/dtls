@@ -76,10 +76,10 @@ func ComputeEarlySecret(suite ciphersuite.Suite, psk []byte, extOrResLabel strin
 	hmacSalt := suite.NewHMAC(nil) // empty salt
 
 	if len(psk) != 0 {
-		earlySecret = ciphersuite.Extract(hmacSalt, psk)
+		earlySecret = ciphersuite.HKDFExtract(hmacSalt, psk)
 	} else {
 		zeroHash := suite.ZeroHash()
-		earlySecret = ciphersuite.Extract(hmacSalt, zeroHash.GetValue())
+		earlySecret = ciphersuite.HKDFExtract(hmacSalt, zeroHash.GetValue())
 	}
 
 	if len(extOrResLabel) != 0 { // optimization
@@ -98,7 +98,7 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 	derivedSecret := deriveSecret(hmacEarlySecret, "derived", emptyHash)
 	hmacderivedSecret := suite.NewHMAC(derivedSecret.GetValue())
 
-	handshakeSecret := ciphersuite.Extract(hmacderivedSecret, sharedSecret)
+	handshakeSecret := ciphersuite.HKDFExtract(hmacderivedSecret, sharedSecret)
 	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret.GetValue())
 
 	handshakeTrafficSecretSend = keys.Send.ComputeHandshakeKeys(suite, serverRole, hmacHandshakeSecret, trHash)
@@ -111,7 +111,7 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 	derivedSecret = deriveSecret(hmacHandshakeSecret, "derived", emptyHash)
 	hmacderivedSecret = suite.NewHMAC(derivedSecret.GetValue())
 	zeros := suite.ZeroHash()
-	masterSecret = ciphersuite.Extract(hmacderivedSecret, zeros.GetValue())
+	masterSecret = ciphersuite.HKDFExtract(hmacderivedSecret, zeros.GetValue())
 	return
 }
 
@@ -121,6 +121,6 @@ func (keys *Keys) ComputeApplicationTrafficSecret(suite ciphersuite.Suite, serve
 }
 
 func deriveSecret(hmacSecret hash.Hash, label string, sum ciphersuite.Hash) (result ciphersuite.Hash) {
-	result.SetValue(ciphersuite.ExpandLabel(hmacSecret, label, sum.GetValue(), sum.Len()))
+	result.SetValue(ciphersuite.HKDFExpandLabel(hmacSecret, label, sum.GetValue(), sum.Len()))
 	return result
 }

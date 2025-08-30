@@ -23,9 +23,9 @@ type SymmetricKeys struct {
 func (keys *SymmetricKeys) ComputeKeys(suite Suite, secret Hash) {
 	const keySize = 16 // TODO - should depend on cipher suite
 	hmacSecret := suite.NewHMAC(secret.GetValue())
-	writeKey := ExpandLabel(hmacSecret, "key", nil, keySize)
-	copy(keys.WriteIV[:], ExpandLabel(hmacSecret, "iv", nil, len(keys.WriteIV)))
-	snKey := ExpandLabel(hmacSecret, "sn", nil, keySize)
+	writeKey := HKDFExpandLabel(hmacSecret, "key", nil, keySize)
+	copy(keys.WriteIV[:], HKDFExpandLabel(hmacSecret, "iv", nil, len(keys.WriteIV)))
+	snKey := HKDFExpandLabel(hmacSecret, "sn", nil, keySize)
 
 	keys.Write = NewGCMCipher(NewAesCipher(writeKey))
 	keys.SN = NewAesCipher(snKey)

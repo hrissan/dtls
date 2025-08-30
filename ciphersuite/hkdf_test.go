@@ -31,11 +31,11 @@ func TestVec1(t *testing.T) {
 	L := 42
 
 	hmacSalt := hmac.New(sha256.New, salt)
-	prkh := ciphersuite.Extract(hmacSalt, ikm)
+	prkh := ciphersuite.HKDFExtract(hmacSalt, ikm)
 	prk := prkh.GetValue()
 	equals(t, eprk, prk)
 	hmacPrk := hmac.New(sha256.New, prk)
-	okm := ciphersuite.Expand(hmacPrk, info, L)
+	okm := ciphersuite.HKDFExpand(hmacPrk, info, L)
 	equals(t, eokm, okm)
 }
 
@@ -65,11 +65,11 @@ func TestVec2(t *testing.T) {
 	L := 82
 
 	hmacSalt := hmac.New(sha256.New, salt)
-	prkh := ciphersuite.Extract(hmacSalt, ikm)
+	prkh := ciphersuite.HKDFExtract(hmacSalt, ikm)
 	prk := prkh.GetValue()
 	equals(t, eprk, prk)
 	hmacPrk := hmac.New(sha256.New, prk)
-	okm := ciphersuite.Expand(hmacPrk, info, L)
+	okm := ciphersuite.HKDFExpand(hmacPrk, info, L)
 	equals(t, eokm, okm)
 }
 
@@ -83,10 +83,10 @@ func TestVec3(t *testing.T) {
 	L := 42
 
 	hmacSalt := hmac.New(sha256.New, salt)
-	prkh := ciphersuite.Extract(hmacSalt, ikm)
+	prkh := ciphersuite.HKDFExtract(hmacSalt, ikm)
 	prk := prkh.GetValue()
 	equals(t, eprk, prk)
 	hmacPrk := hmac.New(sha256.New, prk)
-	okm := ciphersuite.Expand(hmacPrk, info, L)
+	okm := ciphersuite.HKDFExpand(hmacPrk, info, L)
 	equals(t, eokm, okm)
 }

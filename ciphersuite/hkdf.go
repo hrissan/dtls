@@ -15,14 +15,14 @@ import (
 
 // TODO - remove allocations
 
-func Extract(hmacSalt hash.Hash, keymaterial []byte) (result Hash) {
+func HKDFExtract(hmacSalt hash.Hash, keymaterial []byte) (result Hash) {
 	hmacSalt.Reset()
 	hmacSalt.Write(keymaterial)
 	result.SetSum(hmacSalt)
 	return
 }
 
-func Expand(hmacSecret hash.Hash, info []byte, outlength int) []byte {
+func HKDFExpand(hmacSecret hash.Hash, info []byte, outlength int) []byte {
 	n := (outlength + hmacSecret.Size() + 1) / hmacSecret.Size()
 	var result []byte
 	var T []byte
@@ -37,7 +37,7 @@ func Expand(hmacSecret hash.Hash, info []byte, outlength int) []byte {
 	return result[:outlength]
 }
 
-func ExpandLabel(hmacSecret hash.Hash, label string, context []byte, length int) []byte {
+func HKDFExpandLabel(hmacSecret hash.Hash, label string, context []byte, length int) []byte {
 	if length < 0 || length > math.MaxUint16 {
 		panic("invalid expand label result length")
 	}
@@ -48,5 +48,5 @@ func ExpandLabel(hmacSecret hash.Hash, label string, context []byte, length int)
 	hkdflabel = append(hkdflabel, label...)
 	hkdflabel = append(hkdflabel, safecast.Cast[byte](len(context)))
 	hkdflabel = append(hkdflabel, context...)
-	return Expand(hmacSecret, hkdflabel, length)
+	return HKDFExpand(hmacSecret, hkdflabel, length)
 }

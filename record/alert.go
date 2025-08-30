@@ -28,6 +28,8 @@ func (msg *Alert) IsFatal() bool {
 	return msg.Level == AlerLevelFatal
 }
 
+func AlertCloseNormal() Alert { return Alert{Level: 2, Description: 0} }
+
 func (msg *Alert) Parse(body []byte) (err error) {
 	offset := 0
 	var level byte

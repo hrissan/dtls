@@ -70,18 +70,24 @@ func (conn *Connection) AddrLocked() netip.AddrPort {
 	return conn.addr
 }
 
-func (conn *Connection) ShutdownLocked(alert record.Alert) {
-	if conn.shutdownLockedShouldSignal(alert) {
-		conn.SignalWriteable()
-	}
-}
-
-func (conn *Connection) shutdownLockedShouldSignal(alert record.Alert) bool {
+// if we want some logic once during transition to shutdown, use returned value
+func (conn *Connection) ShutdownLocked(alert record.Alert) (switchedToShutdown bool) {
 	if conn.stateID == smIDClosed || conn.stateID == smIDShutdown {
 		return false
 	}
 	conn.sendAlert = alert
 	conn.stateID = smIDShutdown
+
+	// cancel handshake
+	conn.hctx = nil // TODO - reuse
+
+	// cancel post-handshake messages
+	conn.sendNewSessionTicketMessageSeq = 0
+	conn.sendKeyUpdateMessageSeq = 0
+	conn.sendKeyUpdateUpdateRequested = false
+
+	// we could optimize sometimes by avoiding lock in sender, but shutdowns are rare
+	conn.SignalWriteable()
 	return true
 }
 
@@ -89,7 +95,7 @@ func (conn *Connection) shutdownLockedShouldSignal(alert record.Alert) bool {
 func (conn *Connection) Shutdown(alert record.Alert) {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
-	conn.ShutdownLocked(alert)
+	_ = conn.ShutdownLocked(alert)
 }
 
 // so we do not forget to prepare vars for reuse

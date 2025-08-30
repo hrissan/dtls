@@ -18,7 +18,7 @@ func (t *Transport) receivedPlaintextRecord(conn *Connection, hdr record.Plainte
 		if conn == nil { // Will not respond with alert, otherwise endless cycle
 			return conn, nil
 		}
-		return conn, conn.receivedAlert(false, hdr.Body)
+		return conn, conn.receivedAlertLocked(false, hdr.Body)
 	case record.RecordTypeAck:
 		fmt.Printf("dtls: got ack record (plaintext) %d bytes from %v, message(hex): %x\n", len(hdr.Body), addr, hdr.Body)
 		// unencrypted acks can only acknowledge unencrypted messaged, so very niche, we simply ignore them

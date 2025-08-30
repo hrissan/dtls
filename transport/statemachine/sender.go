@@ -101,7 +101,7 @@ func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 		if hrr.data != nil {
 			snd.helloRetryPool = append(snd.helloRetryPool, hrr.data)
 		}
-		if addToSendQueue {
+		if addToSendQueue { // could also have been registered while we were not under lock above
 			_ = snd.registerConnectionForSendLocked(conn)
 		}
 	}
@@ -115,6 +115,22 @@ func (snd *sender) sendDatagram(socket *net.UDPConn, data []byte, addr netip.Add
 		if errors.Is(err, net.ErrClosed) {
 			return false
 		}
+		// We are interested to receive ICMP message "destination unreachable" to shut down our connections.
+		// We tried setting socket option for error queue.
+		// _ = syscall.SetsockoptInt(int(file.Fd()), syscall.IPPROTO_IP, syscall.IP_RECVERR, 1)
+		// _ = syscall.SetsockoptInt(int(file.Fd()), syscall.IPPROTO_IPV6, syscall.IPV6_RECVERR, 1)
+		//
+		// And indeed we start receiving errors here, but the problem is that there is wrong address.
+		// Golang returns addr given to WriteToUDPAddrPort, while the actual error is from error queue.
+		// Error queue contains correct address from ICMP message, but it is ignored.
+		//var opErr *net.OpError
+		//if errors.As(err, &opErr) {
+		//	if sysErr, ok := opErr.Unwrap().(*syscall.Errno); ok && *sysErr == syscall.ECONNREFUSED {
+		//		fmt.Println("Connection refused error detected.")
+		//	} else {
+		//		fmt.Printf("Other network error: %v\n", err)
+		//	}
+		//}
 		snd.t.opts.Stats.SocketWriteError(n, addr, err)
 		time.Sleep(snd.t.opts.SocketWriteErrorDelay)
 	}

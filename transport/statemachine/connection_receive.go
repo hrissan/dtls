@@ -28,56 +28,39 @@ func (conn *Connection) receivedCiphertextRecord(opts *options.TransportOptions,
 	// [rfc9147:4.1]
 	switch contentType { // TODO - call StateMachine here
 	case record.RecordTypeAlert:
-		return conn.receivedAlert(true, recordBody)
+		return conn.receivedAlertLocked(true, recordBody)
 	case record.RecordTypeAck:
 		// does not depend on conn.state()
-		return conn.receivedEncryptedAck(opts, recordBody, rn)
+		return conn.receivedEncryptedAckLocked(opts, recordBody, rn)
 	case record.RecordTypeApplicationData:
 		// TODO - allow or drop based on early data state
-		return conn.receivedApplicationData(recordBody)
+		return conn.receivedApplicationDataLocked(recordBody)
 	case record.RecordTypeHandshake:
-		return conn.receivedEncryptedHandshakeRecord(opts, recordBody, rn)
+		return conn.receivedEncryptedHandshakeRecordLocked(opts, recordBody, rn)
 	}
 	return dtlserrors.ErrUnknownInnerPlaintextRecordType
 }
 
-func (conn *Connection) receivedAlert(encrypted bool, recordBody []byte) error {
+func (conn *Connection) receivedAlertLocked(encrypted bool, recordBody []byte) error {
 	// record with an Alert type MUST contain exactly one message. [rfc8446:5.1]
 	var alert record.Alert
 	if err := alert.Parse(recordBody); err != nil {
 		return err
 	}
+	if encrypted && alert.IsFatal() {
+		_ = conn.ShutdownLocked(alert)
+	}
 	// TODO - beware of unencrypted alert!
-	fmt.Printf("dtls: got alert record (encrypted=%v) %d bytes from %v, %+v\n", encrypted, len(recordBody), conn.addr, alert)
+	fmt.Printf("dtls: got alert record (encrypted=%v) fatal=%v description=%d from %v\n", encrypted, alert.IsFatal(), alert.Description, conn.addr)
 	return nil
 }
 
-func (conn *Connection) receivedApplicationData(recordBody []byte) error {
+func (conn *Connection) receivedApplicationDataLocked(recordBody []byte) error {
 	fmt.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q\n", len(recordBody), conn.addr, recordBody)
 	return conn.handler.OnReadRecordLocked(recordBody)
-	/*
-		if conn.roleServer && conn.handler != nil {
-			// TODO - controller to play with state. Remove after testing!
-			if strings.HasPrefix(string(recordBody), "upds") && !conn.keyUpdateInProgress() {
-				if err := conn.keyUpdateStart(false); err != nil {
-					return err
-				}
-			}
-			if strings.HasPrefix(string(recordBody), "upd2") && !conn.keyUpdateInProgress() {
-				if err := conn.keyUpdateStart(true); err != nil {
-					return err
-				}
-			}
-			if ha, ok := conn.handler.(*exampleHandler); ok {
-				ha.toSend = string(recordBody)
-				conn.handlerWriteable = true
-			}
-		}
-	*/
-	return nil
 }
 
-func (conn *Connection) receivedEncryptedHandshakeRecord(opts *options.TransportOptions, recordBody []byte, rn record.Number) error {
+func (conn *Connection) receivedEncryptedHandshakeRecordLocked(opts *options.TransportOptions, recordBody []byte, rn record.Number) error {
 	fmt.Printf("dtls: got handshake record (encrypted) %d bytes from %v, message(hex): %x\n", len(recordBody), conn.addr, recordBody)
 	if len(recordBody) == 0 {
 		// [rfc8446:5.1] Implementations MUST NOT send zero-length fragments of Handshake types, even if those fragments contain padding

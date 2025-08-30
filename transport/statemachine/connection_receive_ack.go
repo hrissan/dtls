@@ -11,7 +11,7 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *Connection) receivedEncryptedAck(opts *options.TransportOptions, recordData []byte, rn record.Number) error {
+func (conn *Connection) receivedEncryptedAckLocked(opts *options.TransportOptions, recordData []byte, rn record.Number) error {
 	parser, err := record.NewAckParser(recordData)
 	if err != nil {
 		return dtlserrors.ErrEncryptedAckMessageHeaderParsing

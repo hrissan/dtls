@@ -27,6 +27,8 @@ func (conn *Connection) hasDataToSend() bool {
 }
 
 func (conn *Connection) hasDataToSendLocked() bool {
+	// has no explicit comparison of conn.stateID, but when resetting state
+	// to closed, all conditions below are cleared.
 	hctx := conn.hctx
 	if hctx != nil && hctx.sendQueue.HasDataToSend() {
 		return true
@@ -34,8 +36,13 @@ func (conn *Connection) hasDataToSendLocked() bool {
 	if conn.keys.Send.Symmetric.Epoch != 0 && conn.keys.SendAcks.GetBitCount() != 0 {
 		return true
 	}
-	return (conn.keyUpdateInProgress() && (conn.sentKeyUpdateRN == record.Number{})) ||
-		(conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN == record.Number{}))
+	if conn.keyUpdateInProgress() && (conn.sentKeyUpdateRN == record.Number{}) {
+		return true
+	}
+	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN == record.Number{}) {
+		return true
+	}
+	return conn.sendAlert != (record.Alert{})
 }
 
 // must not write over len(datagram), returns part of datagram filled
@@ -48,14 +55,14 @@ func (conn *Connection) constructDatagram(opts *options.TransportOptions, datagr
 	datagramSize, addToSendQueue, err = conn.constructDatagramLocked(opts, datagram)
 	// TODO - return dtls.Error from constructDatagramLocked so we can get to alert without cast
 	// and cannot return some other error type
-	if err != nil && conn.shutdownLockedShouldSignal(record.Alert{Level: record.AlerLevelFatal, Description: 22}) {
+	if err != nil && conn.ShutdownLocked(record.Alert{Level: record.AlerLevelFatal, Description: 22}) {
 		fmt.Printf("seq overflow or another serious problem in connection to: %v\n", addr)
-		addToSendQueue = true
 	}
 	if conn.stateID == smIDShutdown && conn.sendAlert == (record.Alert{}) {
-		// wait in this state until constructDatagramLocked writes (often encrypted) alert
+		// We need to call onDisconnect from our reactor, so when shutdown state is set, we register
+		// connection in sender, and call later here.
+		// We wait in shutdown state, until constructDatagramLocked writes (often encrypted) alert
 		conn.resetToClosedLocked(true)
-		addToSendQueue = false
 	}
 	return
 }
@@ -123,7 +130,7 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN != record.Number{}) {
 		// TODO
 	}
-	if conn.sendAlert.Level != 0 {
+	if conn.sendAlert != (record.Alert{}) {
 		if recordSize, err := conn.constructDatagramAlert(opts, datagram[datagramSize:], conn.sendAlert); err != nil {
 			return 0, false, err
 		} else {

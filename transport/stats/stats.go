@@ -77,9 +77,9 @@ func (s *StatsLog) SocketReadError(n int, addr netip.AddrPort, err error) {
 }
 
 func (s *StatsLog) SocketWriteError(n int, addr netip.AddrPort, err error) {
-	if !s.printDatagrams.Load() {
-		return
-	}
+	// if !s.printDatagrams.Load() {
+	//	return
+	// }
 	fmt.Printf("dtls: socket write error n=%d addr=%v: %v\n", n, addr, err)
 }
 

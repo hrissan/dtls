@@ -89,12 +89,12 @@ func ComputeEarlySecret(psk []byte, extOrResLabel string) (earlySecret ciphersui
 	return
 }
 
-func (keys *Keys) ComputeHandshakeKeys(serverRole bool, earlySecret []byte, sharedSecret []byte, trHash []byte) (
+func (keys *Keys) ComputeHandshakeKeys(serverRole bool, earlySecret ciphersuite.Hash, sharedSecret []byte, trHash []byte) (
 	masterSecret [32]byte, handshakeTrafficSecretSend [32]byte, handshakeTrafficSecretReceive [32]byte) {
 	hasher := sha256.New()
 	emptyHash := sha256.Sum256(nil)
 
-	derivedSecret := deriveSecret(hasher, earlySecret, "derived", emptyHash[:])
+	derivedSecret := deriveSecret(hasher, earlySecret.GetValue(), "derived", emptyHash[:])
 	handshakeSecret := hkdf.Extract(hasher, derivedSecret, sharedSecret)
 
 	handshakeTrafficSecretSend = keys.Send.ComputeHandshakeKeys(serverRole, handshakeSecret, trHash)

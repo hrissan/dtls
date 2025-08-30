@@ -195,7 +195,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	}
 
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
-		conn.keys.ComputeHandshakeKeys(true, hctx.earlySecret.GetValue(), sharedSecret, handshakeTranscriptHash.GetValue())
+		conn.keys.ComputeHandshakeKeys(true, hctx.earlySecret, sharedSecret, handshakeTranscriptHash.GetValue())
 
 	if err := hctx.PushMessage(conn, generateEncryptedExtensions()); err != nil {
 		return err

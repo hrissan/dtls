@@ -23,9 +23,9 @@ import (
 )
 
 func debugPrintSum(hasher hash.Hash) {
-	var ha [constants.MaxHashLength]byte
-	hasher.Sum(ha[:0])
-	fmt.Printf("%x\n", ha[:])
+	var ha ciphersuite.Hash
+	ha.SetSum(hasher)
+	fmt.Printf("%x\n", ha.GetValue())
 }
 
 // we must generate the same server hello, because we are stateless, but this message is in transcript

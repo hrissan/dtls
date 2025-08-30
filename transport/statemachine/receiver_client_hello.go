@@ -55,7 +55,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 			KeyShareSet:       !msgClientHello.Extensions.KeyShare.X25519PublicKeySet,
 			CipherSuite:       suiteID,
 		}
-		transcriptHasher.Sum(params.TranscriptHash[:0])
+		params.TranscriptHash.SetSum(transcriptHasher)
 
 		ck := t.cookieState.CreateCookie(params, addr)
 		t.opts.Stats.CookieCreated(addr)
@@ -105,7 +105,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		syntheticMessage := handshake.Message{
 			MsgType: handshake.MsgTypeMessageHash,
 			MsgSeq:  0, // does not affect transcript hash
-			Body:    params.TranscriptHash[:sha256.Size],
+			Body:    params.TranscriptHash.GetValue(),
 		}
 		syntheticMessage.AddToHash(transcriptHasher)
 		debugPrintSum(transcriptHasher)

@@ -96,13 +96,6 @@ func (keys *Keys) ComputeHandshakeKeys(serverRole bool, earlySecret []byte, shar
 	hasher := sha256.New()
 	emptyHash := sha256.Sum256(nil)
 
-	//salt := []byte{}
-	//psk := [32]byte{}
-	//earlySecret2 := hkdf.Extract(hasher, salt, psk[:])
-	//if string(earlySecret) != string(earlySecret2) {
-	//	panic("nad")
-	//}
-
 	derivedSecret := deriveSecret(hasher, earlySecret, "derived", emptyHash[:])
 	handshakeSecret := hkdf.Extract(hasher, derivedSecret, sharedSecret)
 

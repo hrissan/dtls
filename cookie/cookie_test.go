@@ -23,12 +23,13 @@ func TestRoundTrip(t *testing.T) {
 		t.FailNow()
 	}
 	params := cookie.Params{
-		TranscriptHash:    sha256.Sum256([]byte("test")),
 		TimestampUnixNano: now.UnixNano(),
 		KeyShareSet:       true,
 		CipherSuite:       ciphersuite.TLS_CHACHA20_POLY1305_SHA256,
 		Age:               time.Second,
 	}
+	hash := sha256.Sum256([]byte("test"))
+	params.TranscriptHash.SetValue(hash[:])
 	ck := state.CreateCookie(params, addr)
 
 	params2, err := state.IsCookieValid(addr, ck, now.Add(time.Second), time.Minute)

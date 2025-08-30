@@ -159,19 +159,14 @@ func (hctx *handshakeContext) DeliverReceivedMessages(conn *Connection) error {
 }
 
 func (hctx *handshakeContext) PushMessage(conn *Connection, msg handshake.Message) error {
-	if conn.nextMessageSeqSend == math.MaxUint16 {
-		return dtlserrors.ErrSendMessageSeqOverflow
+	if err := hctx.PushMessageNoHasher(conn, msg); err != nil {
+		return err
 	}
-	msg.MsgSeq = conn.nextMessageSeqSend
-	conn.nextMessageSeqSend++
-
-	hctx.sendQueue.PushMessage(msg)
-
 	msg.AddToHash(hctx.transcriptHasher)
 	return nil
 }
 
-// we need it for ClientHello, because ciphersuite is not selected yet
+// we need it for ClientHello1, because ciphersuite is not selected yet
 func (hctx *handshakeContext) PushMessageNoHasher(conn *Connection, msg handshake.Message) error {
 	if conn.nextMessageSeqSend == math.MaxUint16 {
 		return dtlserrors.ErrSendMessageSeqOverflow

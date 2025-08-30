@@ -39,21 +39,16 @@ func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg han
 			return dtlserrors.ErrServerHRRMustHaveMsgSeq0
 		}
 		// [rfc8446:4.4.1] replace initial hello message with its hash if HRR was used
-		//TODO - remove
-		//syntheticMessage := handshake.Message{
-		//	MsgType: handshake.MsgTypeMessageHash,
-		//	MsgSeq:  0, // does not affect transcript hash
-		//	Body:    params.TranscriptHash.GetValue(),
-		//}
-		//syntheticMessage.AddToHash(transcriptHasher)
-		//debugPrintSum(transcriptHasher)
-
 		var initialHelloTranscriptHash ciphersuite.Hash
 		initialHelloTranscriptHash.SetSum(hctx.transcriptHasher)
 		hctx.transcriptHasher.Reset()
-		syntheticHashData := []byte{byte(handshake.MsgTypeMessageHash), 0, 0, byte(initialHelloTranscriptHash.Len())}
-		_, _ = hctx.transcriptHasher.Write(syntheticHashData)
-		_, _ = hctx.transcriptHasher.Write(initialHelloTranscriptHash.GetValue())
+
+		syntheticMessage := handshake.Message{
+			MsgType: handshake.MsgTypeMessageHash,
+			MsgSeq:  0, // does not affect transcript hash
+			Body:    initialHelloTranscriptHash.GetValue(),
+		}
+		syntheticMessage.AddToHash(hctx.transcriptHasher)
 
 		msg.AddToHash(hctx.transcriptHasher)
 

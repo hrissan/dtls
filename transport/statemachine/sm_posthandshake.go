@@ -32,13 +32,9 @@ func (*smPostHandshake) OnHandshakeMsgFragment(conn *Connection, opts *options.T
 	case handshake.MsgTypeClientHello:
 		panic("TODO - should not be called, client_hello is special")
 	case handshake.MsgTypeNewSessionTicket:
-		if err := conn.receivedNewSessionTicket(opts, fragment, rn); err != nil {
-			return err
-		}
+		return conn.receivedNewSessionTicket(opts, fragment, rn)
 	case handshake.MsgTypeKeyUpdate:
-		if err := conn.receivedKeyUpdate(opts, fragment, rn); err != nil {
-			return err
-		}
+		return conn.receivedKeyUpdate(opts, fragment, rn)
 	}
 	return dtlserrors.ErrHandshakeMessagePostHandshake
 }

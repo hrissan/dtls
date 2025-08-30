@@ -6,7 +6,6 @@ package statemachine
 import (
 	"crypto/ecdh"
 	"crypto/rsa"
-	"crypto/sha256"
 	"fmt"
 	"hash"
 	"net/netip"
@@ -98,20 +97,20 @@ func generateServerCertificate(opts *options.TransportOptions) handshake.Message
 	}
 }
 
-func generateServerCertificateVerify(opts *options.TransportOptions, hctx *handshakeContext) (handshake.Message, error) {
+func generateServerCertificateVerify(opts *options.TransportOptions, conn *Connection, hctx *handshakeContext) (handshake.Message, error) {
 	msg := handshake.MsgCertificateVerify{
 		SignatureScheme: handshake.SignatureAlgorithm_RSA_PSS_RSAE_SHA256,
 	}
+	suite := conn.keys.Suite()
 
 	// [rfc8446:4.4.3] - certificate verification
-	var certVerifyTranscriptHashStorage [constants.MaxHashLength]byte
-	certVerifyTranscriptHash := hctx.transcriptHasher.Sum(certVerifyTranscriptHashStorage[:0])
+	var certVerifyTranscriptHash ciphersuite.Hash
+	certVerifyTranscriptHash.SetSum(hctx.transcriptHasher)
 
-	var sigMessageHashStorage [constants.MaxHashLength]byte
-	sigMessageHash := signature.CalculateCoveredContentHash(sha256.New(), certVerifyTranscriptHash, sigMessageHashStorage[:0])
+	sigMessageHash := signature.CalculateCoveredContentHash(suite.NewHasher(), certVerifyTranscriptHash.GetValue())
 
 	privateRsa := opts.ServerCertificate.PrivateKey.(*rsa.PrivateKey)
-	sig, err := signature.CreateSignature_RSA_PSS_RSAE_SHA256(opts.Rnd, privateRsa, sigMessageHash)
+	sig, err := signature.CreateSignature_RSA_PSS_RSAE_SHA256(opts.Rnd, privateRsa, sigMessageHash.GetValue())
 	if err != nil {
 		fmt.Printf("create signature error: %v\n", err)
 		return handshake.Message{}, dtlserrors.ErrCertificateVerifyMessageSignature
@@ -209,7 +208,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 		}
 
 		// TODO - offload to calculator goroutine
-		msgCertificateVerify, err := generateServerCertificateVerify(opts, hctx)
+		msgCertificateVerify, err := generateServerCertificateVerify(opts, conn, hctx)
 		if err != nil {
 			return err // TODO - test on this path. Should close connection immediately
 		}

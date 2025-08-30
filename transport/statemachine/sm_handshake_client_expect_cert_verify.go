@@ -4,11 +4,10 @@
 package statemachine
 
 import (
-	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
 
-	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/signature"
@@ -20,6 +19,7 @@ type smHandshakeClientExpectCertVerify struct {
 
 func (*smHandshakeClientExpectCertVerify) OnCertificateVerify(conn *Connection, msg handshake.Message, msgParsed handshake.MsgCertificateVerify) error {
 	hctx := conn.hctx
+	suite := conn.keys.Suite()
 	hctx.receivedNextFlight(conn)
 	// TODO - We do not want checks here, because receiving goroutine should not be blocked for long
 	// We have to first receive everything up to finished, probably send ack,
@@ -33,18 +33,17 @@ func (*smHandshakeClientExpectCertVerify) OnCertificateVerify(conn *Connection, 
 		return dtlserrors.ErrCertificateAlgorithmUnsupported
 	}
 	// [rfc8446:4.4.3] - certificate verification
-	var certVerifyTranscriptHashStorage [constants.MaxHashLength]byte
-	certVerifyTranscriptHash := hctx.transcriptHasher.Sum(certVerifyTranscriptHashStorage[:0])
+	var certVerifyTranscriptHash ciphersuite.Hash
+	certVerifyTranscriptHash.SetSum(hctx.transcriptHasher)
 
 	// TODO - offload to calc goroutine here
-	var sigMessageHashStorage [constants.MaxHashLength]byte
-	sigMessageHash := signature.CalculateCoveredContentHash(sha256.New(), certVerifyTranscriptHash, sigMessageHashStorage[:0])
+	sigMessageHash := signature.CalculateCoveredContentHash(suite.NewHasher(), certVerifyTranscriptHash.GetValue())
 
 	cert, err := x509.ParseCertificate(hctx.certificateChain.Certificates[0].CertData) // TODO - reuse certificates
 	if err != nil {
 		return dtlserrors.ErrCertificateLoadError
 	}
-	if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash, msgParsed.Signature); err != nil {
+	if err := signature.VerifySignature_RSA_PSS_RSAE_SHA256(cert, sigMessageHash.GetValue(), msgParsed.Signature); err != nil {
 		return dtlserrors.ErrCertificateSignatureInvalid
 	}
 	fmt.Printf("certificate verify ok: %+v\n", msgParsed)

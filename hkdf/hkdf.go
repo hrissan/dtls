@@ -6,8 +6,6 @@
 package hkdf
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
 	"encoding/binary"
 	"hash"
 	"math"
@@ -16,14 +14,11 @@ import (
 )
 
 // TODO - remove allocations
-func HMAC(key, data []byte, h hash.Hash) []byte {
-	mirror := hmac.New(sha256.New, key) // TODO - actually use h
-	_, _ = mirror.Write(data)
-	return mirror.Sum(nil)
-}
 
-func Extract(hasher hash.Hash, salt, keymaterial []byte) []byte {
-	return HMAC(salt, keymaterial, hasher)
+func Extract(hmacSalt hash.Hash, keymaterial []byte) []byte {
+	hmacSalt.Reset()
+	hmacSalt.Write(keymaterial)
+	return hmacSalt.Sum(nil)
 }
 
 func Expand(hmacSecret hash.Hash, info []byte, outlength int) []byte {

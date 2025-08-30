@@ -73,7 +73,6 @@ func ComputeEarlySecret(suite ciphersuite.Suite, psk []byte, extOrResLabel strin
 	// [rfc8446:4.2.11.2] PSK Binder
 	// Derive-Secret(., "ext binder" | "res binder", "") = binder_key
 	// finished_key = HKDF-Expand-Label(binder_key, "finished", "", Hash.length)
-	hasher := sha256.New()
 	emptyHash := sha256.Sum256(nil)
 
 	salt := []byte{}
@@ -81,7 +80,8 @@ func ComputeEarlySecret(suite ciphersuite.Suite, psk []byte, extOrResLabel strin
 	if len(psk) == 0 {
 		psk = pskStorage[:]
 	}
-	earlySecret.SetValue(hkdf.Extract(hasher, salt, psk[:]))
+	hmacSalt := suite.NewHMAC(salt)
+	earlySecret.SetValue(hkdf.Extract(hmacSalt, psk[:]))
 
 	if len(extOrResLabel) != 0 { // optimization
 		hmacEarlySecret := suite.NewHMAC(earlySecret.GetValue())
@@ -92,14 +92,15 @@ func ComputeEarlySecret(suite ciphersuite.Suite, psk []byte, extOrResLabel strin
 
 func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool, earlySecret ciphersuite.Hash, sharedSecret []byte, trHash []byte) (
 	masterSecret [32]byte, handshakeTrafficSecretSend [32]byte, handshakeTrafficSecretReceive [32]byte) {
-	hasher := sha256.New()
 	emptyHash := sha256.Sum256(nil)
 
 	hmacEarlySecret := suite.NewHMAC(earlySecret.GetValue())
-	derivedSecret := deriveSecret(hmacEarlySecret, "derived", emptyHash[:])
-	handshakeSecret := hkdf.Extract(hasher, derivedSecret, sharedSecret)
 
-	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret) // TODO - use above
+	derivedSecret := deriveSecret(hmacEarlySecret, "derived", emptyHash[:])
+	hmacderivedSecret := suite.NewHMAC(derivedSecret)
+
+	handshakeSecret := hkdf.Extract(hmacderivedSecret, sharedSecret)
+	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret)
 
 	handshakeTrafficSecretSend = keys.Send.ComputeHandshakeKeys(suite, serverRole, hmacHandshakeSecret, trHash)
 	keys.SendNextSegmentSequence = 0
@@ -109,8 +110,9 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 	keys.ExpectReceiveEpochUpdate = true
 
 	derivedSecret = deriveSecret(hmacHandshakeSecret, "derived", emptyHash[:])
+	hmacderivedSecret = suite.NewHMAC(derivedSecret)
 	zeros := [32]byte{}
-	masterSecretSlice := hkdf.Extract(hasher, derivedSecret, zeros[:])
+	masterSecretSlice := hkdf.Extract(hmacderivedSecret, zeros[:])
 	copy(masterSecret[:], masterSecretSlice)
 	return
 }

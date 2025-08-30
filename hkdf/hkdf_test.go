@@ -30,8 +30,8 @@ func TestVec1(t *testing.T) {
 		"34007208d5b887185865")
 	L := 42
 
-	h := sha256.New()
-	prk := hkdf.Extract(h, salt, ikm)
+	hmacSalt := hmac.New(sha256.New, salt)
+	prk := hkdf.Extract(hmacSalt, ikm)
 	equals(t, eprk, prk)
 	hmacPrk := hmac.New(sha256.New, prk)
 	okm := hkdf.Expand(hmacPrk, info, L)
@@ -63,8 +63,8 @@ func TestVec2(t *testing.T) {
 		"1d87")
 	L := 82
 
-	h := sha256.New()
-	prk := hkdf.Extract(h, salt, ikm)
+	hmacSalt := hmac.New(sha256.New, salt)
+	prk := hkdf.Extract(hmacSalt, ikm)
 	equals(t, eprk, prk)
 	hmacPrk := hmac.New(sha256.New, prk)
 	okm := hkdf.Expand(hmacPrk, info, L)
@@ -80,8 +80,8 @@ func TestVec3(t *testing.T) {
 		"9d201395faa4b61a96c8")
 	L := 42
 
-	h := sha256.New()
-	prk := hkdf.Extract(h, salt, ikm)
+	hmacSalt := hmac.New(sha256.New, salt)
+	prk := hkdf.Extract(hmacSalt, ikm)
 	equals(t, eprk, prk)
 	hmacPrk := hmac.New(sha256.New, prk)
 	okm := hkdf.Expand(hmacPrk, info, L)

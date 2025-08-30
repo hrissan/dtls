@@ -37,10 +37,13 @@ func (s *impl_TLS_AES_128_GCM_SHA256) ComputeSymmetricKeys(keys *SymmetricKeys, 
 	keys.SN = NewAesCipher(snKey[:])
 }
 
-var emptySha256Hash = sha256.Sum256(nil)
+var emptySha256Hash Hash
+
+func init() {
+	ha := sha256.Sum256(nil)
+	emptySha256Hash.SetValue(ha[:])
+}
 
 func (s *impl_TLS_AES_128_GCM_SHA256) EmptyHash() Hash {
-	var h Hash
-	h.SetValue(emptySha256Hash[:])
-	return h
+	return emptySha256Hash
 }

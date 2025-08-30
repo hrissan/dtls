@@ -29,11 +29,14 @@ const (
 )
 
 var suite_TLS_AES_128_GCM_SHA256 Suite = &impl_TLS_AES_128_GCM_SHA256{}
+var suite_TLS_AES_256_GCM_SHA384 Suite = &impl_TLS_AES_256_GCM_SHA384{}
 
 func GetSuite(num ID) Suite {
 	switch num {
 	case TLS_AES_128_GCM_SHA256:
 		return suite_TLS_AES_128_GCM_SHA256
+	case TLS_AES_256_GCM_SHA384:
+		return suite_TLS_AES_256_GCM_SHA384
 	}
 	panic("unsupported ciphersuite ID")
 }

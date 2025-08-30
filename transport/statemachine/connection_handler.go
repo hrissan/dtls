@@ -14,6 +14,13 @@ package statemachine
 // you must call Connection.Lock() / defer Connection.Unlock()
 // See examples
 type ConnectionHandler interface {
+	// For client connection, after you call StartConnection
+	// 1. if handshake fails, OnStartConnectionFailedLocked is called.
+	// 2. if handshake successfull, first OnConnectLocked and then later OnDisconnectLocked is called.
+	// For server connection, on failed handshake nothing is called.
+	// If handshake successfull, first OnConnectLocked and then later OnDisconnectLocked is called.
+	OnStartConnectionFailedLocked(err error)
+
 	OnConnectLocked()
 	// application must remove connection from all data structures
 	// connection will be reused and become invalid immediately after method returns

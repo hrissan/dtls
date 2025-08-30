@@ -127,9 +127,9 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 		//	return datagramSize, true, nil
 		//}
 	}
-	if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN != record.Number{}) {
-		// TODO
-	}
+	//if conn.sendNewSessionTicketMessageSeq != 0 && (conn.sentNewSessionTicketRN != record.Number{}) {
+	// TODO
+	//}
 	if conn.sendAlert != (record.Alert{}) {
 		if recordSize, err := conn.constructDatagramAlert(opts, datagram[datagramSize:], conn.sendAlert); err != nil {
 			return 0, false, err

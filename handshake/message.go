@@ -34,5 +34,4 @@ func (msg *Message) AddToHashPartial(transcriptHasher hash.Hash, partialLength i
 	binary.BigEndian.PutUint32(result[:], first4Bytes)
 	_, _ = transcriptHasher.Write(result[:])
 	_, _ = transcriptHasher.Write(msg.Body[:partialLength])
-	return
 }

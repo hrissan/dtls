@@ -151,7 +151,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	if conn != nil {
 		t.snd.RegisterConnectionForSend(conn)
 	}
-	return conn, nil
+	return conn, err
 }
 
 func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrPort,

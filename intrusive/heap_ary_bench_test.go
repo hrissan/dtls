@@ -4,7 +4,7 @@
 package intrusive_test
 
 import (
-	"math/rand/v2"
+	"math/rand"
 	"testing"
 
 	"github.com/hrissan/dtls/intrusive"

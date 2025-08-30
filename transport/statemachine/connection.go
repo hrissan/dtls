@@ -163,15 +163,6 @@ func (conn *Connection) startConnection(tr *Transport, handler ConnectionHandler
 
 func (conn *Connection) state() StateMachine { return stateMachineStates[conn.stateID] }
 
-func (conn *Connection) onReceiverClose() netip.AddrPort {
-	conn.mu.Lock()
-	defer conn.mu.Unlock()
-	// TODO - call user code if needed
-	addr := conn.addr
-	conn.addr = netip.AddrPort{}
-	return addr
-}
-
 func (conn *Connection) keyUpdateInProgress() bool {
 	return conn.sendKeyUpdateMessageSeq != 0
 }
@@ -202,22 +193,4 @@ func (conn *Connection) keyUpdateStart(updateRequested bool) error {
 }
 
 func (conn *Connection) onTimer() {
-}
-
-type exampleHandler struct {
-	toSend string
-}
-
-func (h *exampleHandler) OnDisconnect(err error) {
-
-}
-
-func (h *exampleHandler) OnWriteRecord(recordData []byte) (recordSize int, send bool, addToSendQueue bool) {
-	toSend := copy(recordData, h.toSend)
-	h.toSend = h.toSend[toSend:]
-	return toSend, toSend != 0, len(h.toSend) > 0
-}
-
-func (h *exampleHandler) OnReadApplicationRecord(record []byte) error {
-	return nil
 }

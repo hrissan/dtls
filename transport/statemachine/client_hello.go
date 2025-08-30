@@ -156,6 +156,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	fmt.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x\n", params.KeyShareSet, params.TranscriptHash)
 	opts.Rnd.ReadMust(hctx.localRandom[:])
 	hctx.ComputeKeyShare(opts.Rnd)
+	hctx.earlySecret = earlySecret
 
 	serverHello := handshake.MsgServerHello{
 		Random:      hctx.localRandom,
@@ -195,7 +196,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	}
 
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
-		conn.keys.ComputeHandshakeKeys(true, earlySecret[:], sharedSecret, handshakeTranscriptHash)
+		conn.keys.ComputeHandshakeKeys(true, hctx.earlySecret[:], sharedSecret, handshakeTranscriptHash)
 	conn.keys.SequenceNumberLimitExp = 5 // TODO - set for actual cipher suite. Small value is for testing.
 
 	if err := hctx.PushMessage(conn, generateEncryptedExtensions()); err != nil {

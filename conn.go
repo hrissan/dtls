@@ -41,6 +41,13 @@ func newConn(localAddr net.Addr, remoteAddr net.Addr) *Conn {
 var _ net.Conn = &Conn{}
 var _ io.ReadWriter = &Conn{}
 
+func signalCond(cond chan struct{}) {
+	select {
+	case cond <- struct{}{}:
+	default:
+	}
+}
+
 func (c *Conn) LocalAddr() net.Addr                { return c.localAddr }
 func (c *Conn) RemoteAddr() net.Addr               { return c.remoteAddr }
 func (c *Conn) SetDeadline(t time.Time) error      { return nil } // TODO
@@ -107,18 +114,10 @@ func (c *Conn) Close() error {
 	return c.closeErr
 }
 
-func (c *Conn) unblockDial() {
-	select {
-	case c.condDial <- struct{}{}:
-	default:
-	}
-}
-
 func (c *Conn) closeLocked(err error) {
 	if c.closed {
 		return
 	}
-	c.unblockDial()
 	c.closed = true
 	c.closeErr = err
 	close(c.condRead)
@@ -126,8 +125,12 @@ func (c *Conn) closeLocked(err error) {
 	c.tc.SignalWriteable()
 }
 
+func (c *Conn) OnStartConnectionFailedLocked(err error) {
+	signalCond(c.condDial)
+}
+
 func (c *Conn) OnConnectLocked() {
-	c.unblockDial()
+	signalCond(c.condDial)
 }
 
 func (c *Conn) OnDisconnectLocked(err error) {
@@ -148,10 +151,7 @@ func (c *Conn) OnWriteRecordLocked(recordBody []byte) (recordSize int, send bool
 	c.writing[0] = c.writing[0][recordSize:]
 	if len(c.writing[0]) == 0 {
 		c.writing = c.writing[1:]
-		select {
-		case c.condWrite <- struct{}{}:
-		default:
-		}
+		signalCond(c.condWrite)
 	}
 	return recordSize, true, false, nil
 }
@@ -167,9 +167,6 @@ func (conn *Conn) OnReadRecordLocked(recordBody []byte) error {
 		return nil // we are losing records, because no one is reading on our side
 	}
 	conn.reading = append(conn.reading, append([]byte{}, recordBody...))
-	select {
-	case conn.condRead <- struct{}{}:
-	default:
-	}
+	signalCond(conn.condRead)
 	return nil
 }

@@ -62,12 +62,16 @@ func (snd *sender) Shutdown() {
 	snd.cond.Broadcast()
 }
 
+func (snd *sender) ready() bool {
+	return snd.shutdown || snd.helloRetryQueue.Len() != 0 || snd.wantToWriteQueue.Len() != 0
+}
+
 // blocks until sender.Close() is closed or socket is Closed (externally), whichever comes first
 func (snd *sender) GoRunUDP(socket *net.UDPConn) {
 	datagram := make([]byte, 65536)
 	snd.mu.Lock()
 	for {
-		if !(snd.shutdown || snd.helloRetryQueue.Len() != 0 || snd.wantToWriteQueue.Len() != 0) {
+		if !snd.ready() {
 			snd.cond.Wait()
 		}
 		quit := snd.shutdown && snd.wantToWriteQueue.Len() == 0

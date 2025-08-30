@@ -159,11 +159,11 @@ func (h *IntrusiveHeapAry[T]) moveDown(storage []pair[T], index uint, length uin
 	h.checkHeap()
 }
 
-func (h *IntrusiveHeapAry[T]) popBackToIndex(ind int) {
-	h.storage[ind] = h.storage[len(h.storage)-1]
-	h.storage[len(h.storage)-1] = pair[T]{nil, nil} // do not leave aliases
-	h.storage = h.storage[:len(h.storage)-1]
-}
+//func (h *IntrusiveHeapAry[T]) popBackToIndex(ind int) {
+//	h.storage[ind] = h.storage[len(h.storage)-1]
+//	h.storage[len(h.storage)-1] = pair[T]{nil, nil} // do not leave aliases
+//	h.storage = h.storage[:len(h.storage)-1]
+//}
 
 func (h *IntrusiveHeapAry[T]) checkHeap() {
 	if !healthChecks {

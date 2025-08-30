@@ -84,28 +84,28 @@ func FuzzReplay(f *testing.F) {
 					t.FailNow()
 				}
 			}
-			switch {
-			case c == 0:
+			switch c {
+			case 0:
 				nextReceived = min(nextReceived+1, maxLastReceivedForFuzzing)
 				cb.SetNextReceived(nextReceived)
 				cb2.SetNextReceived(nextReceived)
-			case c == 1:
+			case 1:
 				nextReceived = min(nextReceived+1, maxLastReceivedForFuzzing)
 				cb.SetNextReceived(nextReceived)
 				cb2.SetNextReceived(nextReceived)
 				cb.SetBit(nextReceived - 1)
 				cb2.SetBit(nextReceived - 1)
-			case c == 2:
+			case 2:
 				cb.SetBit(v)
 				cb2.SetBit(v)
-			case c == 3:
+			case 3:
 				cb.ClearBit(v)
 				cb2.ClearBit(v)
-			case c == 4:
+			case 4:
 				nextReceived = min(nextReceived+v, maxLastReceivedForFuzzing)
 				cb.SetNextReceived(nextReceived)
 				cb2.SetNextReceived(nextReceived)
-			case c == 5:
+			case 5:
 				if nextReceived != 0 {
 					cb.ClearBit(nextReceived - 1)
 					cb2.ClearBit(nextReceived - 1)

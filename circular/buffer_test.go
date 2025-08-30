@@ -4,7 +4,7 @@
 package circular_test
 
 import (
-	"math/rand/v2"
+	"math/rand"
 	"testing"
 
 	"github.com/hrissan/dtls/circular"
@@ -13,7 +13,7 @@ import (
 var benchmarkSideEffect int
 
 func BenchmarkDiv9(b *testing.B) {
-	dividend := 12345678912341234 + rand.IntN(100)
+	dividend := 12345678912341234 + rand.Intn(100)
 	value := benchmarkSideEffect
 	for i := 0; i < b.N; i++ {
 		value += (^value) / dividend

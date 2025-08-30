@@ -75,7 +75,7 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 }
 
 func (conn *Connection) constructPlaintextRecord(datagramLeft []byte, msg handshake.Fragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, record.Number, error) {
-	if *sendNextSegmentSequenceEpoch0 >= math.MaxUint16 {
+	if *sendNextSegmentSequenceEpoch0 == math.MaxUint16 { // linter does not like >= here
 		// We arbitrarily decided that we do not need more outgoing sequence numbers for epoch 0
 		// We needed code to prevent overflow below anyway
 		return nil, record.Number{}, dtlserrors.ErrSendEpoch0RecordSeqOverflow

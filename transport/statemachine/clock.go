@@ -83,12 +83,10 @@ func (cl *Clock) GoRun() {
 		t.Reset(fireDur)
 		select {
 		case <-t.C:
-			break
 		case <-cl.cond:
 			if t.Stop() {
 				<-t.C
 			}
-			continue
 		}
 	}
 }

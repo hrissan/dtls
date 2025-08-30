@@ -16,6 +16,10 @@ type Conn struct {
 	messagesToSend []string // protected by chatRoom lock
 }
 
+func (conn *Conn) OnStartConnectionFailedLocked(err error) {
+	// not used for server connections
+}
+
 func (conn *Conn) OnConnectLocked() {
 	fmt.Printf("chat room connection from %q\n", conn.AddrLocked())
 	conn.chatRoom.mu.Lock()

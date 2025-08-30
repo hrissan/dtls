@@ -14,7 +14,6 @@ import (
 	"github.com/hrissan/dtls/dtlsrand"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
-	"github.com/hrissan/dtls/replay"
 )
 
 type handshakeContext struct {
@@ -26,8 +25,8 @@ type handshakeContext struct {
 	handshakeTrafficSecretSend    [32]byte // we need this to generate finished message.
 	handshakeTrafficSecretReceive [32]byte // we need this to check peer's finished message.
 
-	// it seems we do not need this protection, but standard says we must have it
-	receiveNextSegmentSequenceEpoch0 replay.Window
+	// it seems we do not need this protection, but standard says we must have it. TODO - decide later
+	// receiveNextSegmentSequenceEpoch0 replay.Window
 
 	// for ServerHello retransmit and replay protection
 	// we decided 2^16 ServerHello/ClientHello is enough for all practical purposes,

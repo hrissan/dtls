@@ -158,7 +158,6 @@ func (hctx *handshakeContext) DeliverReceivedMessages(conn *Connection) error {
 	return nil
 }
 
-// also acks (removes) all previous flights
 func (hctx *handshakeContext) PushMessage(conn *Connection, msg handshake.Message) error {
 	if conn.nextMessageSeqSend == math.MaxUint16 {
 		return dtlserrors.ErrSendMessageSeqOverflow
@@ -169,5 +168,17 @@ func (hctx *handshakeContext) PushMessage(conn *Connection, msg handshake.Messag
 	hctx.sendQueue.PushMessage(msg)
 
 	msg.AddToHash(hctx.transcriptHasher)
+	return nil
+}
+
+// we need it for ClientHello, because ciphersuite is not selected yet
+func (hctx *handshakeContext) PushMessageNoHasher(conn *Connection, msg handshake.Message) error {
+	if conn.nextMessageSeqSend == math.MaxUint16 {
+		return dtlserrors.ErrSendMessageSeqOverflow
+	}
+	msg.MsgSeq = conn.nextMessageSeqSend
+	conn.nextMessageSeqSend++
+
+	hctx.sendQueue.PushMessage(msg)
 	return nil
 }

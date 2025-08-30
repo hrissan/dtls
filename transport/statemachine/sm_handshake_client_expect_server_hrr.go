@@ -5,7 +5,7 @@ package statemachine
 
 import (
 	"github.com/hrissan/dtls/ciphersuite"
-	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 )
@@ -20,6 +20,16 @@ func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg han
 	if err := IsSupportedServerHello(&msgParsed); err != nil {
 		return err
 	}
+	if hctx.transcriptHasher != nil {
+		panic("transcript hasher must not be set here")
+	}
+	conn.keys.SuiteID = msgParsed.CipherSuite
+	hctx.transcriptHasher = conn.keys.Suite().NewHasher()
+	// only after we know ciphersuite, can we now hash ClientHello1
+	{
+		clientHello1Msg := hctx.generateClientHello(false, cookie.Cookie{})
+		clientHello1Msg.AddToHash(hctx.transcriptHasher)
+	}
 	if msgParsed.IsHelloRetryRequest() {
 		conn.keys.SendAcks.Reset() // we do not want to ack HRR, and we do not send unencrypted acks anyway
 		if !msgParsed.Extensions.CookieSet {
@@ -29,12 +39,21 @@ func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg han
 			return dtlserrors.ErrServerHRRMustHaveMsgSeq0
 		}
 		// [rfc8446:4.4.1] replace initial hello message with its hash if HRR was used
-		var initialHelloTranscriptHashStorage [constants.MaxHashLength]byte
-		initialHelloTranscriptHash := hctx.transcriptHasher.Sum(initialHelloTranscriptHashStorage[:0])
+		//TODO - remove
+		//syntheticMessage := handshake.Message{
+		//	MsgType: handshake.MsgTypeMessageHash,
+		//	MsgSeq:  0, // does not affect transcript hash
+		//	Body:    params.TranscriptHash.GetValue(),
+		//}
+		//syntheticMessage.AddToHash(transcriptHasher)
+		//debugPrintSum(transcriptHasher)
+
+		var initialHelloTranscriptHash ciphersuite.Hash
+		initialHelloTranscriptHash.SetSum(hctx.transcriptHasher)
 		hctx.transcriptHasher.Reset()
-		syntheticHashData := []byte{byte(handshake.MsgTypeMessageHash), 0, 0, byte(len(initialHelloTranscriptHash))}
+		syntheticHashData := []byte{byte(handshake.MsgTypeMessageHash), 0, 0, byte(initialHelloTranscriptHash.Len())}
 		_, _ = hctx.transcriptHasher.Write(syntheticHashData)
-		_, _ = hctx.transcriptHasher.Write(initialHelloTranscriptHash)
+		_, _ = hctx.transcriptHasher.Write(initialHelloTranscriptHash.GetValue())
 
 		msg.AddToHash(hctx.transcriptHasher)
 
@@ -48,7 +67,6 @@ func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg han
 	}
 	// server decided to skip HRR, this is tricky SM switch, we should carefully test it
 	conn.hctx.serverUsedHRR = false
-	conn.keys.SuiteID = ciphersuite.TLS_AES_128_GCM_SHA256
 	conn.stateID = smIDHandshakeClientExpectServerHello
 	return conn.state().OnServerHello(conn, msg, msgParsed)
 }

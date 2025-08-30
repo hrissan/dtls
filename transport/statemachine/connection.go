@@ -4,7 +4,6 @@
 package statemachine
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"math"
 	"net/netip"
@@ -136,7 +135,7 @@ func (conn *Connection) startConnection(tr *Transport, handler ConnectionHandler
 	if conn.stateID != smIDClosed {
 		return ErrConnectionInProgress
 	}
-	hctx := newHandshakeContext(sha256.New()) // TODO - take from pool
+	hctx := newHandshakeContext(nil) // TODO - take from pool
 	tr.opts.Rnd.ReadMust(hctx.localRandom[:])
 	// We'd like to postpone ECC until HRR, but wolfssl requires key_share in the first client_hello
 	// TODO - offload to separate goroutine
@@ -154,7 +153,7 @@ func (conn *Connection) startConnection(tr *Transport, handler ConnectionHandler
 
 	clientHelloMsg := hctx.generateClientHello(false, cookie.Cookie{})
 
-	if err := hctx.PushMessage(conn, clientHelloMsg); err != nil {
+	if err := hctx.PushMessageNoHasher(conn, clientHelloMsg); err != nil {
 		conn.hctx = nil // TODO - reuse
 		return err
 	}

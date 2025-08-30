@@ -123,8 +123,8 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		msg.AddToHashPartial(transcriptHasher, len(msg.Body)-bindersListLength)
 		debugPrintSum(transcriptHasher)
 
-		var transcriptHashStorage [constants.MaxHashLength]byte
-		transcriptHash := transcriptHasher.Sum(transcriptHashStorage[:0])
+		var transcriptHash ciphersuite.Hash
+		transcriptHash.SetSum(transcriptHasher)
 
 		var pskStorage [256]byte
 		pskNum, psk, identity, ok := selectPSKIdentity(pskStorage[:], t.opts, &msgClientHello.Extensions)
@@ -136,7 +136,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 			var binderKey [32]byte
 			earlySecret, binderKey = keys.ComputeEarlySecret(psk, "ext binder")
 			mustBeFinished := keys.ComputeFinished(sha256.New(), binderKey[:], transcriptHash)
-			if string(identity.Binder) == string(mustBeFinished) {
+			if string(identity.Binder) == string(mustBeFinished.GetValue()) {
 				pskSelected = true
 				pskSelectedIdentity = pskNum
 				fmt.Printf("PSK auth selected, identity %d (%q) binders length=%d\n", pskNum, identity.Identity, bindersListLength)

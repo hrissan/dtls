@@ -7,7 +7,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"github.com/hrissan/dtls/constants"
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/keys"
@@ -21,11 +21,11 @@ func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handsha
 	hctx := conn.hctx
 	hctx.receivedNextFlight(conn)
 	// [rfc8446:4.4.4] - finished
-	var finishedTranscriptHashStorage [constants.MaxHashLength]byte
-	finishedTranscriptHash := hctx.transcriptHasher.Sum(finishedTranscriptHashStorage[:0])
+	var finishedTranscriptHash ciphersuite.Hash
+	finishedTranscriptHash.SetSum(hctx.transcriptHasher)
 
 	mustBeFinished := keys.ComputeFinished(sha256.New(), hctx.handshakeTrafficSecretReceive[:], finishedTranscriptHash)
-	if string(msgParsed.VerifyData) != string(mustBeFinished) {
+	if string(msgParsed.VerifyData) != string(mustBeFinished.GetValue()) {
 		return dtlserrors.ErrFinishedMessageVerificationFailed
 	}
 	fmt.Printf("finished message verify ok: %+v\n", msgParsed)

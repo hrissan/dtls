@@ -42,9 +42,11 @@ func (keys *DirectionKeys) ComputeHandshakeKeys(roleServer bool, handshakeSecret
 }
 
 // TODO - remove allocations
-func ComputeFinished(hasher hash.Hash, HandshakeTrafficSecret []byte, transcriptHash []byte) []byte {
+func ComputeFinished(hasher hash.Hash, HandshakeTrafficSecret []byte, transcriptHash ciphersuite.Hash) ciphersuite.Hash {
 	finishedKey := hkdf.ExpandLabel(hasher, HandshakeTrafficSecret, "finished", []byte{}, hasher.Size())
-	return hkdf.HMAC(finishedKey, transcriptHash[:], hasher)
+	var result ciphersuite.Hash
+	result.SetValue(hkdf.HMAC(finishedKey, transcriptHash.GetValue(), hasher))
+	return result
 }
 
 func (keys *DirectionKeys) ComputeApplicationTrafficSecret(roleServer bool, masterSecret []byte, trHash []byte) {

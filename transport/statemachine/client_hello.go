@@ -11,7 +11,6 @@ import (
 	"net/netip"
 
 	"github.com/hrissan/dtls/ciphersuite"
-	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
@@ -182,8 +181,8 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 		panic("pushing ServerHello must never fail")
 	}
 
-	var handshakeTranscriptHashStorage [constants.MaxHashLength]byte
-	handshakeTranscriptHash := hctx.transcriptHasher.Sum(handshakeTranscriptHashStorage[:0])
+	var handshakeTranscriptHash ciphersuite.Hash
+	handshakeTranscriptHash.SetSum(hctx.transcriptHasher)
 
 	// TODO - move to calculator goroutine
 	remotePublic, err := ecdh.X25519().NewPublicKey(msgClientHello.Extensions.KeyShare.X25519PublicKey[:])
@@ -196,7 +195,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	}
 
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
-		conn.keys.ComputeHandshakeKeys(true, hctx.earlySecret[:], sharedSecret, handshakeTranscriptHash)
+		conn.keys.ComputeHandshakeKeys(true, hctx.earlySecret[:], sharedSecret, handshakeTranscriptHash.GetValue())
 
 	if err := hctx.PushMessage(conn, generateEncryptedExtensions()); err != nil {
 		return err
@@ -220,8 +219,8 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 		return err
 	}
 
-	handshakeTranscriptHash = hctx.transcriptHasher.Sum(handshakeTranscriptHashStorage[:0])
-	conn.keys.ComputeApplicationTrafficSecret(true, hctx.masterSecret[:], handshakeTranscriptHash)
+	handshakeTranscriptHash.SetSum(hctx.transcriptHasher)
+	conn.keys.ComputeApplicationTrafficSecret(true, hctx.masterSecret[:], handshakeTranscriptHash.GetValue())
 	conn.stateID = smIDHandshakeServerExpectFinished
 	return nil
 }

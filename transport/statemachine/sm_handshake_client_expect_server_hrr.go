@@ -17,7 +17,7 @@ type smHandshakeClientExpectServerHRR struct {
 func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg handshake.Message, msgParsed handshake.MsgServerHello) error {
 	hctx := conn.hctx
 	hctx.receivedNextFlight(conn)
-	if err := IsSupportedServerHello(&msgParsed); err != nil {
+	if err := conn.tr.IsSupportedServerHello(&msgParsed); err != nil {
 		return err
 	}
 	if hctx.transcriptHasher != nil {
@@ -27,7 +27,7 @@ func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg han
 	hctx.transcriptHasher = conn.keys.Suite().NewHasher()
 	// only after we know ciphersuite, can we now hash ClientHello1
 	{
-		clientHello1Msg := hctx.generateClientHello(false, cookie.Cookie{})
+		clientHello1Msg := hctx.generateClientHello(conn.tr.opts, false, cookie.Cookie{})
 		clientHello1Msg.AddToHash(hctx.transcriptHasher)
 	}
 	if msgParsed.IsHelloRetryRequest() {
@@ -52,7 +52,7 @@ func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg han
 
 		msg.AddToHash(hctx.transcriptHasher)
 
-		clientHelloMsg := hctx.generateClientHello(true, msgParsed.Extensions.Cookie)
+		clientHelloMsg := hctx.generateClientHello(conn.tr.opts, true, msgParsed.Extensions.Cookie)
 		if err := hctx.PushMessage(conn, clientHelloMsg); err != nil {
 			return err
 		}

@@ -30,8 +30,14 @@ type TransportOptions struct {
 	MaxHelloRetryQueueSize int
 	MaxHandshakes          int // TODO - implement actual limit
 	MaxConnections         int
-	CIDLength              int  // We use fixed size connection ID, so we can parse ciphertext records easily [rfc9147:9.1]
-	Use8BitSeq             bool // We have to support receiving them, so we also implemented sending them
+	CIDLength              int // We use fixed size connection ID, so we can parse ciphertext records easily [rfc9147:9.1]
+
+	Use8BitSeq bool // We have to support receiving them, so we also implemented sending them
+
+	// TODO - set priority
+	TLS_AES_128_GCM_SHA256       bool
+	TLS_AES_256_GCM_SHA384       bool
+	TLS_CHACHA20_POLY1305_SHA256 bool
 
 	ServerCertificate tls.Certificate // some shortcut
 
@@ -45,18 +51,21 @@ type TransportOptions struct {
 
 func DefaultTransportOptions(roleServer bool, rnd dtlsrand.Rand, stats stats.Stats) *TransportOptions {
 	return &TransportOptions{
-		RoleServer:             roleServer,
-		Rnd:                    rnd,
-		Stats:                  stats,
-		Preallocate:            true,
-		SocketReadErrorDelay:   50 * time.Millisecond,
-		SocketWriteErrorDelay:  5 * time.Millisecond,
-		CookieValidDuration:    120 * time.Second, // larger value for debug
-		MaxHelloRetryQueueSize: 10_000,
-		MaxHandshakes:          1000,
-		MaxConnections:         100_000,
-		CIDLength:              0,
-		Use8BitSeq:             false,
+		RoleServer:                   roleServer,
+		Rnd:                          rnd,
+		Stats:                        stats,
+		Preallocate:                  true,
+		SocketReadErrorDelay:         50 * time.Millisecond,
+		SocketWriteErrorDelay:        5 * time.Millisecond,
+		CookieValidDuration:          120 * time.Second, // larger value for debug
+		MaxHelloRetryQueueSize:       10_000,
+		MaxHandshakes:                1000,
+		MaxConnections:               100_000,
+		CIDLength:                    0,
+		Use8BitSeq:                   false,
+		TLS_AES_128_GCM_SHA256:       false,
+		TLS_AES_256_GCM_SHA384:       true,
+		TLS_CHACHA20_POLY1305_SHA256: false,
 	}
 }
 

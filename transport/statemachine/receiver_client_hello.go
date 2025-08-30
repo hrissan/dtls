@@ -35,7 +35,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	}
 	// rc.opts.Stats.ClientHelloMessage(msg.Header, msgClientHello, addr)
 
-	suiteID, err := IsSupportedClientHello(&msgClientHello)
+	suiteID, err := t.IsSupportedClientHello(&msgClientHello)
 	if err != nil {
 		return conn, err
 	}
@@ -88,6 +88,8 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		// [rfc8446:4.1.2] In that case, the client MUST send the same ClientHello without modification
 		return conn, dtlserrors.ErrClientHelloUnsupportedParams
 	}
+	// TODO - seems wolfssl always uses TLS_AES_128_GCM_SHA256 for PSK.
+	// should investigate why so, check with openssl
 	suite := ciphersuite.GetSuite(suiteID)
 	transcriptHasher := suite.NewHasher()
 	var earlySecret ciphersuite.Hash
@@ -206,12 +208,9 @@ func selectPSKIdentity(pskStorage []byte, opts *options.TransportOptions, ext *h
 	return 0, nil, handshake.PSKIdentity{}, false
 }
 
-func IsSupportedClientHello(msgParsed *handshake.MsgClientHello) (ciphersuite.ID, error) {
+func (t *Transport) IsSupportedClientHello(msgParsed *handshake.MsgClientHello) (ciphersuite.ID, error) {
 	if !msgParsed.Extensions.SupportedVersions.DTLS_13 {
 		return 0, dtlserrors.ErrParamsSupportOnlyDTLS13
-	}
-	if !msgParsed.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 {
-		return 0, dtlserrors.ErrParamsSupportCiphersuites
 	}
 	if !msgParsed.Extensions.SupportedGroups.X25519 {
 		return 0, dtlserrors.ErrParamsSupportKeyShare
@@ -220,5 +219,11 @@ func IsSupportedClientHello(msgParsed *handshake.MsgClientHello) (ciphersuite.ID
 		// [rfc8446:4.2.9]
 		return 0, dtlserrors.ErrPskKeyRequiresPskModes
 	}
-	return ciphersuite.TLS_AES_128_GCM_SHA256, nil
+	if msgParsed.CipherSuites.HasCypherSuite_TLS_AES_256_GCM_SHA384 && t.opts.TLS_AES_256_GCM_SHA384 {
+		return ciphersuite.TLS_AES_256_GCM_SHA384, nil
+	}
+	if msgParsed.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 && t.opts.TLS_AES_128_GCM_SHA256 {
+		return ciphersuite.TLS_AES_128_GCM_SHA256, nil
+	}
+	return 0, dtlserrors.ErrParamsSupportCiphersuites
 }

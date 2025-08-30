@@ -4,6 +4,7 @@
 package statemachine
 
 import (
+	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
 
@@ -19,7 +20,6 @@ type smHandshakeClientExpectCertVerify struct {
 
 func (*smHandshakeClientExpectCertVerify) OnCertificateVerify(conn *Connection, msg handshake.Message, msgParsed handshake.MsgCertificateVerify) error {
 	hctx := conn.hctx
-	suite := conn.keys.Suite()
 	hctx.receivedNextFlight(conn)
 	// TODO - We do not want checks here, because receiving goroutine should not be blocked for long
 	// We have to first receive everything up to finished, probably send ack,
@@ -37,7 +37,7 @@ func (*smHandshakeClientExpectCertVerify) OnCertificateVerify(conn *Connection, 
 	certVerifyTranscriptHash.SetSum(hctx.transcriptHasher)
 
 	// TODO - offload to calc goroutine here
-	sigMessageHash := signature.CalculateCoveredContentHash(suite.NewHasher(), certVerifyTranscriptHash.GetValue())
+	sigMessageHash := signature.CalculateCoveredContentHash(sha256.New(), certVerifyTranscriptHash.GetValue())
 
 	cert, err := x509.ParseCertificate(hctx.certificateChain.Certificates[0].CertData) // TODO - reuse certificates
 	if err != nil {

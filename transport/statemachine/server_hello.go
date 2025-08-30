@@ -19,12 +19,14 @@ func (conn *Connection) receivedServerHelloFragment(opts *options.TransportOptio
 	return conn.state().OnHandshakeMsgFragment(conn, opts, fragment, rn)
 }
 
-func (hctx *handshakeContext) generateClientHello(setCookie bool, ck cookie.Cookie) handshake.Message {
+func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions, setCookie bool, ck cookie.Cookie) handshake.Message {
 	// [rfc8446:4.1.2] the client MUST send the same ClientHello without modification, except as follows
 	clientHello := handshake.MsgClientHello{
 		Random: hctx.localRandom,
 	}
-	clientHello.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 = true
+	clientHello.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 = opts.TLS_AES_128_GCM_SHA256
+	clientHello.CipherSuites.HasCypherSuite_TLS_AES_256_GCM_SHA384 = opts.TLS_AES_256_GCM_SHA384
+	clientHello.CipherSuites.HasCypherSuite_TLS_CHACHA20_POLY1305_SHA256 = opts.TLS_CHACHA20_POLY1305_SHA256
 	clientHello.Extensions.SupportedVersionsSet = true
 	clientHello.Extensions.SupportedVersions.DTLS_13 = true
 	clientHello.Extensions.SupportedGroupsSet = true
@@ -72,12 +74,15 @@ func (hctx *handshakeContext) generateClientHello(setCookie bool, ck cookie.Cook
 	}
 }
 
-func IsSupportedServerHello(msgParsed *handshake.MsgServerHello) error {
+func (tr *Transport) IsSupportedServerHello(msgParsed *handshake.MsgServerHello) error {
 	if msgParsed.Extensions.SupportedVersions.SelectedVersion != handshake.DTLS_VERSION_13 {
 		return dtlserrors.ErrParamsSupportOnlyDTLS13
 	}
-	if msgParsed.CipherSuite != ciphersuite.TLS_AES_128_GCM_SHA256 {
-		return dtlserrors.ErrParamsSupportCiphersuites
+	if msgParsed.CipherSuite == ciphersuite.TLS_AES_128_GCM_SHA256 && tr.opts.TLS_AES_128_GCM_SHA256 {
+		return nil
 	}
-	return nil
+	if msgParsed.CipherSuite == ciphersuite.TLS_AES_256_GCM_SHA384 && tr.opts.TLS_AES_256_GCM_SHA384 {
+		return nil
+	}
+	return dtlserrors.ErrParamsSupportCiphersuites
 }

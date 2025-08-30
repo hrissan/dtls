@@ -20,7 +20,7 @@ type smHandshakeClientExpectServerHello struct {
 func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg handshake.Message, msgParsed handshake.MsgServerHello) error {
 	hctx := conn.hctx
 	hctx.receivedNextFlight(conn)
-	if err := IsSupportedServerHello(&msgParsed); err != nil {
+	if err := conn.tr.IsSupportedServerHello(&msgParsed); err != nil {
 		return err
 	}
 	if msgParsed.IsHelloRetryRequest() {

@@ -6,6 +6,7 @@ package statemachine
 import (
 	"crypto/ecdh"
 	"crypto/rsa"
+	"crypto/sha256"
 	"fmt"
 	"hash"
 	"net/netip"
@@ -100,13 +101,12 @@ func generateServerCertificateVerify(opts *options.TransportOptions, conn *Conne
 	msg := handshake.MsgCertificateVerify{
 		SignatureScheme: handshake.SignatureAlgorithm_RSA_PSS_RSAE_SHA256,
 	}
-	suite := conn.keys.Suite()
 
 	// [rfc8446:4.4.3] - certificate verification
 	var certVerifyTranscriptHash ciphersuite.Hash
 	certVerifyTranscriptHash.SetSum(hctx.transcriptHasher)
 
-	sigMessageHash := signature.CalculateCoveredContentHash(suite.NewHasher(), certVerifyTranscriptHash.GetValue())
+	sigMessageHash := signature.CalculateCoveredContentHash(sha256.New(), certVerifyTranscriptHash.GetValue())
 
 	privateRsa := opts.ServerCertificate.PrivateKey.(*rsa.PrivateKey)
 	sig, err := signature.CreateSignature_RSA_PSS_RSAE_SHA256(opts.Rnd, privateRsa, sigMessageHash.GetValue())

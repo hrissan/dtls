@@ -27,3 +27,17 @@ func (s *impl_TLS_AES_128_GCM_SHA256) NewHMAC(key []byte) hash.Hash {
 func (s *impl_TLS_AES_128_GCM_SHA256) ComputeSymmetricKeys(k *SymmetricKeys, secret []byte) {
 	// TODO
 }
+
+func (s *impl_TLS_AES_128_GCM_SHA256) ZeroHash() Hash {
+	var h Hash
+	h.SetValue(make([]byte, sha256.Size))
+	return h
+}
+
+var emptySha256Hash = sha256.Sum256(nil)
+
+func (s *impl_TLS_AES_128_GCM_SHA256) EmptyHash() Hash {
+	var h Hash
+	h.SetValue(emptySha256Hash[:])
+	return h
+}

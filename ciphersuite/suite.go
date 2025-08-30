@@ -12,6 +12,8 @@ type Suite interface {
 	NewHasher() hash.Hash                                 // used for transcript hash for handshake. Unfortunately, allocates.
 	NewHMAC(key []byte) hash.Hash                         // used for HKDF and such. Unfortunately, allocates.
 	ComputeSymmetricKeys(k *SymmetricKeys, secret []byte) // Unfortunately, allocates.
+	ZeroHash() Hash
+	EmptyHash() Hash
 }
 
 type ID uint16

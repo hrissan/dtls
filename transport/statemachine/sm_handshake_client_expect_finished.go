@@ -24,7 +24,7 @@ func (*smHandshakeClientExpectFinished) OnFinished(conn *Connection, msg handsha
 	var finishedTranscriptHash ciphersuite.Hash
 	finishedTranscriptHash.SetSum(hctx.transcriptHasher)
 
-	mustBeFinished := keys.ComputeFinished(suite, hctx.handshakeTrafficSecretReceive[:], finishedTranscriptHash)
+	mustBeFinished := keys.ComputeFinished(suite, hctx.handshakeTrafficSecretReceive.GetValue(), finishedTranscriptHash)
 	if string(msgParsed.VerifyData) != string(mustBeFinished.GetValue()) {
 		return dtlserrors.ErrFinishedMessageVerificationFailed
 	}
@@ -35,7 +35,7 @@ func (*smHandshakeClientExpectFinished) OnFinished(conn *Connection, msg handsha
 	var handshakeTranscriptHash ciphersuite.Hash
 	handshakeTranscriptHash.SetSum(hctx.transcriptHasher)
 
-	conn.keys.ComputeApplicationTrafficSecret(suite, false, hctx.masterSecret[:], handshakeTranscriptHash.GetValue())
+	conn.keys.ComputeApplicationTrafficSecret(suite, false, hctx.masterSecret, handshakeTranscriptHash)
 	conn.stateID = smIDPostHandshake
 
 	// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here

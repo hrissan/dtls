@@ -10,7 +10,6 @@ import (
 	"fmt"
 
 	"github.com/hrissan/dtls/dtlserrors"
-	"github.com/hrissan/dtls/hkdf"
 	"github.com/hrissan/dtls/record"
 )
 
@@ -21,12 +20,12 @@ type SymmetricKeys struct {
 	Epoch   uint16 // here to save sizeof due to alignment
 }
 
-func (keys *SymmetricKeys) ComputeKeys(suite Suite, secret []byte) {
+func (keys *SymmetricKeys) ComputeKeys(suite Suite, secret Hash) {
 	const keySize = 16 // TODO - should depend on cipher suite
-	hmacSecret := suite.NewHMAC(secret)
-	writeKey := hkdf.ExpandLabel(hmacSecret, "key", []byte{}, keySize)
-	copy(keys.WriteIV[:], hkdf.ExpandLabel(hmacSecret, "iv", []byte{}, len(keys.WriteIV)))
-	snKey := hkdf.ExpandLabel(hmacSecret, "sn", []byte{}, keySize)
+	hmacSecret := suite.NewHMAC(secret.GetValue())
+	writeKey := ExpandLabel(hmacSecret, "key", []byte{}, keySize)
+	copy(keys.WriteIV[:], ExpandLabel(hmacSecret, "iv", []byte{}, len(keys.WriteIV)))
+	snKey := ExpandLabel(hmacSecret, "sn", []byte{}, keySize)
 
 	keys.Write = NewGCMCipher(NewAesCipher(writeKey))
 	keys.SN = NewAesCipher(snKey)

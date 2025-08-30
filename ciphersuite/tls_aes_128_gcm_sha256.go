@@ -25,7 +25,7 @@ func (s *impl_TLS_AES_128_GCM_SHA256) NewHMAC(key []byte) hash.Hash {
 }
 
 func (s *impl_TLS_AES_128_GCM_SHA256) ComputeSymmetricKeys(k *SymmetricKeys, secret []byte) {
-	// TODO
+	panic("TODO")
 }
 
 func (s *impl_TLS_AES_128_GCM_SHA256) ZeroHash() Hash {

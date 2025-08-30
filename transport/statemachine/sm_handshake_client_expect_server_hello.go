@@ -58,7 +58,7 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	}
 	earlySecret, _ := keys.ComputeEarlySecret(conn.keys.Suite(), nil, "")
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
-		conn.keys.ComputeHandshakeKeys(conn.keys.Suite(), false, earlySecret, sharedSecret, handshakeTranscriptHash.GetValue())
+		conn.keys.ComputeHandshakeKeys(conn.keys.Suite(), false, earlySecret, sharedSecret, handshakeTranscriptHash)
 
 	conn.stateID = smIDHandshakeClientExpectServerEE
 	fmt.Printf("processed server hello\n")

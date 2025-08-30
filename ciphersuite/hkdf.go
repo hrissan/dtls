@@ -3,7 +3,7 @@
 
 // Portions of this file copied from some gist with unclear copyright.
 
-package hkdf
+package ciphersuite
 
 import (
 	"encoding/binary"
@@ -15,10 +15,11 @@ import (
 
 // TODO - remove allocations
 
-func Extract(hmacSalt hash.Hash, keymaterial []byte) []byte {
+func Extract(hmacSalt hash.Hash, keymaterial []byte) (result Hash) {
 	hmacSalt.Reset()
 	hmacSalt.Write(keymaterial)
-	return hmacSalt.Sum(nil)
+	result.SetSum(hmacSalt)
+	return
 }
 
 func Expand(hmacSecret hash.Hash, info []byte, outlength int) []byte {

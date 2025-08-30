@@ -7,7 +7,6 @@ import (
 	"hash"
 
 	"github.com/hrissan/dtls/ciphersuite"
-	"github.com/hrissan/dtls/hkdf"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/replay"
 )
@@ -75,31 +74,33 @@ func ComputeEarlySecret(suite ciphersuite.Suite, psk []byte, extOrResLabel strin
 	emptyHash := suite.EmptyHash()
 
 	salt := []byte{}
-	zeroHash := suite.ZeroHash()
-	if len(psk) == 0 {
-		psk = zeroHash.GetValue()
-	}
 	hmacSalt := suite.NewHMAC(salt)
-	earlySecret.SetValue(hkdf.Extract(hmacSalt, psk[:]))
+
+	if len(psk) != 0 {
+		earlySecret = ciphersuite.Extract(hmacSalt, psk)
+	} else {
+		zeroHash := suite.ZeroHash()
+		earlySecret = ciphersuite.Extract(hmacSalt, zeroHash.GetValue())
+	}
 
 	if len(extOrResLabel) != 0 { // optimization
 		hmacEarlySecret := suite.NewHMAC(earlySecret.GetValue())
-		binderKey.SetValue(deriveSecret(hmacEarlySecret, extOrResLabel, emptyHash.GetValue()))
+		binderKey = deriveSecret(hmacEarlySecret, extOrResLabel, emptyHash)
 	}
 	return
 }
 
-func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool, earlySecret ciphersuite.Hash, sharedSecret []byte, trHash []byte) (
-	masterSecret [32]byte, handshakeTrafficSecretSend [32]byte, handshakeTrafficSecretReceive [32]byte) {
+func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool, earlySecret ciphersuite.Hash, sharedSecret []byte, trHash ciphersuite.Hash) (
+	masterSecret ciphersuite.Hash, handshakeTrafficSecretSend ciphersuite.Hash, handshakeTrafficSecretReceive ciphersuite.Hash) {
 	emptyHash := suite.EmptyHash()
 
 	hmacEarlySecret := suite.NewHMAC(earlySecret.GetValue())
 
-	derivedSecret := deriveSecret(hmacEarlySecret, "derived", emptyHash.GetValue())
-	hmacderivedSecret := suite.NewHMAC(derivedSecret)
+	derivedSecret := deriveSecret(hmacEarlySecret, "derived", emptyHash)
+	hmacderivedSecret := suite.NewHMAC(derivedSecret.GetValue())
 
-	handshakeSecret := hkdf.Extract(hmacderivedSecret, sharedSecret)
-	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret)
+	handshakeSecret := ciphersuite.Extract(hmacderivedSecret, sharedSecret)
+	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret.GetValue())
 
 	handshakeTrafficSecretSend = keys.Send.ComputeHandshakeKeys(suite, serverRole, hmacHandshakeSecret, trHash)
 	keys.SendNextSegmentSequence = 0
@@ -108,19 +109,19 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 	keys.ReceiveNextSegmentSequence.Reset()
 	keys.ExpectReceiveEpochUpdate = true
 
-	derivedSecret = deriveSecret(hmacHandshakeSecret, "derived", emptyHash.GetValue())
-	hmacderivedSecret = suite.NewHMAC(derivedSecret)
+	derivedSecret = deriveSecret(hmacHandshakeSecret, "derived", emptyHash)
+	hmacderivedSecret = suite.NewHMAC(derivedSecret.GetValue())
 	zeros := suite.ZeroHash()
-	masterSecretSlice := hkdf.Extract(hmacderivedSecret, zeros.GetValue())
-	copy(masterSecret[:], masterSecretSlice)
+	masterSecret = ciphersuite.Extract(hmacderivedSecret, zeros.GetValue())
 	return
 }
 
-func (keys *Keys) ComputeApplicationTrafficSecret(suite ciphersuite.Suite, serverRole bool, masterSecret []byte, trHash []byte) {
+func (keys *Keys) ComputeApplicationTrafficSecret(suite ciphersuite.Suite, serverRole bool, masterSecret ciphersuite.Hash, trHash ciphersuite.Hash) {
 	keys.Send.ComputeApplicationTrafficSecret(suite, serverRole, masterSecret, trHash)
 	keys.Receive.ComputeApplicationTrafficSecret(suite, !serverRole, masterSecret, trHash)
 }
 
-func deriveSecret(hmacSecret hash.Hash, label string, sum []byte) []byte {
-	return hkdf.ExpandLabel(hmacSecret, label, sum, len(sum))
+func deriveSecret(hmacSecret hash.Hash, label string, sum ciphersuite.Hash) (result ciphersuite.Hash) {
+	result.SetValue(ciphersuite.ExpandLabel(hmacSecret, label, sum.GetValue(), sum.Len()))
+	return result
 }

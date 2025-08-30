@@ -22,9 +22,9 @@ type handshakeContext struct {
 	x25519Secret *ecdh.PrivateKey // Tons of allocations here. TODO - compute in calculator goroutine
 
 	earlySecret                   ciphersuite.Hash
-	masterSecret                  [32]byte
-	handshakeTrafficSecretSend    [32]byte // we need this to generate finished message.
-	handshakeTrafficSecretReceive [32]byte // we need this to check peer's finished message.
+	masterSecret                  ciphersuite.Hash
+	handshakeTrafficSecretSend    ciphersuite.Hash // we need this to generate finished message.
+	handshakeTrafficSecretReceive ciphersuite.Hash // we need this to check peer's finished message.
 
 	// it seems we do not need this protection, but standard says we must have it. TODO - decide later
 	// receiveNextSegmentSequenceEpoch0 replay.Window

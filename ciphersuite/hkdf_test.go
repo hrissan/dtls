@@ -3,7 +3,7 @@
 
 // Portions of this file copied from some gist with unclear copyright.
 
-package hkdf_test
+package ciphersuite_test
 
 import (
 	"crypto/hmac"
@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hrissan/dtls/hkdf"
+	"github.com/hrissan/dtls/ciphersuite"
 )
 
 func equals(t *testing.T, exp, act interface{}) {
@@ -31,10 +31,11 @@ func TestVec1(t *testing.T) {
 	L := 42
 
 	hmacSalt := hmac.New(sha256.New, salt)
-	prk := hkdf.Extract(hmacSalt, ikm)
+	prkh := ciphersuite.Extract(hmacSalt, ikm)
+	prk := prkh.GetValue()
 	equals(t, eprk, prk)
 	hmacPrk := hmac.New(sha256.New, prk)
-	okm := hkdf.Expand(hmacPrk, info, L)
+	okm := ciphersuite.Expand(hmacPrk, info, L)
 	equals(t, eokm, okm)
 }
 
@@ -64,10 +65,11 @@ func TestVec2(t *testing.T) {
 	L := 82
 
 	hmacSalt := hmac.New(sha256.New, salt)
-	prk := hkdf.Extract(hmacSalt, ikm)
+	prkh := ciphersuite.Extract(hmacSalt, ikm)
+	prk := prkh.GetValue()
 	equals(t, eprk, prk)
 	hmacPrk := hmac.New(sha256.New, prk)
-	okm := hkdf.Expand(hmacPrk, info, L)
+	okm := ciphersuite.Expand(hmacPrk, info, L)
 	equals(t, eokm, okm)
 }
 
@@ -81,9 +83,10 @@ func TestVec3(t *testing.T) {
 	L := 42
 
 	hmacSalt := hmac.New(sha256.New, salt)
-	prk := hkdf.Extract(hmacSalt, ikm)
+	prkh := ciphersuite.Extract(hmacSalt, ikm)
+	prk := prkh.GetValue()
 	equals(t, eprk, prk)
 	hmacPrk := hmac.New(sha256.New, prk)
-	okm := hkdf.Expand(hmacPrk, info, L)
+	okm := ciphersuite.Expand(hmacPrk, info, L)
 	equals(t, eokm, okm)
 }

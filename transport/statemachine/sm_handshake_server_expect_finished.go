@@ -24,13 +24,13 @@ func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handsha
 	var finishedTranscriptHash ciphersuite.Hash
 	finishedTranscriptHash.SetSum(hctx.transcriptHasher)
 
-	mustBeFinished := keys.ComputeFinished(suite, hctx.handshakeTrafficSecretReceive[:], finishedTranscriptHash)
+	mustBeFinished := keys.ComputeFinished(suite, hctx.handshakeTrafficSecretReceive.GetValue(), finishedTranscriptHash)
 	if string(msgParsed.VerifyData) != string(mustBeFinished.GetValue()) {
 		return dtlserrors.ErrFinishedMessageVerificationFailed
 	}
 	fmt.Printf("finished message verify ok: %+v\n", msgParsed)
 	// if conn.hctx.sendQueue.Len() == 0 && conn.keys.Send.Symmetric.Epoch == 2 {
-	conn.keys.Send.Symmetric.ComputeKeys(suite, conn.keys.Send.ApplicationTrafficSecret[:])
+	conn.keys.Send.Symmetric.ComputeKeys(suite, conn.keys.Send.ApplicationTrafficSecret)
 	conn.keys.Send.Symmetric.Epoch = 3
 	conn.keys.SendNextSegmentSequence = 0
 	conn.hctx = nil

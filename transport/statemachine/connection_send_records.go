@@ -4,6 +4,8 @@
 package statemachine
 
 import (
+	"encoding/binary"
+	"fmt"
 	"math"
 	"math/rand"
 
@@ -140,9 +142,49 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, user
 		return 0, record.Number{}, err
 	}
 	rn := record.NumberWith(conn.keys.SendEpoch, seq)
-	encryptSN := !conn.keys.DoNotEncryptSequenceNumbers
-	recordSize = conn.keys.Send.Symmetric.Protect(rn, encryptSN, recordType, datagramLeft, userPadding, hdrSize, insideSize)
-	return recordSize, rn, nil
+	sealSize, snBlockSize := conn.keys.Send.Symmetric.RecordOverhead()
+
+	// format of our encrypted record is fixed.
+	// Saving 1 byte for the sequence number seems very niche.
+	// Saving on not including length of the last datagram is also very hard.
+	// At the point we know it is the last one, we cannot not change header,
+	// because it is "additional data" for AEAD
+	firstByte := record.CiphertextHeaderFirstByte(false, hdrSize == record.OutgoingCiphertextRecordHeader16, true, rn.Epoch())
+	// panic below would mean, caller violated invariant of using datagram space
+	datagramLeft[0] = firstByte
+	datagramLeft[hdrSize+insideSize] = recordType
+	insideSize++
+
+	for i := 0; i != userPadding; i++ {
+		datagramLeft[hdrSize+insideSize] = 0
+		insideSize++
+	}
+	for insideSize+sealSize < snBlockSize {
+		datagramLeft[hdrSize+insideSize] = 0
+		insideSize++
+	}
+	cipherTextLength := safecast.Cast[uint16](insideSize + sealSize)
+
+	var seqNumData []byte
+	if hdrSize == record.OutgoingCiphertextRecordHeader8 {
+		seqNumData = datagramLeft[1:2]
+		seqNumData[0] = byte(rn.SeqNum()) // truncation
+		binary.BigEndian.PutUint16(datagramLeft[2:], cipherTextLength)
+	} else {
+		seqNumData = datagramLeft[1:3]
+		binary.BigEndian.PutUint16(seqNumData, uint16(rn.SeqNum())) // truncation
+		binary.BigEndian.PutUint16(datagramLeft[3:], cipherTextLength)
+	}
+	fmt.Printf("constructing ciphertext type %d with rn={%d,%d} hdrSize = %d body: %x\n", recordType, rn.Epoch(), rn.SeqNum(), hdrSize, datagramLeft[hdrSize:hdrSize+insideSize])
+	conn.keys.Send.Symmetric.AEADEncrypt(rn.SeqNum(), datagramLeft, hdrSize, insideSize)
+	if !conn.keys.DoNotEncryptSequenceNumbers {
+		mask, err := conn.keys.Send.Symmetric.EncryptSeqMask(datagramLeft[hdrSize:])
+		if err != nil {
+			panic("cipher text too short when sending")
+		}
+		encryptSequenceNumbers(seqNumData, mask)
+	}
+	return hdrSize + insideSize + sealSize, rn, nil
 }
 
 func encryptSequenceNumbers(seqNum []byte, mask [2]byte) {

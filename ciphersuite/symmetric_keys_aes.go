@@ -6,12 +6,10 @@ package ciphersuite
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"encoding/binary"
 	"fmt"
 
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/record"
-	"github.com/hrissan/dtls/safecast"
 )
 
 const symmetricKeysAESSealSize = 16
@@ -38,7 +36,7 @@ func NewGCMCipher(block cipher.Block) cipher.AEAD {
 	return c
 }
 
-func (keys *SymmetricKeysAES) encryptSeqMask(cipherText []byte) ([2]byte, error) {
+func (keys *SymmetricKeysAES) EncryptSeqMask(cipherText []byte) ([2]byte, error) {
 	var mask [aes.BlockSize]byte
 	if len(cipherText) < keys.SN.BlockSize() {
 		return [2]byte{}, dtlserrors.WarnCipherTextTooShortForSNDecryption
@@ -51,38 +49,9 @@ func (keys *SymmetricKeysAES) RecordOverhead() (AEADSealSize int, SNBlockSize in
 	return symmetricKeysAESSealSize, aes.BlockSize
 }
 
-func (keys *SymmetricKeysAES) Protect(rn record.Number, encryptSN bool, recordType byte, datagramLeft []byte, userPadding int, hdrSize int, insideSize int) (recordSize int) {
-	fmt.Printf("constructing ciphertext type %d with rn={%d,%d} hdrSize = %d body: %x\n", recordType, rn.Epoch(), rn.SeqNum(), hdrSize, datagramLeft[hdrSize:hdrSize+insideSize])
-
+func (keys *SymmetricKeysAES) AEADEncrypt(seq uint64, datagramLeft []byte, hdrSize int, insideSize int) {
 	iv := keys.WriteIV
-	FillIVSequence(iv[:], rn.SeqNum())
-
-	// format of our encrypted record is fixed.
-	// Saving 1 byte for the sequence number seems very niche.
-	// Saving on not including length of the last datagram is also very hard.
-	// At the point we know it is the last one, we cannot not change header,
-	// because it is "additional data" for AEAD
-	firstByte := record.CiphertextHeaderFirstByte(false, hdrSize == record.OutgoingCiphertextRecordHeader16, true, rn.Epoch())
-	// panic below would mean, caller violated invariant of using datagram space
-	datagramLeft[0] = firstByte
-	datagramLeft[hdrSize+insideSize] = recordType
-	insideSize++
-
-	for i := 0; i != userPadding; i++ {
-		datagramLeft[hdrSize+insideSize] = 0
-		insideSize++
-	}
-
-	var seqNumData []byte
-	if hdrSize == record.OutgoingCiphertextRecordHeader8 {
-		seqNumData = datagramLeft[1:2]
-		seqNumData[0] = byte(rn.SeqNum()) // truncation
-		binary.BigEndian.PutUint16(datagramLeft[2:], safecast.Cast[uint16](insideSize+symmetricKeysAESSealSize))
-	} else {
-		seqNumData = datagramLeft[1:3]
-		binary.BigEndian.PutUint16(seqNumData, uint16(rn.SeqNum())) // truncation
-		binary.BigEndian.PutUint16(datagramLeft[3:], safecast.Cast[uint16](insideSize+symmetricKeysAESSealSize))
-	}
+	FillIVSequence(iv[:], seq)
 
 	encrypted := keys.Write.Seal(datagramLeft[hdrSize:hdrSize], iv[:], datagramLeft[hdrSize:hdrSize+insideSize], datagramLeft[:hdrSize])
 	if &encrypted[0] != &datagramLeft[hdrSize] {
@@ -91,21 +60,11 @@ func (keys *SymmetricKeysAES) Protect(rn record.Number, encryptSN bool, recordTy
 	if len(encrypted) != len(datagramLeft[hdrSize:hdrSize+insideSize+symmetricKeysAESSealSize]) {
 		panic("gcm.Seal length mismatch")
 	}
-
-	if encryptSN {
-		mask, err := keys.encryptSeqMask(datagramLeft[hdrSize:])
-		if err != nil {
-			panic("cipher text too short when sending")
-		}
-		encryptSeq(seqNumData, mask)
-	}
-	//	fmt.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
-	return hdrSize + insideSize + symmetricKeysAESSealSize
 }
 
 func (keys *SymmetricKeysAES) Deprotect(hdr record.Ciphertext, encryptSN bool, expectedSN uint64) (decrypted []byte, seq uint64, contentType byte, err error) {
 	if encryptSN {
-		mask, err := keys.encryptSeqMask(hdr.Body)
+		mask, err := keys.EncryptSeqMask(hdr.Body)
 		if err != nil {
 			return nil, 0, 0, err
 		}

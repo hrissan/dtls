@@ -12,10 +12,11 @@ import (
 )
 
 type SymmetricKeys interface {
+	EncryptSeqMask(cipherText []byte) ([2]byte, error)
+
 	RecordOverhead() (AEADSealSize int, SNBlockSize int)
 
-	// Pass the same datagramLeft, returned hdrSize, and pass insideSize, how many data copied into insideBody
-	Protect(rn record.Number, encryptSN bool, recordType byte, datagramLeft []byte, userPadding int, hdrSize int, insideSize int) (recordSize int)
+	AEADEncrypt(seq uint64, datagramLeft []byte, hdrSize int, insideSize int)
 
 	// Warning - decrypts in place, seqNumData and body can be garbage after unsuccessfull decryption
 	Deprotect(hdr record.Ciphertext, encryptSN bool, expectedSN uint64) (decrypted []byte, seq uint64, contentType byte, err error)

@@ -20,6 +20,53 @@ type SymmetricKeysAES struct {
 	WriteIV [12]byte
 }
 
+func (keys *SymmetricKeysAES) RecordOverhead() (AEADSealSize int, MinCiphertextSize int) {
+	return symmetricKeysAESSealSize, aes.BlockSize
+}
+
+func (keys *SymmetricKeysAES) EncryptSeqMask(ciphertext []byte) ([2]byte, error) {
+	var mask [aes.BlockSize]byte
+	if len(ciphertext) < keys.SN.BlockSize() {
+		return [2]byte{}, dtlserrors.WarnCipherTextTooShortForSNDecryption
+	}
+	keys.SN.Encrypt(mask[:], ciphertext)
+	return [2]byte(mask[0:2]), nil
+}
+
+func (keys *SymmetricKeysAES) AEADEncrypt(seq uint64, datagramLeft []byte, hdrSize int, plaintextSize int) {
+	iv := keys.WriteIV
+	FillIVSequence(iv[:], seq)
+
+	additionalData := datagramLeft[:hdrSize]
+	plaintext := datagramLeft[hdrSize : hdrSize+plaintextSize]
+
+	encrypted := keys.Write.Seal(datagramLeft[hdrSize:hdrSize], iv[:], plaintext, additionalData)
+	if &encrypted[0] != &datagramLeft[hdrSize] {
+		panic("gcm.Seal reallocated datagram storage")
+	}
+	if len(encrypted) != len(plaintext)+symmetricKeysAESSealSize {
+		panic("gcm.Seal length mismatch")
+	}
+}
+
+func (keys *SymmetricKeysAES) AEADDecrypt(rec record.Ciphertext, seq uint64) (plaintextSize int, err error) {
+	gcm := keys.Write
+	iv := keys.WriteIV // copy, otherwise disaster
+
+	FillIVSequence(iv[:], seq)
+	decrypted, err := gcm.Open(rec.Body[:0], iv[:], rec.Body, rec.Header)
+	if err != nil {
+		return 0, dtlserrors.WarnAEADDeprotectionFailed
+	}
+	if &decrypted[0] != &rec.Body[0] {
+		panic("gcm.Open reallocated datagram storage")
+	}
+	if len(decrypted)+symmetricKeysAESSealSize != len(rec.Body) {
+		panic("unexpected decrypted body size")
+	}
+	return len(decrypted), nil
+}
+
 func NewAesCipher(key []byte) cipher.Block {
 	c, err := aes.NewCipher(key)
 	if err != nil {
@@ -46,48 +93,4 @@ func (keys *SymmetricKeysAES) fillWithSecret(hmacSecret hash.Hash, keyStorage []
 	keys.SN = NewAesCipher(keyStorage[:])
 
 	HKDFExpandLabel(keys.WriteIV[:], hmacSecret, "iv", nil)
-}
-
-func (keys *SymmetricKeysAES) EncryptSeqMask(cipherText []byte) ([2]byte, error) {
-	var mask [aes.BlockSize]byte
-	if len(cipherText) < keys.SN.BlockSize() {
-		return [2]byte{}, dtlserrors.WarnCipherTextTooShortForSNDecryption
-	}
-	keys.SN.Encrypt(mask[:], cipherText)
-	return [2]byte(mask[0:2]), nil
-}
-
-func (keys *SymmetricKeysAES) RecordOverhead() (AEADSealSize int, MinCiphertextSize int) {
-	return symmetricKeysAESSealSize, aes.BlockSize
-}
-
-func (keys *SymmetricKeysAES) AEADEncrypt(seq uint64, datagramLeft []byte, hdrSize int, insideSize int) {
-	iv := keys.WriteIV
-	FillIVSequence(iv[:], seq)
-
-	encrypted := keys.Write.Seal(datagramLeft[hdrSize:hdrSize], iv[:], datagramLeft[hdrSize:hdrSize+insideSize], datagramLeft[:hdrSize])
-	if &encrypted[0] != &datagramLeft[hdrSize] {
-		panic("gcm.Seal reallocated datagram storage")
-	}
-	if len(encrypted) != len(datagramLeft[hdrSize:hdrSize+insideSize+symmetricKeysAESSealSize]) {
-		panic("gcm.Seal length mismatch")
-	}
-}
-
-func (keys *SymmetricKeysAES) AEADDecrypt(hdr record.Ciphertext, seq uint64) (decrypted []byte, err error) {
-	gcm := keys.Write
-	iv := keys.WriteIV // copy, otherwise disaster
-
-	FillIVSequence(iv[:], seq)
-	decrypted, err = gcm.Open(hdr.Body[:0], iv[:], hdr.Body, hdr.Header)
-	if err != nil {
-		return nil, dtlserrors.WarnAEADDeprotectionFailed
-	}
-	if &decrypted[0] != &hdr.Body[0] {
-		panic("gcm.Open reallocated datagram storage")
-	}
-	if len(decrypted) != len(hdr.Body)-symmetricKeysAESSealSize {
-		panic("unexpected decrypted body size")
-	}
-	return decrypted, nil
 }

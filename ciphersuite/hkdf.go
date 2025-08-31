@@ -8,7 +8,6 @@ package ciphersuite
 import (
 	"encoding/binary"
 	"hash"
-	"math"
 
 	"github.com/hrissan/dtls/safecast"
 )
@@ -35,11 +34,8 @@ func HKDFExpand(dst []byte, hmacSecret hash.Hash, info []byte) {
 }
 
 func HKDFExpandLabel(dst []byte, hmacSecret hash.Hash, label string, context []byte) {
-	if len(dst) > math.MaxUint16 {
-		panic("invalid expand label result length")
-	}
 	hkdflabel := make([]byte, 0, 128)
-	hkdflabel = binary.BigEndian.AppendUint16(hkdflabel, uint16(len(dst))) // safe due to check above
+	hkdflabel = binary.BigEndian.AppendUint16(hkdflabel, safecast.Cast[uint16](len(dst)))
 	hkdflabel = append(hkdflabel, safecast.Cast[byte](len(label)+6))
 	hkdflabel = append(hkdflabel, "dtls13"...)
 	hkdflabel = append(hkdflabel, label...)

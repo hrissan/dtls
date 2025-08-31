@@ -28,7 +28,7 @@ func (keys *DirectionKeys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleSer
 		handshakeTrafficSecret = deriveSecret(hmacHandshakeSecret, "c hs traffic", trHash)
 		fmt.Printf("client2 handshake traffic secret: %x\n", handshakeTrafficSecret)
 	}
-	keys.Symmetric = suite.NewSymmetricKeys(handshakeTrafficSecret)
+	suite.ResetSymmetricKeys(&keys.Symmetric, handshakeTrafficSecret)
 	return handshakeTrafficSecret
 }
 

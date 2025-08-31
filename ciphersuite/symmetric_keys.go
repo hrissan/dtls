@@ -10,14 +10,29 @@ import (
 )
 
 type SymmetricKeys interface {
-	EncryptSeqMask(cipherText []byte) ([2]byte, error)
-
 	RecordOverhead() (AEADSealSize int, MinCiphertextSize int)
 
-	AEADEncrypt(seq uint64, datagramLeft []byte, hdrSize int, insideSize int)
+	// error if called with too short ciphertext
+	EncryptSeqMask(ciphertext []byte) ([2]byte, error)
+
+	// [.................................................] <-- datagramLeft
+	// [.hdr.]
+	//        [....plaintext....]
+	//                           [.AEAD seal.]
+	//        [..........ciphertext..........]
+	// Encrypts in place, with hdr as additional data and puts AEAD seal after plaintext.
+	// len(datagramLeft) >= hdrSize + plaintextSize + AEADSealSize
+	AEADEncrypt(seq uint64, datagramLeft []byte, hdrSize int, plaintextSize int)
 
 	// Warning - decrypts in place, seqNumData and body can be garbage after unsuccessfull decryption
-	AEADDecrypt(hdr record.Ciphertext, seq uint64) (decrypted []byte, err error)
+	// [.....................................]
+	// [.....] <-- rec.Header
+	//        [...........rec.Body...........]
+	//                           [.AEAD seal.]
+	//        [....plaintext....]
+	// Deencrypts in place, with rec.Header as additional data
+	// len(rec.Body) == plaintextSize + AEADSealSize
+	AEADDecrypt(rec record.Ciphertext, seq uint64) (plaintextSize int, err error)
 }
 
 // panic if len(iv) is < 8

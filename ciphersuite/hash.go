@@ -9,6 +9,7 @@ import (
 	"github.com/hrissan/dtls/constants"
 )
 
+// we like static storage, so we do almost no allocations
 type Hash struct {
 	data [constants.MaxHashLength]byte
 	size int

@@ -75,7 +75,7 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 	// So, we decided we better store new keys
 	if !conn.keys.NewReceiveKeysSet {
 		conn.keys.NewReceiveKeysSet = true
-		conn.keys.NewReceiveKeys = conn.keys.Suite().NewSymmetricKeys(receiver.ApplicationTrafficSecret)
+		conn.keys.Suite().ResetSymmetricKeys(&conn.keys.NewReceiveKeys, receiver.ApplicationTrafficSecret)
 		conn.keys.FailedDeprotectionCounterNewReceiveKeys = 0
 		receiver.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "receive")
 	}
@@ -87,9 +87,9 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 	}
 	conn.keys.ExpectReceiveEpochUpdate = false
 
-	receiver.Symmetric = conn.keys.NewReceiveKeys
+	// do not free memory, suite will update keys inplace on the next update
+	receiver.Symmetric, conn.keys.NewReceiveKeys = conn.keys.NewReceiveKeys, receiver.Symmetric
 	conn.keys.ReceiveEpoch++
-	conn.keys.NewReceiveKeys = nil
 	conn.keys.NewReceiveKeysSet = false
 
 	conn.keys.ReceiveNextSegmentSequence.Reset()
@@ -117,10 +117,11 @@ func (conn *Connection) deprotectWithKeysLocked(keys ciphersuite.SymmetricKeys, 
 	decryptedSeqData, seq := hdr.ClosestSequenceNumber(hdr.SeqNum, expectedSN)
 	fmt.Printf("decrypted SN: %d, closest: %d\n", decryptedSeqData, seq)
 
-	decrypted, err := keys.AEADDecrypt(hdr, seq)
+	plaintextSize, err := keys.AEADDecrypt(hdr, seq)
 	if err != nil {
 		return nil, seq, 0, err
 	}
+	decrypted := hdr.Body[:plaintextSize]
 	paddingOffset, contentType := findPaddingOffsetContentType(decrypted) // [rfc8446:5.4]
 	if paddingOffset < 0 {
 		return nil, seq, 0, dtlserrors.ErrCipherTextAllZeroPadding

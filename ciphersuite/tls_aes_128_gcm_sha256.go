@@ -27,8 +27,10 @@ func (s *impl_TLS_AES_128_GCM_SHA256) NewHMAC(key []byte) hash.Hash {
 	return hmac.New(sha256.New, key)
 }
 
-func (s *impl_TLS_AES_128_GCM_SHA256) ComputeSymmetricKeys(keys *SymmetricKeys, secret Hash) {
+func (s *impl_TLS_AES_128_GCM_SHA256) NewSymmetricKeys(secret Hash) SymmetricKeys {
 	const keySize = 16
+
+	keys := &SymmetricKeysAES{}
 	hmacSecret := s.NewHMAC(secret.GetValue())
 	var writeKey [keySize]byte
 	HKDFExpandLabel(writeKey[:], hmacSecret, "key", nil)
@@ -38,6 +40,7 @@ func (s *impl_TLS_AES_128_GCM_SHA256) ComputeSymmetricKeys(keys *SymmetricKeys, 
 
 	keys.Write = NewGCMCipher(NewAesCipher(writeKey[:]))
 	keys.SN = NewAesCipher(snKey[:])
+	return keys
 }
 
 var emptySha256Hash Hash

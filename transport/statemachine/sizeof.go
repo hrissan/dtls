@@ -26,5 +26,5 @@ Symmetric Keys:   %d (For TLS_AES_128_GCM_SHA256)
 		unsafe.Sizeof(Connection{}),
 		unsafe.Sizeof(keys.Keys{}),
 		unsafe.Sizeof(keys.DirectionKeys{}),
-		unsafe.Sizeof(ciphersuite.SymmetricKeys{}))
+		unsafe.Sizeof(ciphersuite.SymmetricKeysAES{}))
 }

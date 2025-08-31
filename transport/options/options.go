@@ -63,8 +63,8 @@ func DefaultTransportOptions(roleServer bool, rnd dtlsrand.Rand, stats stats.Sta
 		MaxConnections:               100_000,
 		CIDLength:                    0,
 		Use8BitSeq:                   false,
-		TLS_AES_128_GCM_SHA256:       false,
-		TLS_AES_256_GCM_SHA384:       true,
+		TLS_AES_128_GCM_SHA256:       true,
+		TLS_AES_256_GCM_SHA384:       false,
 		TLS_CHACHA20_POLY1305_SHA256: false,
 	}
 }

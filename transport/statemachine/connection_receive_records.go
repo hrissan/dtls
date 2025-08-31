@@ -6,7 +6,6 @@ package statemachine
 import (
 	"math"
 
-	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/record"
@@ -74,7 +73,7 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 	// So, we decided we better store new keys
 	if !conn.keys.NewReceiveKeysSet {
 		conn.keys.NewReceiveKeysSet = true
-		conn.keys.Suite().ComputeSymmetricKeys(&conn.keys.NewReceiveKeys, receiver.ApplicationTrafficSecret)
+		conn.keys.NewReceiveKeys = conn.keys.Suite().NewSymmetricKeys(receiver.ApplicationTrafficSecret)
 		conn.keys.FailedDeprotectionCounterNewReceiveKeys = 0
 		receiver.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "receive")
 	}
@@ -88,7 +87,7 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 
 	receiver.Symmetric = conn.keys.NewReceiveKeys
 	conn.keys.ReceiveEpoch++
-	conn.keys.NewReceiveKeys = ciphersuite.SymmetricKeys{} // remove alias
+	conn.keys.NewReceiveKeys = nil
 	conn.keys.NewReceiveKeysSet = false
 
 	conn.keys.ReceiveNextSegmentSequence.Reset()

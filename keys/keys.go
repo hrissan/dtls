@@ -43,7 +43,7 @@ type Keys struct {
 	// otherwise we will request update again after peer's ack, but before actual epoch update
 	RequestedReceiveEpochUpdate bool
 	// calculate NewReceiveKeys only once
-	NewReceiveKeysSet bool
+	NewReceiveKeysSet bool // TODO remove
 	SuiteID           ciphersuite.ID
 }
 

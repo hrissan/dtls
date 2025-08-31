@@ -9,9 +9,9 @@ type Suite interface {
 	// when we protect or deprotect 3/4 of 2^exp packets, we ask for KeyUpdate
 	// if peer does not respond quickly. and we reach 2^exp, we close connection for good
 	ProtectionLimit() uint64
-	NewHasher() hash.Hash                                  // used for transcript hash for handshake. Unfortunately, allocates.
-	NewHMAC(key []byte) hash.Hash                          // used for HKDF and such. Unfortunately, allocates.
-	ComputeSymmetricKeys(keys *SymmetricKeys, secret Hash) // Unfortunately, allocates.
+	NewHasher() hash.Hash                       // used for transcript hash for handshake. Unfortunately, allocates.
+	NewHMAC(key []byte) hash.Hash               // used for HKDF and such. Unfortunately, allocates.
+	NewSymmetricKeys(secret Hash) SymmetricKeys // Unfortunately, allocates.
 	EmptyHash() Hash
 }
 

@@ -4,11 +4,8 @@
 package statemachine
 
 import (
-	"encoding/binary"
-	"fmt"
 	"math"
 
-	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
@@ -110,16 +107,7 @@ func (conn *Connection) checkSendLimit() (uint64, error) {
 // can return empty body, useful if the caller wants to write empty application data.
 // Pass datagramLeft, hdrSize and how many bytes pf insideBody filled to protectRecord
 func (conn *Connection) prepareProtect(datagramLeft []byte, use8BitSeq bool) (hdrSize int, insideBody []byte, ok bool) {
-	hdrSize = record.OutgoingCiphertextRecordHeader16
-	if use8BitSeq {
-		hdrSize = record.OutgoingCiphertextRecordHeader8
-	}
-	overhead := hdrSize + 1 + record.MaxOutgoingCiphertextRecordPadding + constants.AEADSealSize
-	userSpace := len(datagramLeft) - overhead
-	if userSpace < 0 {
-		return 0, nil, false
-	}
-	return hdrSize, datagramLeft[hdrSize : hdrSize+userSpace], true
+	return conn.keys.Send.Symmetric.PrepareProtect(datagramLeft, use8BitSeq)
 }
 
 func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, hdrSize int, insideSize int) (recordSize int, _ record.Number, _ error) {
@@ -133,57 +121,8 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, hdrS
 	if err != nil {
 		return 0, record.Number{}, err
 	}
-	send := &conn.keys.Send
-	epoch := conn.keys.SendEpoch
-	rn := record.NumberWith(epoch, seq)
-	fmt.Printf("constructing ciphertext type %d with rn={%d,%d} hdrSize = %d body: %x\n", recordType, rn.Epoch(), rn.SeqNum(), hdrSize, datagramLeft[hdrSize:hdrSize+insideSize])
-
-	gcm := send.Symmetric.Write
-	iv := send.Symmetric.WriteIV
-	ciphersuite.FillIVSequence(iv[:], seq)
-
-	// format of our encrypted record is fixed.
-	// Saving 1 byte for the sequence number seems very niche.
-	// Saving on not including length of the last datagram is also very hard.
-	// At the point we know it is the last one, we cannot not change header,
-	// because it is "additional data" for AEAD
-	firstByte := record.CiphertextHeaderFirstByte(false, hdrSize == record.OutgoingCiphertextRecordHeader16, true, epoch)
-	// panic below would mean, caller violated invariant of using datagram space
-	datagramLeft[0] = firstByte
-	datagramLeft[hdrSize+insideSize] = recordType
-	insideSize++
-
-	padding := (insideSize + 1) % 4 // test our code with different padding. TODO - remove later
-	// max padding max correspond to format.MaxOutgoingCiphertextRecordOverhead
-	for i := 0; i != padding; i++ {
-		datagramLeft[hdrSize+insideSize] = 0
-		insideSize++
-	}
-
-	var seqNumData []byte
-	if hdrSize == record.OutgoingCiphertextRecordHeader8 {
-		seqNumData = datagramLeft[1:2]
-		seqNumData[0] = byte(seq) // truncation
-		binary.BigEndian.PutUint16(datagramLeft[2:], safecast.Cast[uint16](insideSize+constants.AEADSealSize))
-	} else {
-		seqNumData = datagramLeft[1:3]
-		binary.BigEndian.PutUint16(seqNumData, uint16(seq)) // truncation
-		binary.BigEndian.PutUint16(datagramLeft[3:], safecast.Cast[uint16](insideSize+constants.AEADSealSize))
-	}
-
-	encrypted := gcm.Seal(datagramLeft[hdrSize:hdrSize], iv[:], datagramLeft[hdrSize:hdrSize+insideSize], datagramLeft[:hdrSize])
-	if &encrypted[0] != &datagramLeft[hdrSize] {
-		panic("gcm.Seal reallocated datagram storage")
-	}
-	if len(encrypted) != len(datagramLeft[hdrSize:hdrSize+insideSize+constants.AEADSealSize]) {
-		panic("gcm.Seal length mismatch")
-	}
-
-	if !conn.keys.DoNotEncryptSequenceNumbers {
-		if err := send.Symmetric.EncryptSequenceNumbers(seqNumData, datagramLeft[hdrSize:]); err != nil {
-			panic("cipher text too short when sending")
-		}
-	}
-	//	fmt.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
-	return hdrSize + insideSize + constants.AEADSealSize, rn, nil
+	rn := record.NumberWith(conn.keys.SendEpoch, seq)
+	encryptSN := !conn.keys.DoNotEncryptSequenceNumbers
+	recordSize = conn.keys.Send.Symmetric.Protect(rn, encryptSN, recordType, datagramLeft, hdrSize, insideSize)
+	return recordSize, rn, nil
 }

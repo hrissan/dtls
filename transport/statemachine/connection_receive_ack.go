@@ -37,9 +37,9 @@ func (conn *Connection) receivedEncryptedAckLocked(opts *options.TransportOption
 		opts.Stats.Warning(conn.addr, dtlserrors.WarnAckEpochSeqnumOverflow)
 	}
 	// if all messages from epoch 2 acked, then switch sending epoch
-	if conn.hctx != nil && conn.hctx.sendQueue.Len() == 0 && conn.keys.Send.Symmetric.Epoch == 2 {
+	if conn.hctx != nil && conn.hctx.sendQueue.Len() == 0 && conn.keys.SendEpoch == 2 {
 		conn.keys.Suite().ComputeSymmetricKeys(&conn.keys.Send.Symmetric, conn.keys.Send.ApplicationTrafficSecret)
-		conn.keys.Send.Symmetric.Epoch = 3
+		conn.keys.SendEpoch = 3
 		conn.keys.SendNextSegmentSequence = 0
 		conn.hctx = nil                // TODO - reuse into pool
 		conn.handler.OnConnectLocked() //  = &exampleHandler{toSend: "Hello from client\n"}
@@ -75,6 +75,6 @@ func (conn *Connection) processKeyUpdateAck(rn record.Number) {
 	// now when we received ack for KeyUpdate, we must update our keys
 	conn.keys.Send.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "send")
 	conn.keys.Suite().ComputeSymmetricKeys(&conn.keys.Send.Symmetric, conn.keys.Send.ApplicationTrafficSecret)
-	conn.keys.Send.Symmetric.Epoch++
+	conn.keys.SendEpoch++
 	conn.keys.SendNextSegmentSequence = 0
 }

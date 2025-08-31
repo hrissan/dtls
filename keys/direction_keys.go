@@ -21,10 +21,6 @@ type DirectionKeys struct {
 }
 
 func (keys *DirectionKeys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleServer bool, hmacHandshakeSecret hash.Hash, trHash ciphersuite.Hash) (handshakeTrafficSecret ciphersuite.Hash) {
-	if keys.Symmetric.Epoch != 0 {
-		panic("handshake keys state machine violation")
-	}
-
 	if roleServer {
 		handshakeTrafficSecret = deriveSecret(hmacHandshakeSecret, "s hs traffic", trHash)
 		fmt.Printf("server2 handshake traffic secret: %x\n", handshakeTrafficSecret)
@@ -33,8 +29,6 @@ func (keys *DirectionKeys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleSer
 		fmt.Printf("client2 handshake traffic secret: %x\n", handshakeTrafficSecret)
 	}
 	suite.ComputeSymmetricKeys(&keys.Symmetric, handshakeTrafficSecret)
-
-	keys.Symmetric.Epoch = 2
 	return handshakeTrafficSecret
 }
 

@@ -98,9 +98,9 @@ func (conn *Connection) checkSendLimit() (uint64, error) {
 	if conn.keys.SendNextSegmentSequence >= sendLimit {
 		return 0, dtlserrors.ErrSendRecordSeqOverflow
 	}
-	seq := conn.keys.SendNextSegmentSequence                                                     // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	conn.keys.SendNextSegmentSequence++                                                          // does not overflow due to checkSendLimit() above
-	if conn.keys.Send.Symmetric.Epoch < 3 || conn.keys.SendNextSegmentSequence < sendLimit*3/4 { // simple heuristic
+	seq := conn.keys.SendNextSegmentSequence                                          // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
+	conn.keys.SendNextSegmentSequence++                                               // does not overflow due to checkSendLimit() above
+	if conn.keys.SendEpoch < 3 || conn.keys.SendNextSegmentSequence < sendLimit*3/4 { // simple heuristic
 		return seq, nil
 	}
 	return seq, conn.keyUpdateStart(false)
@@ -134,7 +134,7 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, hdrS
 		return 0, record.Number{}, err
 	}
 	send := &conn.keys.Send
-	epoch := send.Symmetric.Epoch
+	epoch := conn.keys.SendEpoch
 	rn := record.NumberWith(epoch, seq)
 	fmt.Printf("constructing ciphertext type %d with rn={%d,%d} hdrSize = %d body: %x\n", recordType, rn.Epoch(), rn.SeqNum(), hdrSize, datagramLeft[hdrSize:hdrSize+insideSize])
 

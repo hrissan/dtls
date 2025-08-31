@@ -13,8 +13,10 @@ import (
 
 type Keys struct {
 	// fields sorted to minimize padding
-	Send    DirectionKeys
-	Receive DirectionKeys
+	Send         DirectionKeys
+	Receive      DirectionKeys
+	SendEpoch    uint16 // not in DirectionKeys to save sizeof due to alignment
+	ReceiveEpoch uint16 // not in DirectionKeys to save sizeof due to alignment
 
 	SendNextSegmentSequence uint64
 
@@ -101,6 +103,12 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 
 	handshakeSecret := ciphersuite.HKDFExtract(hmacderivedSecret, sharedSecret)
 	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret.GetValue())
+
+	if keys.SendEpoch != 0 || keys.ReceiveEpoch != 0 {
+		panic("handshake keys state machine violation")
+	}
+	keys.SendEpoch = 2
+	keys.ReceiveEpoch = 2
 
 	handshakeTrafficSecretSend = keys.Send.ComputeHandshakeKeys(suite, serverRole, hmacHandshakeSecret, trHash)
 	keys.SendNextSegmentSequence = 0

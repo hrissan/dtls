@@ -25,7 +25,7 @@ func (conn *Connection) checkReceiveLimits() error {
 	if receivedCurrentEpoch >= receiveLimit {
 		return dtlserrors.ErrReceiveRecordSeqOverflow
 	}
-	if conn.keys.Receive.Symmetric.Epoch < 3 || receivedCurrentEpoch < receiveLimit*3/4 { // simple heuristics
+	if conn.keys.ReceiveEpoch < 3 || receivedCurrentEpoch < receiveLimit*3/4 { // simple heuristics
 		return nil
 	}
 	if conn.keyUpdateInProgress() {
@@ -42,10 +42,10 @@ func (conn *Connection) checkReceiveLimits() error {
 // returns contentType == 0 (which is impossible due to padding format) with err == nil when replay detected
 func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.Number, byte, error) {
 	receiver := &conn.keys.Receive
-	if receiver.Symmetric.Epoch == 0 {
+	if conn.keys.ReceiveEpoch == 0 {
 		return nil, record.Number{}, 0, dtlserrors.WarnCannotDecryptInEpoch0
 	}
-	if hdr.MatchesEpoch(receiver.Symmetric.Epoch) {
+	if hdr.MatchesEpoch(conn.keys.ReceiveEpoch) {
 		nextSeq := conn.keys.ReceiveNextSegmentSequence.GetNextReceivedSeq()
 		decrypted, seq, contentType, err := receiver.Symmetric.Deprotect(hdr, !conn.keys.DoNotEncryptSequenceNumbers, nextSeq)
 		if err != nil {
@@ -58,14 +58,14 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 			return nil, record.Number{}, 0, nil // replay protection
 		}
 		conn.keys.ReceiveNextSegmentSequence.SetBit(seq)
-		return decrypted, record.NumberWith(receiver.Symmetric.Epoch, seq), contentType, nil
+		return decrypted, record.NumberWith(conn.keys.ReceiveEpoch, seq), contentType, nil
 	}
-	if !conn.keys.ExpectReceiveEpochUpdate || !hdr.MatchesEpoch(receiver.Symmetric.Epoch+1) {
+	if !conn.keys.ExpectReceiveEpochUpdate || !hdr.MatchesEpoch(conn.keys.ReceiveEpoch+1) {
 		// simply ignore, probably garbage or keys from previous epoch
 		return nil, record.Number{}, 0, dtlserrors.WarnEpochDoesNotMatch
 	}
 	// We check here that receiver.Epoch+1 does not overflow, because we increment it below
-	if receiver.Symmetric.Epoch == math.MaxUint16 {
+	if conn.keys.ReceiveEpoch == math.MaxUint16 {
 		return nil, record.Number{}, 0, dtlserrors.ErrUpdatingKeysWouldOverflowEpoch
 	}
 	// We should not believe new epoch bits before we decrypt record successfully,
@@ -74,7 +74,6 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 	// So, we decided we better store new keys
 	if !conn.keys.NewReceiveKeysSet {
 		conn.keys.NewReceiveKeysSet = true
-		conn.keys.NewReceiveKeys.Epoch = receiver.Symmetric.Epoch + 1
 		conn.keys.Suite().ComputeSymmetricKeys(&conn.keys.NewReceiveKeys, receiver.ApplicationTrafficSecret)
 		conn.keys.FailedDeprotectionCounterNewReceiveKeys = 0
 		receiver.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "receive")
@@ -87,7 +86,8 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 	}
 	conn.keys.ExpectReceiveEpochUpdate = false
 
-	receiver.Symmetric = conn.keys.NewReceiveKeys          // epoch is also copied
+	receiver.Symmetric = conn.keys.NewReceiveKeys
+	conn.keys.ReceiveEpoch++
 	conn.keys.NewReceiveKeys = ciphersuite.SymmetricKeys{} // remove alias
 	conn.keys.NewReceiveKeysSet = false
 
@@ -102,5 +102,5 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 	conn.keys.FailedDeprotectionCounterNewReceiveKeys = 0
 
 	conn.keys.RequestedReceiveEpochUpdate = false // so we can request in the next epoch
-	return recordBody, record.NumberWith(receiver.Symmetric.Epoch, seq), contentType, nil
+	return recordBody, record.NumberWith(conn.keys.ReceiveEpoch, seq), contentType, nil
 }

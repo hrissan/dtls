@@ -33,7 +33,7 @@ func (conn *Connection) hasDataToSendLocked() bool {
 	if hctx != nil && hctx.sendQueue.HasDataToSend() {
 		return true
 	}
-	if conn.keys.Send.Symmetric.Epoch != 0 && conn.keys.SendAcks.GetBitCount() != 0 {
+	if conn.keys.SendEpoch != 0 && conn.keys.SendAcks.GetBitCount() != 0 {
 		return true
 	}
 	if conn.keyUpdateInProgress() && (conn.sentKeyUpdateRN == record.Number{}) {
@@ -174,7 +174,7 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 }
 
 func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, datagramLeft []byte) (int, error) {
-	if conn.keys.Send.Symmetric.Epoch == 0 {
+	if conn.keys.SendEpoch == 0 {
 		return 0, nil // no one should believe unencrypted acks, so we never send them
 	}
 	acks := &conn.keys.SendAcks
@@ -217,7 +217,7 @@ func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, da
 }
 
 func (conn *Connection) constructDatagramAlert(opts *options.TransportOptions, datagramLeft []byte, alert record.Alert) (int, error) {
-	if conn.keys.Send.Symmetric.Epoch == 0 {
+	if conn.keys.SendEpoch == 0 {
 		// TODO - unencrypted alert
 		return 0, nil
 	}

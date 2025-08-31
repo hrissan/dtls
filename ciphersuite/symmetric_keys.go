@@ -18,7 +18,6 @@ type SymmetricKeys struct {
 	SN      cipher.Block // 16 interface + 240 aes half + (240 aes half we do not need). Can be removed with unencrypted sequence numbers extension
 	Write   cipher.AEAD  // 16 interface + 16 interface inside + 16 (counters) + 240 aes half + (240 aes half we do not need)
 	WriteIV [12]byte
-	Epoch   uint16 // here to save sizeof due to alignment
 }
 
 func (keys *SymmetricKeys) EncryptSequenceNumbers(seqNum []byte, cipherText []byte) error {

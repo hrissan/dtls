@@ -4,8 +4,11 @@
 package statemachine
 
 import (
+	"encoding/binary"
+	"fmt"
 	"math"
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/record"
@@ -46,7 +49,7 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 	}
 	if hdr.MatchesEpoch(conn.keys.ReceiveEpoch) {
 		nextSeq := conn.keys.ReceiveNextSegmentSequence.GetNextReceivedSeq()
-		decrypted, seq, contentType, err := receiver.Symmetric.Deprotect(hdr, !conn.keys.DoNotEncryptSequenceNumbers, nextSeq)
+		recordBody, seq, contentType, err := conn.deprotectWithKeysLocked(receiver.Symmetric, hdr, nextSeq)
 		if err != nil {
 			// [rfc9147:4.5.3] check against AEAD limit
 			conn.keys.FailedDeprotectionCounter++
@@ -57,7 +60,7 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 			return nil, record.Number{}, 0, nil // replay protection
 		}
 		conn.keys.ReceiveNextSegmentSequence.SetBit(seq)
-		return decrypted, record.NumberWith(conn.keys.ReceiveEpoch, seq), contentType, nil
+		return recordBody, record.NumberWith(conn.keys.ReceiveEpoch, seq), contentType, nil
 	}
 	if !conn.keys.ExpectReceiveEpochUpdate || !hdr.MatchesEpoch(conn.keys.ReceiveEpoch+1) {
 		// simply ignore, probably garbage or keys from previous epoch
@@ -77,7 +80,7 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 		conn.keys.FailedDeprotectionCounterNewReceiveKeys = 0
 		receiver.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "receive")
 	}
-	recordBody, seq, contentType, err := conn.keys.NewReceiveKeys.Deprotect(hdr, !conn.keys.DoNotEncryptSequenceNumbers, 0)
+	recordBody, seq, contentType, err := conn.deprotectWithKeysLocked(conn.keys.NewReceiveKeys, hdr, 0)
 	if err != nil {
 		// [rfc9147:4.5.3] check against AEAD limit
 		conn.keys.FailedDeprotectionCounterNewReceiveKeys++
@@ -102,4 +105,46 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 
 	conn.keys.RequestedReceiveEpochUpdate = false // so we can request in the next epoch
 	return recordBody, record.NumberWith(conn.keys.ReceiveEpoch, seq), contentType, nil
+}
+
+func (conn *Connection) deprotectWithKeysLocked(keys ciphersuite.SymmetricKeys, hdr record.Ciphertext, expectedSN uint64) (recordBody []byte, seq uint64, contentType byte, err error) {
+	if !conn.keys.DoNotEncryptSequenceNumbers {
+		mask, err := keys.EncryptSeqMask(hdr.Body)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		encryptSequenceNumbers(hdr.SeqNum, mask)
+	}
+	decryptedSeqData, seq := hdr.ClosestSequenceNumber(hdr.SeqNum, expectedSN)
+	fmt.Printf("decrypted SN: %d, closest: %d\n", decryptedSeqData, seq)
+
+	decrypted, err := keys.Deprotect(hdr, seq)
+	if err != nil {
+		return nil, seq, 0, err
+	}
+	paddingOffset, contentType := findPaddingOffsetContentType(decrypted) // [rfc8446:5.4]
+	if paddingOffset < 0 {
+		return nil, seq, 0, dtlserrors.ErrCipherTextAllZeroPadding
+	}
+	return decrypted[:paddingOffset], seq, contentType, nil
+}
+
+// contentType is the first non-zero byte from the end
+func findPaddingOffsetContentType(data []byte) (paddingOffset int, contentType byte) {
+	offset := len(data)
+	for ; offset > 16; offset -= 16 { // poor man's SIMD
+		slice := data[offset-16 : offset]
+		val1 := binary.LittleEndian.Uint64(slice)
+		val2 := binary.LittleEndian.Uint64(slice[8:])
+		if (val1 | val2) != 0 {
+			break
+		}
+	}
+	for ; offset > 0; offset-- {
+		b := data[offset-1]
+		if b != 0 {
+			return offset - 1, b
+		}
+	}
+	return -1, 0
 }

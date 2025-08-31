@@ -19,7 +19,7 @@ type SymmetricKeys interface {
 	AEADEncrypt(seq uint64, datagramLeft []byte, hdrSize int, insideSize int)
 
 	// Warning - decrypts in place, seqNumData and body can be garbage after unsuccessfull decryption
-	Deprotect(hdr record.Ciphertext, encryptSN bool, expectedSN uint64) (decrypted []byte, seq uint64, contentType byte, err error)
+	Deprotect(hdr record.Ciphertext, seq uint64) (decrypted []byte, err error)
 }
 
 func encryptSeq(seqNum []byte, mask [2]byte) {

@@ -6,7 +6,6 @@ package ciphersuite
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"fmt"
 
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/record"
@@ -62,27 +61,20 @@ func (keys *SymmetricKeysAES) AEADEncrypt(seq uint64, datagramLeft []byte, hdrSi
 	}
 }
 
-func (keys *SymmetricKeysAES) Deprotect(hdr record.Ciphertext, encryptSN bool, expectedSN uint64) (decrypted []byte, seq uint64, contentType byte, err error) {
-	if encryptSN {
-		mask, err := keys.EncryptSeqMask(hdr.Body)
-		if err != nil {
-			return nil, 0, 0, err
-		}
-		encryptSeq(hdr.SeqNum, mask)
-	}
+func (keys *SymmetricKeysAES) Deprotect(hdr record.Ciphertext, seq uint64) (decrypted []byte, err error) {
 	gcm := keys.Write
 	iv := keys.WriteIV // copy, otherwise disaster
-	decryptedSeqData, seq := hdr.ClosestSequenceNumber(hdr.SeqNum, expectedSN)
-	fmt.Printf("decrypted SN: %d, closest: %d\n", decryptedSeqData, seq)
 
 	FillIVSequence(iv[:], seq)
 	decrypted, err = gcm.Open(hdr.Body[:0], iv[:], hdr.Body, hdr.Header)
 	if err != nil {
-		return nil, seq, 0, dtlserrors.WarnAEADDeprotectionFailed
+		return nil, dtlserrors.WarnAEADDeprotectionFailed
 	}
-	paddingOffset, contentType := findPaddingOffsetContentType(decrypted) // [rfc8446:5.4]
-	if paddingOffset < 0 {
-		return nil, seq, 0, dtlserrors.ErrCipherTextAllZeroPadding
+	if &decrypted[0] != &hdr.Body[0] {
+		panic("gcm.Open reallocated datagram storage")
 	}
-	return decrypted[:paddingOffset], seq, contentType, nil
+	if len(decrypted) != len(hdr.Body)-symmetricKeysAESSealSize {
+		panic("unexpected decrypted body size")
+	}
+	return decrypted, nil
 }

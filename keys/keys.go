@@ -15,7 +15,7 @@ type Keys struct {
 	// fields sorted to minimize padding
 	Send    DirectionKeys
 	Receive DirectionKeys
-	// always correspond to ReceiveEpoch + 1 if NewReceiveKeysSet is set
+	// always correspond to Receive.Epoch + 1 if NewReceiveKeysSet is set
 	NewReceiveKeys ciphersuite.SymmetricKeys
 	// Idea: we now store 2 sets of symmetric keys, so we could keep previous epoch keys for
 	// replay window length, but then we need also 2 replay windows, and 2 SendAcks structs, so no.
@@ -25,16 +25,13 @@ type Keys struct {
 	// It seems, we need no replay protection for Epoch 0. TODO - investigate..
 	ReceiveNextSegmentSequence replay.Window // for Epoch > 0
 
+	FailedDeprotectionCounter               uint64
+	FailedDeprotectionCounterNewReceiveKeys uint64 // separate counter for NewReceiveKeys
+
 	SendAcks      replay.Window
 	SendAcksEpoch uint16 // we do not want to lose acks immediately  when switching epoch
 
-	SendEpoch    uint16 // not in DirectionKeys to save sizeof due to alignment
-	ReceiveEpoch uint16 // not in DirectionKeys to save sizeof due to alignment
-
 	SuiteID ciphersuite.ID
-
-	FailedDeprotectionCounter               uint64
-	FailedDeprotectionCounterNewReceiveKeys uint64 // separate counter for NewReceiveKeys
 
 	// enabled extensions and saves us 50% memory on crypto contexts
 	DoNotEncryptSequenceNumbers bool
@@ -104,11 +101,11 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 	handshakeSecret := ciphersuite.HKDFExtract(hmacderivedSecret, sharedSecret)
 	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret.GetValue())
 
-	if keys.SendEpoch != 0 || keys.ReceiveEpoch != 0 {
+	if keys.Send.Epoch != 0 || keys.Receive.Epoch != 0 {
 		panic("handshake keys state machine violation")
 	}
-	keys.SendEpoch = 2
-	keys.ReceiveEpoch = 2
+	keys.Send.Epoch = 2
+	keys.Receive.Epoch = 2
 
 	handshakeTrafficSecretSend = keys.Send.ComputeHandshakeKeys(suite, serverRole, hmacHandshakeSecret, trHash)
 	keys.SendNextSegmentSequence = 0

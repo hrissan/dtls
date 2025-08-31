@@ -11,9 +11,9 @@ import (
 )
 
 type DirectionKeys struct {
+	Symmetric                ciphersuite.SymmetricKeys
 	ApplicationTrafficSecret ciphersuite.Hash // we need to keep this for key update
-
-	Symmetric ciphersuite.SymmetricKeys
+	Epoch                    uint16
 }
 
 func (keys *DirectionKeys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleServer bool, hmacHandshakeSecret hash.Hash, trHash ciphersuite.Hash) (handshakeTrafficSecret ciphersuite.Hash) {

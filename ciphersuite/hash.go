@@ -13,7 +13,7 @@ const MaxHashLength = 48
 // If we ever need very large hashes, we may want to start using allocated storage.
 type Hash struct {
 	data [MaxHashLength]byte
-	size int
+	size byte
 }
 
 func (h *Hash) GetValue() []byte {
@@ -21,7 +21,7 @@ func (h *Hash) GetValue() []byte {
 }
 
 func (h *Hash) Len() int {
-	return h.size
+	return int(h.size) // widening
 }
 
 func (h *Hash) Cap() int {
@@ -34,20 +34,21 @@ func (h *Hash) SetSum(hasher hash.Hash) {
 	if len(da) > len(h.data) {
 		panic("hasher length exceeds hash storage size")
 	}
-	h.size = len(da)
+	h.size = byte(len(da)) // safe due to check above
 }
 
 func (h *Hash) SetZero(size int) {
 	if size > len(h.data) {
 		panic("zero hash length exceeds hash storage size")
 	}
-	*h = Hash{size: size}
+	*h = Hash{size: byte(size)} // safe due to check above
 }
 
 func (h *Hash) SetValue(data []byte) {
 	if len(data) > len(h.data) {
 		panic("hash length exceeds hash storage size")
 	}
-	*h = Hash{size: len(data)} // clear data, so objects are equal by built-int operator
+	// clear data, so objects are equal by built-int operator
+	*h = Hash{size: byte(len(data))} // safe due to check above
 	copy(h.data[:], data)
 }

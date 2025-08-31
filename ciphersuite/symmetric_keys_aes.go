@@ -6,6 +6,7 @@ package ciphersuite
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"hash"
 
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/record"
@@ -14,8 +15,8 @@ import (
 const symmetricKeysAESSealSize = 16
 
 type SymmetricKeysAES struct {
-	SN      cipher.Block // 16 interface + 240 aes half + (240 aes half we do not need). Can be removed with unencrypted sequence numbers extension
-	Write   cipher.AEAD  // 16 interface + 16 interface inside + 16 (counters) + 240 aes half + (240 aes half we do not need)
+	SN      cipher.Block
+	Write   cipher.AEAD
 	WriteIV [12]byte
 }
 
@@ -35,6 +36,18 @@ func NewGCMCipher(block cipher.Block) cipher.AEAD {
 	return c
 }
 
+func (keys *SymmetricKeysAES) fillWithSecret(hmacSecret hash.Hash, keyStorage []byte) {
+	// write key
+	HKDFExpandLabel(keyStorage[:], hmacSecret, "key", nil)
+	keys.Write = NewGCMCipher(NewAesCipher(keyStorage[:]))
+
+	// sn key
+	HKDFExpandLabel(keyStorage[:], hmacSecret, "sn", nil)
+	keys.SN = NewAesCipher(keyStorage[:])
+
+	HKDFExpandLabel(keys.WriteIV[:], hmacSecret, "iv", nil)
+}
+
 func (keys *SymmetricKeysAES) EncryptSeqMask(cipherText []byte) ([2]byte, error) {
 	var mask [aes.BlockSize]byte
 	if len(cipherText) < keys.SN.BlockSize() {
@@ -44,7 +57,7 @@ func (keys *SymmetricKeysAES) EncryptSeqMask(cipherText []byte) ([2]byte, error)
 	return [2]byte(mask[0:2]), nil
 }
 
-func (keys *SymmetricKeysAES) RecordOverhead() (AEADSealSize int, SNBlockSize int) {
+func (keys *SymmetricKeysAES) RecordOverhead() (AEADSealSize int, MinCiphertextSize int) {
 	return symmetricKeysAESSealSize, aes.BlockSize
 }
 
@@ -61,7 +74,7 @@ func (keys *SymmetricKeysAES) AEADEncrypt(seq uint64, datagramLeft []byte, hdrSi
 	}
 }
 
-func (keys *SymmetricKeysAES) Deprotect(hdr record.Ciphertext, seq uint64) (decrypted []byte, err error) {
+func (keys *SymmetricKeysAES) AEADDecrypt(hdr record.Ciphertext, seq uint64) (decrypted []byte, err error) {
 	gcm := keys.Write
 	iv := keys.WriteIV // copy, otherwise disaster
 

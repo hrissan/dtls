@@ -29,16 +29,17 @@ func (s *impl_TLS_CHACHA20_POLY1305_SHA256) NewHMAC(key []byte) hash.Hash {
 func (s *impl_TLS_CHACHA20_POLY1305_SHA256) NewSymmetricKeys(secret Hash) SymmetricKeys {
 	const keySize = 32
 
-	keys := &SymmetricKeysAES{}
+	keys := &SymmetricKeysChaCha20Poly1305{}
 	hmacSecret := s.NewHMAC(secret.GetValue())
+
 	var writeKey [keySize]byte
 	HKDFExpandLabel(writeKey[:], hmacSecret, "key", nil)
-	HKDFExpandLabel(keys.WriteIV[:], hmacSecret, "iv", nil)
-	var snKey [keySize]byte
-	HKDFExpandLabel(snKey[:], hmacSecret, "sn", nil)
+	keys.Write = NewChacha20Poly1305(writeKey[:])
 
-	keys.Write = NewGCMCipher(NewAesCipher(writeKey[:]))
-	keys.SN = NewAesCipher(snKey[:])
+	HKDFExpandLabel(keys.SNKey[:], hmacSecret, "sn", nil)
+
+	HKDFExpandLabel(keys.WriteIV[:], hmacSecret, "iv", nil)
+
 	return keys
 }
 

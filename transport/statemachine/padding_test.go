@@ -1,7 +1,7 @@
 // Copyright (c) 2025, Grigory Buteyko aka Hrissan
 // Licensed under the MIT License. See LICENSE for details.
 
-package ciphersuite
+package statemachine
 
 import (
 	"testing"
@@ -52,8 +52,6 @@ func findPaddingOffsetContentTypeUnsafe32(data []byte) (paddingOffset int, conte
 	return -1, 0
 }
 */
-
-var benchmarkSideEffect = 0
 
 func BenchmarkPadding_1X(b *testing.B) {
 	var record [16384]byte

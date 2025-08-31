@@ -113,12 +113,12 @@ func (conn *Connection) checkSendLimit() (uint64, error) {
 // or (if even 0-byte application data will not fit), returns !ok.
 // Caller should check if his data fits into insideBody, put it there.
 func (conn *Connection) prepareProtect(datagramLeft []byte, use8BitSeq bool, userPadding int) (hdrSize int, insideBody []byte, ok bool) {
-	sealSize, snBlockSize := conn.keys.Send.Symmetric.RecordOverhead()
+	sealSize, minCiphertextSize := conn.keys.Send.Symmetric.RecordOverhead()
 	hdrSize = record.OutgoingCiphertextRecordHeader16
 	if use8BitSeq {
 		hdrSize = record.OutgoingCiphertextRecordHeader8
 	}
-	if len(datagramLeft)-hdrSize < snBlockSize { // not enough ciphertext to encrypt seq
+	if len(datagramLeft)-hdrSize < minCiphertextSize { // not enough ciphertext to encrypt seq
 		return 0, nil, false
 	}
 	cipherTextSize := 1 + userPadding + sealSize
@@ -142,7 +142,7 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, user
 		return 0, record.Number{}, err
 	}
 	rn := record.NumberWith(conn.keys.SendEpoch, seq)
-	sealSize, snBlockSize := conn.keys.Send.Symmetric.RecordOverhead()
+	sealSize, minCiphertextSize := conn.keys.Send.Symmetric.RecordOverhead()
 
 	// format of our encrypted record is fixed.
 	// Saving 1 byte for the sequence number seems very niche.
@@ -159,7 +159,7 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, user
 		datagramLeft[hdrSize+insideSize] = 0
 		insideSize++
 	}
-	for insideSize+sealSize < snBlockSize {
+	for insideSize+sealSize < minCiphertextSize {
 		datagramLeft[hdrSize+insideSize] = 0
 		insideSize++
 	}

@@ -9,8 +9,6 @@ import (
 	"hash"
 )
 
-//	"golang.org/x/crypto/chacha20poly1305"
-
 type impl_TLS_AES_128_GCM_SHA256 struct {
 }
 
@@ -28,18 +26,10 @@ func (s *impl_TLS_AES_128_GCM_SHA256) NewHMAC(key []byte) hash.Hash {
 }
 
 func (s *impl_TLS_AES_128_GCM_SHA256) NewSymmetricKeys(secret Hash) SymmetricKeys {
-	const keySize = 16
+	hmacSecret := s.NewHMAC(secret.GetValue())
 
 	keys := &SymmetricKeysAES{}
-	hmacSecret := s.NewHMAC(secret.GetValue())
-	var writeKey [keySize]byte
-	HKDFExpandLabel(writeKey[:], hmacSecret, "key", nil)
-	HKDFExpandLabel(keys.WriteIV[:], hmacSecret, "iv", nil)
-	var snKey [keySize]byte
-	HKDFExpandLabel(snKey[:], hmacSecret, "sn", nil)
-
-	keys.Write = NewGCMCipher(NewAesCipher(writeKey[:]))
-	keys.SN = NewAesCipher(snKey[:])
+	keys.fillWithSecret(hmacSecret, make([]byte, 16)) // on stack
 	return keys
 }
 

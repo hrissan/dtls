@@ -124,7 +124,7 @@ var ErrServerHelloReceivedByServer = NewWarning(-703, "ServerHello handshake mes
 var ErrClientHelloUnsupportedParams = NewWarning(-704, "ClientHello unsupported params (version, ciphersuite, groups, etc)") // TODO - more granular error
 
 var ErrParamsSupportOnlyDTLS13 = NewWarning(-705, "unsupported version - only DTLSv1.3 supported")
-var ErrParamsSupportCiphersuites = NewWarning(-705, "unsupported ciphersuite - only TLS_AES_128_GCM_SHA256 supported")
+var ErrParamsSupportCiphersuites = NewWarning(-705, "unsupported ciphersuite")
 var ErrParamsSupportKeyShare = NewWarning(-705, "unsupported key share - only X25519 supported")
 var ErrPskKeyRequiresPskModes = NewWarning(-705, "pre_shared_key requires psk_key_exchange_modes")
 var ErrServerHRRMustContainCookie = errors.New("server HelloRetryRequest must contain valid cookie")

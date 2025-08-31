@@ -84,5 +84,8 @@ func (tr *Transport) IsSupportedServerHello(msgParsed *handshake.MsgServerHello)
 	if msgParsed.CipherSuite == ciphersuite.TLS_AES_256_GCM_SHA384 && tr.opts.TLS_AES_256_GCM_SHA384 {
 		return nil
 	}
+	if msgParsed.CipherSuite == ciphersuite.TLS_CHACHA20_POLY1305_SHA256 && tr.opts.TLS_CHACHA20_POLY1305_SHA256 {
+		return nil
+	}
 	return dtlserrors.ErrParamsSupportCiphersuites
 }

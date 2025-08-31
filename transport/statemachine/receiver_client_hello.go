@@ -225,5 +225,8 @@ func (t *Transport) IsSupportedClientHello(msgParsed *handshake.MsgClientHello) 
 	if msgParsed.CipherSuites.HasCypherSuite_TLS_AES_128_GCM_SHA256 && t.opts.TLS_AES_128_GCM_SHA256 {
 		return ciphersuite.TLS_AES_128_GCM_SHA256, nil
 	}
+	if msgParsed.CipherSuites.HasCypherSuite_TLS_CHACHA20_POLY1305_SHA256 && t.opts.TLS_CHACHA20_POLY1305_SHA256 {
+		return ciphersuite.TLS_CHACHA20_POLY1305_SHA256, nil
+	}
 	return 0, dtlserrors.ErrParamsSupportCiphersuites
 }

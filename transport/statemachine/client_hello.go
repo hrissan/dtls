@@ -28,7 +28,7 @@ func debugPrintSum(hasher hash.Hash) {
 }
 
 // we must generate the same server hello, because we are stateless, but this message is in transcript
-func GenerateStatelessHRR(params cookie.Params, datagram []byte, ck cookie.Cookie) ([]byte, []byte) {
+func GenerateStatelessHRR(params cookie.Params, datagram []byte, ck []byte) ([]byte, []byte) {
 	helloRetryRequest := handshake.MsgServerHello{
 		CipherSuite: params.CipherSuite,
 	}

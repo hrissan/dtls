@@ -5,7 +5,6 @@ package statemachine
 
 import (
 	"github.com/hrissan/dtls/ciphersuite"
-	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 )
@@ -27,7 +26,7 @@ func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg han
 	hctx.transcriptHasher = conn.keys.Suite().NewHasher()
 	// only after we know ciphersuite, can we now hash ClientHello1
 	{
-		clientHello1Msg := hctx.generateClientHello(conn.tr.opts, false, cookie.Cookie{})
+		clientHello1Msg := hctx.generateClientHello(conn.tr.opts, false, nil)
 		clientHello1Msg.AddToHash(hctx.transcriptHasher)
 	}
 	if msgParsed.IsHelloRetryRequest() {

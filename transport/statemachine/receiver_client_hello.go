@@ -57,7 +57,8 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		}
 		params.TranscriptHash.SetSum(transcriptHasher)
 
-		ck := t.cookieState.CreateCookie(params, addr)
+		ck := make([]byte, 0, cookie.CookieStorageSize)
+		ck = t.cookieState.AppendCookie(ck, params, addr)
 		t.opts.Stats.CookieCreated(addr)
 
 		hrrStorage := t.snd.PopHelloRetryDatagramStorage()

@@ -30,7 +30,8 @@ func TestRoundTrip(t *testing.T) {
 	}
 	hash := sha256.Sum256([]byte("test"))
 	params.TranscriptHash.SetValue(hash[:])
-	ck := state.CreateCookie(params, addr)
+	cookieStorage := make([]byte, 0, cookie.CookieStorageSize)
+	ck := state.AppendCookie(cookieStorage, params, addr)
 
 	params2, err := state.IsCookieValid(addr, ck, now.Add(time.Second), time.Minute)
 	if err != nil {

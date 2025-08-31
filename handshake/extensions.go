@@ -6,11 +6,10 @@ package handshake
 import (
 	"encoding/binary"
 	"errors"
-	"math"
 
-	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/format"
+	"github.com/hrissan/dtls/safecast"
 )
 
 const (
@@ -28,6 +27,7 @@ const (
 var ErrInvalidEarlyDataIndicationSize = errors.New("invalid EarlyDataIndicationSize")
 var ErrPreSharedKeyExtensionMustBeLast = errors.New("psk_key_exchange_modes extension must be last")
 
+// after parsing, slices inside point to datagram, so must not be retained
 type ExtensionsSet struct {
 	SupportedVersionsSet   bool
 	SupportedVersions      SupportedVersions
@@ -39,11 +39,8 @@ type ExtensionsSet struct {
 	EarlyDataMaxSize       uint32
 	EncryptThenMacSet      bool
 
-	CookieSet bool
-	// we have fixed size cookie to avoid allocations.
-	// if actual cookie in datagram is larger or smaller, it will be truncated or padded with zeroes,
-	// this makes it invalid for crypto check, which is exactly we want.
-	Cookie cookie.Cookie
+	CookieSet bool // we do not play with nil values
+	Cookie    []byte
 
 	KeyShareSet bool
 	KeyShare    KeyShare
@@ -57,11 +54,7 @@ type ExtensionsSet struct {
 
 func (msg *ExtensionsSet) parseCookie(body []byte) (err error) {
 	offset := 0
-	var insideBody []byte
-	if offset, insideBody, err = format.ParserReadUint16Length(body, offset); err != nil {
-		return err
-	}
-	if err := msg.Cookie.SetValue(insideBody); err != nil {
+	if offset, msg.Cookie, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
 	return format.ParserReadFinish(body, offset)
@@ -188,12 +181,8 @@ func (msg *ExtensionsSet) WriteInside(body []byte, isNewSessionTicket bool, isSe
 	if msg.CookieSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_COOKIE)
 		body, mark = format.MarkUint16Offset(body)
-		data := msg.Cookie.GetValue()
-		if len(data) >= math.MaxUint16 {
-			panic("cookie length too big")
-		}
-		body = binary.BigEndian.AppendUint16(body, uint16(len(data))) // safe due to check above
-		body = append(body, data...)
+		body = binary.BigEndian.AppendUint16(body, safecast.Cast[uint16](len(msg.Cookie)))
+		body = append(body, msg.Cookie...)
 		format.FillUint16Offset(body, mark)
 	}
 	if msg.KeyShareSet {

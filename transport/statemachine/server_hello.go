@@ -5,7 +5,6 @@ package statemachine
 
 import (
 	"github.com/hrissan/dtls/ciphersuite"
-	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
@@ -19,7 +18,7 @@ func (conn *Connection) receivedServerHelloFragment(opts *options.TransportOptio
 	return conn.state().OnHandshakeMsgFragment(conn, opts, fragment, rn)
 }
 
-func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions, setCookie bool, ck cookie.Cookie) handshake.Message {
+func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions, setCookie bool, ck []byte) handshake.Message {
 	// [rfc8446:4.1.2] the client MUST send the same ClientHello without modification, except as follows
 	clientHello := handshake.MsgClientHello{
 		Random: hctx.localRandom,

@@ -3,8 +3,7 @@
 
 package handshake
 
-// after parsing, those slices point to datagram, so must be copied or
-// discarded before next datagram is read
+// after parsing, slices inside point to datagram, so must not be retained
 type CertificateEntry struct {
 	CertData        []byte
 	ExtenstionsData []byte // we do not write extensions, and skip during read

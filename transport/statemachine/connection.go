@@ -9,7 +9,6 @@ import (
 	"net/netip"
 	"sync"
 
-	"github.com/hrissan/dtls/cookie"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
@@ -151,7 +150,7 @@ func (conn *Connection) startConnection(tr *Transport, handler ConnectionHandler
 
 	conn.hctx = hctx
 
-	clientHelloMsg := hctx.generateClientHello(tr.opts, false, cookie.Cookie{})
+	clientHelloMsg := hctx.generateClientHello(tr.opts, false, nil)
 
 	if err := hctx.PushMessageNoHasher(conn, clientHelloMsg); err != nil {
 		conn.hctx = nil // TODO - reuse

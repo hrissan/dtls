@@ -7,7 +7,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/binary"
-	"errors"
 	"hash"
 	"net/netip"
 	"sync"
@@ -30,12 +29,7 @@ type CookieState struct {
 	rnd        dtlsrand.Rand // for salt
 }
 
-const MaxCookieSize = 256
-
-type Cookie struct {
-	data [MaxCookieSize]byte // maximum supported size
-	size int
-}
+const CookieStorageSize = 256
 
 type Params struct {
 	// those values are signed, so server can trust them after validation
@@ -44,37 +38,6 @@ type Params struct {
 	KeyShareSet       bool           // we must remember to generate exactly same HRR for transcript
 	CipherSuite       ciphersuite.ID // we must remember to generate exactly same HRR for transcript
 	Age               time.Duration  // set during validation
-}
-
-var ErrCookieDataTooLong = errors.New("cookie data is too long")
-
-func (c *Cookie) GetValue() []byte {
-	return c.data[0:c.size]
-}
-
-func (c *Cookie) SetValue(data []byte) error {
-	if len(data) > len(c.data) {
-		return ErrCookieDataTooLong
-	}
-	*c = Cookie{size: len(data)} // clear data, so objects are equal by built-int operator
-	copy(c.data[:], data)
-	return nil
-}
-
-func (c *Cookie) AppendMust(data []byte) {
-	if c.size+len(data) > len(c.data) {
-		panic(ErrCookieDataTooLong)
-	}
-	copy(c.data[c.size:], data)
-	c.size += len(data)
-}
-
-func (c *Cookie) AppendByteMust(data byte) {
-	if c.size+1 > len(c.data) {
-		panic(ErrCookieDataTooLong)
-	}
-	c.data[c.size] = data
-	c.size += 1
 }
 
 func (c *CookieState) SetRand(rnd dtlsrand.Rand) {
@@ -88,81 +51,71 @@ func (c *CookieState) SetRand(rnd dtlsrand.Rand) {
 	c.hmacHasher = hmac.New(sha256.New, cookieSecret[:])
 }
 
-func (c *CookieState) CreateCookie(params Params, addr netip.AddrPort) Cookie {
-	var cookie Cookie
+func (c *CookieState) AppendCookie(cookie []byte, params Params, addr netip.AddrPort) []byte {
 	{
 		var salt [saltLength]byte
 		c.rnd.ReadMust(salt[:])
-		cookie.AppendMust(salt[:])
+		cookie = append(cookie, salt[:]...)
 	}
-	{
-		var unixNanoBytes [8]byte
-		binary.BigEndian.PutUint64(unixNanoBytes[:], uint64(params.TimestampUnixNano)) // type conversion
-		cookie.AppendMust(unixNanoBytes[:])
-	}
-	if params.KeyShareSet { // to reconstruct stateless HRR, we must remember if we asked for alternative key_share
-		cookie.AppendByteMust(1)
+	cookie = binary.BigEndian.AppendUint64(cookie, uint64(params.TimestampUnixNano)) // type conversion
+	if params.KeyShareSet {                                                          // to reconstruct stateless HRR, we must remember if we asked for alternative key_share
+		cookie = append(cookie, 1)
 	} else {
-		cookie.AppendByteMust(0)
+		cookie = append(cookie, 0)
 	}
-	{
-		var suiteBytes [2]byte
-		binary.BigEndian.PutUint16(suiteBytes[:], uint16(params.CipherSuite))
-		cookie.AppendMust(suiteBytes[:])
-	}
-	cookie.AppendByteMust(safecast.Cast[byte](params.TranscriptHash.Len()))
-	cookie.AppendMust(params.TranscriptHash.GetValue()[:])
+	cookie = binary.BigEndian.AppendUint16(cookie, uint16(params.CipherSuite))
+	cookie = append(cookie, safecast.Cast[byte](params.TranscriptHash.Len()))
+	cookie = append(cookie, params.TranscriptHash.GetValue()...)
 
-	actualHash := c.getScratchHash(cookie.GetValue(), addr)
-	cookie.AppendMust(actualHash[:])
+	actualHash := c.getScratchHash(cookie, addr)
+	cookie = append(cookie, actualHash[:]...)
 
 	return cookie
 }
 
-func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time.Time, cookieValidDuration time.Duration) (_ Params, err error) {
+func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie []byte, now time.Time, cookieValidDuration time.Duration) (_ Params, err error) {
 	// Important to return empty params below in case of error,
 	// so we accidentally do not use them if forgot to check ok.
 	var params Params
-	data := cookie.GetValue()
 	offset := 0
 	var salt [saltLength]byte // value ignored
-	if offset, err = format.ParserReadFixedBytes(data, offset, salt[:]); err != nil {
+	if offset, err = format.ParserReadFixedBytes(cookie, offset, salt[:]); err != nil {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
 	var timestampUnixNano uint64
-	if offset, timestampUnixNano, err = format.ParserReadUint64(data, offset); err != nil {
+	if offset, timestampUnixNano, err = format.ParserReadUint64(cookie, offset); err != nil {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
 	params.TimestampUnixNano = int64(timestampUnixNano)
 	var keyShareSet byte
-	if offset, keyShareSet, err = format.ParserReadByte(data, offset); err != nil {
+	if offset, keyShareSet, err = format.ParserReadByte(cookie, offset); err != nil {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
 	params.KeyShareSet = keyShareSet != 0
 	var cipherSuite uint16
-	if offset, cipherSuite, err = format.ParserReadUint16(data, offset); err != nil {
+	if offset, cipherSuite, err = format.ParserReadUint16(cookie, offset); err != nil {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
 	params.CipherSuite = ciphersuite.ID(cipherSuite)
 	var transcriptHashLen byte
-	if offset, transcriptHashLen, err = format.ParserReadByte(data, offset); err != nil {
+	if offset, transcriptHashLen, err = format.ParserReadByte(cookie, offset); err != nil {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
 	if int(transcriptHashLen) > params.TranscriptHash.Cap() {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
 	params.TranscriptHash.SetZero(int(transcriptHashLen))
-	if offset, err = format.ParserReadFixedBytes(data, offset, params.TranscriptHash.GetValue()); err != nil {
+	if offset, err = format.ParserReadFixedBytes(cookie, offset, params.TranscriptHash.GetValue()); err != nil {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
 
-	actualHash := c.getScratchHash(data[:offset], addr)
+	actualHash := c.getScratchHash(cookie[:offset], addr)
 
 	var mustBeHash [cookieHashLength]byte
-	if offset, err = format.ParserReadFixedBytes(data, offset, mustBeHash[:]); err != nil {
+	if offset, err = format.ParserReadFixedBytes(cookie, offset, mustBeHash[:]); err != nil {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
-	if offset != len(data) {
+	if offset != len(cookie) {
 		return Params{}, dtlserrors.ErrClientHelloCookieInvalid
 	}
 
@@ -181,14 +134,15 @@ func (c *CookieState) IsCookieValid(addr netip.AddrPort, cookie Cookie, now time
 }
 
 func (c *CookieState) getScratchHash(cookieHashedBytes []byte, addr netip.AddrPort) [cookieHashLength]byte {
-	scratch := make([]byte, 0, 2*MaxCookieSize) // allocate on stack
+	scratch := make([]byte, 0, 2*CookieStorageSize) // allocate on stack
+
 	scratch = append(scratch, cookieHashedBytes...)
 	// Treating as equal actual ipv4 address and one mapped to ipv6 seems to be good enough for us here
 	b := addr.Addr().As16()
 	scratch = append(scratch, b[:]...)
 	scratch = binary.BigEndian.AppendUint16(scratch, addr.Port())
-	if len(scratch) > 2*MaxCookieSize {
-		panic("please increase maxScratchSize")
+	if len(scratch) > 2*CookieStorageSize {
+		panic("please increase scratch size")
 	}
 
 	c.mu.Lock()

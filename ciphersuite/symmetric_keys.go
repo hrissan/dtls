@@ -12,23 +12,16 @@ import (
 )
 
 type SymmetricKeys interface {
-	// 1 or 2 bytes of mask actually used, depending on 8-bit or 16-bit sequence number fornat
-	EncryptSequenceNumbersMask(cipherText []byte) ([2]byte, error)
-
-	// datagramLeft is space to the end of datagram
-	// Reserves space for header and padding, returns ok and insideBody to write application data into,
-	// or (if even 0-byte application data will not fit), returns !ok.
-	// Caller should check if his data fits into insideBody, put it there.
-	PrepareProtect(datagramLeft []byte, use8BitSeq bool) (hdrSize int, insideBody []byte, ok bool)
+	RecordOverhead() (AEADSealSize int, SNBlockSize int)
 
 	// Pass the same datagramLeft, returned hdrSize, and pass insideSize, how many data copied into insideBody
-	Protect(rn record.Number, encryptSN bool, recordType byte, datagramLeft []byte, hdrSize int, insideSize int) (recordSize int)
+	Protect(rn record.Number, encryptSN bool, recordType byte, datagramLeft []byte, userPadding int, hdrSize int, insideSize int) (recordSize int)
 
 	// Warning - decrypts in place, seqNumData and body can be garbage after unsuccessfull decryption
 	Deprotect(hdr record.Ciphertext, encryptSN bool, expectedSN uint64) (decrypted []byte, seq uint64, contentType byte, err error)
 }
 
-func encryptSequenceNumbers(seqNum []byte, mask [2]byte) {
+func encryptSeq(seqNum []byte, mask [2]byte) {
 	if len(seqNum) == 1 {
 		seqNum[0] ^= mask[0]
 		return

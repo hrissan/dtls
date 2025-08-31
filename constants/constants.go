@@ -40,5 +40,3 @@ const MaxPSKIdentities = 32
 // Should be >32 even in tests, otherwise KeyUpdate cannot complete before reaching hard limit.
 const MaxProtectionLimitSend = 32
 const MaxProtectionLimitReceive = 32
-
-const AEADSealSize = 16 // TODO - include into our gcm wrapper

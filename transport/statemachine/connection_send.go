@@ -6,6 +6,7 @@ package statemachine
 import (
 	"encoding/binary"
 	"fmt"
+	"math/rand"
 	"net/netip"
 
 	"github.com/hrissan/dtls/constants"
@@ -152,7 +153,8 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	//if datagramSize > 0 {
 	//	return datagramSize, true, nil
 	//}
-	hdrSize, insideBody, ok := conn.prepareProtect(datagram[datagramSize:], opts.Use8BitSeq)
+	userPadding := rand.Intn(4) // TODO - remove
+	hdrSize, insideBody, ok := conn.prepareProtect(datagram[datagramSize:], opts.Use8BitSeq, userPadding)
 	if !ok || len(insideBody) < constants.MinFragmentBodySize {
 		return datagramSize, true, nil
 	}
@@ -164,7 +166,8 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 		panic("ciphertext user handler overflows allowed record")
 	}
 	if send {
-		recordSize, _, err := conn.protectRecord(record.RecordTypeApplicationData, datagram[datagramSize:], hdrSize, insideSize)
+		recordSize, _, err := conn.protectRecord(record.RecordTypeApplicationData,
+			datagram[datagramSize:], userPadding, hdrSize, insideSize)
 		if err != nil {
 			return 0, false, err
 		}
@@ -182,7 +185,8 @@ func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, da
 	if acksSize == 0 {
 		return 0, nil
 	}
-	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq)
+	userPadding := rand.Intn(4) // TODO - remove
+	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq, userPadding)
 	if !ok || len(insideBody) < record.AckHeaderSize+record.AckElementSize { // not a single one fits
 		return 0, nil
 	}
@@ -209,7 +213,8 @@ func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, da
 	if offset != record.AckHeaderSize+acksCount*record.AckElementSize {
 		panic("error calculating space for acks")
 	}
-	recordSize, _, err := conn.protectRecord(record.RecordTypeAck, datagramLeft, hdrSize, offset)
+	recordSize, _, err := conn.protectRecord(record.RecordTypeAck,
+		datagramLeft, userPadding, hdrSize, offset)
 	if err != nil {
 		return 0, err
 	}
@@ -221,12 +226,14 @@ func (conn *Connection) constructDatagramAlert(opts *options.TransportOptions, d
 		// TODO - unencrypted alert
 		return 0, nil
 	}
-	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq)
+	userPadding := rand.Intn(4) // TODO - remove
+	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq, userPadding)
 	if !ok || len(insideBody) < record.AlertSize {
 		return 0, nil
 	}
 	_ = alert.Write(insideBody[:0])
-	recordSize, _, err := conn.protectRecord(record.RecordTypeAlert, datagramLeft, hdrSize, record.AlertSize)
+	recordSize, _, err := conn.protectRecord(record.RecordTypeAlert,
+		datagramLeft, userPadding, hdrSize, record.AlertSize)
 	if err != nil {
 		return 0, err
 	}

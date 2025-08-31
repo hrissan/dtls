@@ -9,11 +9,12 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/safecast"
 )
+
+const symmetricKeysAESSealSize = 16
 
 type SymmetricKeysAES struct {
 	SN      cipher.Block // 16 interface + 240 aes half + (240 aes half we do not need). Can be removed with unencrypted sequence numbers extension
@@ -37,8 +38,8 @@ func NewGCMCipher(block cipher.Block) cipher.AEAD {
 	return c
 }
 
-func (keys *SymmetricKeysAES) EncryptSequenceNumbersMask(cipherText []byte) ([2]byte, error) {
-	var mask [16]byte
+func (keys *SymmetricKeysAES) encryptSeqMask(cipherText []byte) ([2]byte, error) {
+	var mask [aes.BlockSize]byte
 	if len(cipherText) < keys.SN.BlockSize() {
 		return [2]byte{}, dtlserrors.WarnCipherTextTooShortForSNDecryption
 	}
@@ -46,20 +47,11 @@ func (keys *SymmetricKeysAES) EncryptSequenceNumbersMask(cipherText []byte) ([2]
 	return [2]byte(mask[0:2]), nil
 }
 
-func (keys *SymmetricKeysAES) PrepareProtect(datagramLeft []byte, use8BitSeq bool) (hdrSize int, insideBody []byte, ok bool) {
-	hdrSize = record.OutgoingCiphertextRecordHeader16
-	if use8BitSeq {
-		hdrSize = record.OutgoingCiphertextRecordHeader8
-	}
-	overhead := hdrSize + 1 + record.MaxOutgoingCiphertextRecordPadding + constants.AEADSealSize
-	userSpace := len(datagramLeft) - overhead
-	if userSpace < 0 {
-		return 0, nil, false
-	}
-	return hdrSize, datagramLeft[hdrSize : hdrSize+userSpace], true
+func (keys *SymmetricKeysAES) RecordOverhead() (AEADSealSize int, SNBlockSize int) {
+	return symmetricKeysAESSealSize, aes.BlockSize
 }
 
-func (keys *SymmetricKeysAES) Protect(rn record.Number, encryptSN bool, recordType byte, datagramLeft []byte, hdrSize int, insideSize int) (recordSize int) {
+func (keys *SymmetricKeysAES) Protect(rn record.Number, encryptSN bool, recordType byte, datagramLeft []byte, userPadding int, hdrSize int, insideSize int) (recordSize int) {
 	fmt.Printf("constructing ciphertext type %d with rn={%d,%d} hdrSize = %d body: %x\n", recordType, rn.Epoch(), rn.SeqNum(), hdrSize, datagramLeft[hdrSize:hdrSize+insideSize])
 
 	iv := keys.WriteIV
@@ -76,9 +68,7 @@ func (keys *SymmetricKeysAES) Protect(rn record.Number, encryptSN bool, recordTy
 	datagramLeft[hdrSize+insideSize] = recordType
 	insideSize++
 
-	padding := (insideSize + 1) % 4 // test our code with different padding. TODO - remove later
-	// max padding max correspond to format.MaxOutgoingCiphertextRecordOverhead
-	for i := 0; i != padding; i++ {
+	for i := 0; i != userPadding; i++ {
 		datagramLeft[hdrSize+insideSize] = 0
 		insideSize++
 	}
@@ -87,39 +77,39 @@ func (keys *SymmetricKeysAES) Protect(rn record.Number, encryptSN bool, recordTy
 	if hdrSize == record.OutgoingCiphertextRecordHeader8 {
 		seqNumData = datagramLeft[1:2]
 		seqNumData[0] = byte(rn.SeqNum()) // truncation
-		binary.BigEndian.PutUint16(datagramLeft[2:], safecast.Cast[uint16](insideSize+constants.AEADSealSize))
+		binary.BigEndian.PutUint16(datagramLeft[2:], safecast.Cast[uint16](insideSize+symmetricKeysAESSealSize))
 	} else {
 		seqNumData = datagramLeft[1:3]
 		binary.BigEndian.PutUint16(seqNumData, uint16(rn.SeqNum())) // truncation
-		binary.BigEndian.PutUint16(datagramLeft[3:], safecast.Cast[uint16](insideSize+constants.AEADSealSize))
+		binary.BigEndian.PutUint16(datagramLeft[3:], safecast.Cast[uint16](insideSize+symmetricKeysAESSealSize))
 	}
 
 	encrypted := keys.Write.Seal(datagramLeft[hdrSize:hdrSize], iv[:], datagramLeft[hdrSize:hdrSize+insideSize], datagramLeft[:hdrSize])
 	if &encrypted[0] != &datagramLeft[hdrSize] {
 		panic("gcm.Seal reallocated datagram storage")
 	}
-	if len(encrypted) != len(datagramLeft[hdrSize:hdrSize+insideSize+constants.AEADSealSize]) {
+	if len(encrypted) != len(datagramLeft[hdrSize:hdrSize+insideSize+symmetricKeysAESSealSize]) {
 		panic("gcm.Seal length mismatch")
 	}
 
 	if encryptSN {
-		mask, err := keys.EncryptSequenceNumbersMask(datagramLeft[hdrSize:])
+		mask, err := keys.encryptSeqMask(datagramLeft[hdrSize:])
 		if err != nil {
 			panic("cipher text too short when sending")
 		}
-		encryptSequenceNumbers(seqNumData, mask)
+		encryptSeq(seqNumData, mask)
 	}
 	//	fmt.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
-	return hdrSize + insideSize + constants.AEADSealSize
+	return hdrSize + insideSize + symmetricKeysAESSealSize
 }
 
 func (keys *SymmetricKeysAES) Deprotect(hdr record.Ciphertext, encryptSN bool, expectedSN uint64) (decrypted []byte, seq uint64, contentType byte, err error) {
 	if encryptSN {
-		mask, err := keys.EncryptSequenceNumbersMask(hdr.Body)
+		mask, err := keys.encryptSeqMask(hdr.Body)
 		if err != nil {
 			return nil, 0, 0, err
 		}
-		encryptSequenceNumbers(hdr.SeqNum, mask)
+		encryptSeq(hdr.SeqNum, mask)
 	}
 	gcm := keys.Write
 	iv := keys.WriteIV // copy, otherwise disaster

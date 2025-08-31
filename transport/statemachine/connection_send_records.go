@@ -5,6 +5,7 @@ package statemachine
 
 import (
 	"math"
+	"math/rand"
 
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
@@ -53,7 +54,8 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 		}
 		return len(da), msg.Header.FragmentInfo, rn, nil
 	}
-	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq)
+	userPadding := rand.Intn(4) // TODO - remove
+	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq, userPadding)
 	if !ok || len(insideBody) <= handshake.FragmentHeaderSize {
 		return
 	}
@@ -64,7 +66,8 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 	insideBody = msg.Header.Write(insideBody[:0])
 	insideBody = append(insideBody, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
 
-	recordSize, rn, err = conn.protectRecord(record.RecordTypeHandshake, datagramLeft, hdrSize, len(insideBody))
+	recordSize, rn, err = conn.protectRecord(record.RecordTypeHandshake,
+		datagramLeft, userPadding, hdrSize, len(insideBody))
 	if err != nil {
 		return 0, handshake.FragmentInfo{}, record.Number{}, err
 	}
@@ -103,14 +106,29 @@ func (conn *Connection) checkSendLimit() (uint64, error) {
 	return seq, conn.keyUpdateStart(false)
 }
 
-// Writes header and returns body to write used data to.
-// can return empty body, useful if the caller wants to write empty application data.
-// Pass datagramLeft, hdrSize and how many bytes pf insideBody filled to protectRecord
-func (conn *Connection) prepareProtect(datagramLeft []byte, use8BitSeq bool) (hdrSize int, insideBody []byte, ok bool) {
-	return conn.keys.Send.Symmetric.PrepareProtect(datagramLeft, use8BitSeq)
+// datagramLeft is space to the end of datagram
+// Reserves space for header and padding, returns ok and insideBody to write application data into,
+// or (if even 0-byte application data will not fit), returns !ok.
+// Caller should check if his data fits into insideBody, put it there.
+func (conn *Connection) prepareProtect(datagramLeft []byte, use8BitSeq bool, userPadding int) (hdrSize int, insideBody []byte, ok bool) {
+	sealSize, snBlockSize := conn.keys.Send.Symmetric.RecordOverhead()
+	hdrSize = record.OutgoingCiphertextRecordHeader16
+	if use8BitSeq {
+		hdrSize = record.OutgoingCiphertextRecordHeader8
+	}
+	if len(datagramLeft)-hdrSize < snBlockSize { // not enough ciphertext to encrypt seq
+		return 0, nil, false
+	}
+	cipherTextSize := 1 + userPadding + sealSize
+	overhead := hdrSize + cipherTextSize
+	userSpace := len(datagramLeft) - overhead
+	if userSpace < 0 {
+		return 0, nil, false
+	}
+	return hdrSize, datagramLeft[hdrSize : hdrSize+userSpace], true
 }
 
-func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, hdrSize int, insideSize int) (recordSize int, _ record.Number, _ error) {
+func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, userPadding int, hdrSize int, insideSize int) (recordSize int, _ record.Number, _ error) {
 	if hdrSize != record.OutgoingCiphertextRecordHeader8 && hdrSize != record.OutgoingCiphertextRecordHeader16 {
 		panic("outgoing record header size must be 4 or 5 bytes")
 	}
@@ -123,7 +141,7 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, hdrS
 	}
 	rn := record.NumberWith(conn.keys.SendEpoch, seq)
 	encryptSN := !conn.keys.DoNotEncryptSequenceNumbers
-	recordSize = conn.keys.Send.Symmetric.Protect(rn, encryptSN, recordType, datagramLeft, hdrSize, insideSize)
+	recordSize = conn.keys.Send.Symmetric.Protect(rn, encryptSN, recordType, datagramLeft, userPadding, hdrSize, insideSize)
 	return recordSize, rn, nil
 }
 

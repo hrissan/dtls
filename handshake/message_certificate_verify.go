@@ -9,8 +9,7 @@ import (
 	"github.com/hrissan/dtls/format"
 )
 
-// for now after parsing those slices point to datagram/message,
-// so must be copied or discarded immediately after parsing
+// after parsing, slices inside point to datagram, so must not be retained
 type MsgCertificateVerify struct {
 	SignatureScheme uint16
 	Signature       []byte // can be relatively large for RSA, fixed array impractical

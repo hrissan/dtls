@@ -13,10 +13,12 @@ import (
 
 type Keys struct {
 	// fields sorted to minimize padding
-	Send         DirectionKeys
-	Receive      DirectionKeys
-	SendEpoch    uint16 // not in DirectionKeys to save sizeof due to alignment
-	ReceiveEpoch uint16 // not in DirectionKeys to save sizeof due to alignment
+	Send    DirectionKeys
+	Receive DirectionKeys
+	// always correspond to ReceiveEpoch + 1 if NewReceiveKeysSet is set
+	NewReceiveKeys ciphersuite.SymmetricKeys
+	// Idea: we now store 2 sets of symmetric keys, so we could keep previous epoch keys for
+	// replay window length, but then we need also 2 replay windows, and 2 SendAcks structs, so no.
 
 	SendNextSegmentSequence uint64
 
@@ -26,11 +28,10 @@ type Keys struct {
 	SendAcks      replay.Window
 	SendAcksEpoch uint16 // we do not want to lose acks immediately  when switching epoch
 
-	// Idea: we have storage 2 sets of keys, keep previous epoch keys for replay window length.
-	// But then we need also 2 replay windows, and 2 SendAcks structs.
+	SendEpoch    uint16 // not in DirectionKeys to save sizeof due to alignment
+	ReceiveEpoch uint16 // not in DirectionKeys to save sizeof due to alignment
 
-	// always correspond to Receive.Symmetric.Epoch + 1 if NewReceiveKeysSet is set
-	NewReceiveKeys ciphersuite.SymmetricKeys
+	SuiteID ciphersuite.ID
 
 	FailedDeprotectionCounter               uint64
 	FailedDeprotectionCounterNewReceiveKeys uint64 // separate counter for NewReceiveKeys
@@ -43,8 +44,7 @@ type Keys struct {
 	// otherwise we will request update again after peer's ack, but before actual epoch update
 	RequestedReceiveEpochUpdate bool
 	// calculate NewReceiveKeys only once
-	NewReceiveKeysSet bool // TODO remove
-	SuiteID           ciphersuite.ID
+	NewReceiveKeysSet bool // we do not deallocate NewReceiveKeys, so cannot use NewReceiveKeys != nil
 }
 
 func (keys *Keys) Suite() ciphersuite.Suite {

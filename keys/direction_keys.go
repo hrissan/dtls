@@ -14,10 +14,6 @@ type DirectionKeys struct {
 	ApplicationTrafficSecret ciphersuite.Hash // we need to keep this for key update
 
 	Symmetric ciphersuite.SymmetricKeys
-
-	// total size ~100 plus 240 (no seq encryption) or 480 (seq encryption)
-	// but crypto.Block in standard golang's crypto contains both encrypting and decrypting halves,
-	// so without unsafe tricks our direction keys total size is ~100 plus 480 (no seq encryption) or 960 (seq encryption)
 }
 
 func (keys *DirectionKeys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleServer bool, hmacHandshakeSecret hash.Hash, trHash ciphersuite.Hash) (handshakeTrafficSecret ciphersuite.Hash) {

@@ -108,7 +108,7 @@ func (conn *Connection) deprotectLocked(hdr record.Encrypted) ([]byte, record.Nu
 
 func (conn *Connection) deprotectWithKeysLocked(keys ciphersuite.SymmetricKeys, hdr record.Encrypted, expectedSN uint64) (recordBody []byte, seq uint64, contentType byte, err error) {
 	if !conn.keys.DoNotEncryptSequenceNumbers {
-		mask, err := keys.EncryptSeqMask(hdr.Body)
+		mask, err := keys.EncryptSeqMask(hdr.Ciphertext)
 		if err != nil {
 			return nil, 0, 0, err
 		}
@@ -121,7 +121,7 @@ func (conn *Connection) deprotectWithKeysLocked(keys ciphersuite.SymmetricKeys, 
 	if err != nil {
 		return nil, seq, 0, err
 	}
-	decrypted := hdr.Body[:plaintextSize]
+	decrypted := hdr.Ciphertext[:plaintextSize]
 	paddingOffset, contentType := findPaddingOffsetContentType(decrypted) // [rfc8446:5.4]
 	if paddingOffset < 0 {
 		return nil, seq, 0, dtlserrors.ErrCipherTextAllZeroPadding

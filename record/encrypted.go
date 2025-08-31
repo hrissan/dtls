@@ -24,7 +24,7 @@ type Encrypted struct {
 	SeqNum    []byte // alias to original slice to be encrypted/decrypted in place
 	Header    []byte // alias to original slice for AEAD
 	// Length is checked, not stored
-	Body []byte // alias to original slice
+	Ciphertext []byte // alias to original slice
 }
 
 var ErrCiphertextRecordTooShort = errors.New("cipher text record header too short")
@@ -102,7 +102,7 @@ func (hdr *Encrypted) Parse(datagram []byte, cIDLength int) (n int, err error) {
 	}
 	if !hdr.HasLength() {
 		hdr.Header = datagram[:offset]
-		hdr.Body = datagram[offset:]
+		hdr.Ciphertext = datagram[offset:]
 		return len(datagram), nil
 	}
 	if len(datagram) < offset+2 {
@@ -118,6 +118,6 @@ func (hdr *Encrypted) Parse(datagram []byte, cIDLength int) (n int, err error) {
 		return 0, ErrCiphertextRecordTooShortLength
 	}
 	hdr.Header = datagram[:offset]
-	hdr.Body = datagram[offset:endOffset]
+	hdr.Ciphertext = datagram[offset:endOffset]
 	return endOffset, nil
 }

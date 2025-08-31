@@ -64,14 +64,14 @@ func (keys *SymmetricKeysChaCha20Poly1305) AEADDecrypt(rec record.Encrypted, seq
 	iv := keys.WriteIV // copy, otherwise disaster
 
 	FillIVSequence(iv[:], seq)
-	decrypted, err := gcm.Open(rec.Body[:0], iv[:], rec.Body, rec.Header)
+	decrypted, err := gcm.Open(rec.Ciphertext[:0], iv[:], rec.Ciphertext, rec.Header)
 	if err != nil {
 		return 0, dtlserrors.WarnAEADDeprotectionFailed
 	}
-	if &decrypted[0] != &rec.Body[0] {
+	if &decrypted[0] != &rec.Ciphertext[0] {
 		panic("gcm.Open reallocated datagram storage")
 	}
-	if len(decrypted)+symmetricKeysAESSealSize != len(rec.Body) {
+	if len(decrypted)+symmetricKeysAESSealSize != len(rec.Ciphertext) {
 		panic("unexpected decrypted body size")
 	}
 	return len(decrypted), nil

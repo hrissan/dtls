@@ -27,11 +27,11 @@ type SymmetricKeys interface {
 	// Warning - decrypts in place, seqNumData and body can be garbage after unsuccessfull decryption
 	// [.....................................]
 	// [.....] <-- rec.Header
-	//        [...........rec.Body...........]
+	//        [........rec.Ciphertext........]
 	//                           [.AEAD seal.]
 	//        [....plaintext....]
 	// Deencrypts in place, with rec.Header as additional data
-	// len(rec.Body) == plaintextSize + AEADSealSize
+	// len(rec.Ciphertext) == plaintextSize + AEADSealSize
 	AEADDecrypt(rec record.Encrypted, seq uint64) (plaintextSize int, err error)
 }
 

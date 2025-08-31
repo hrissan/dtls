@@ -12,10 +12,10 @@ import (
 
 var ErrCertificateChainTooLong = errors.New("certificate chain is too long")
 
+// after parsing, slices inside point to datagram, so must not be retained
 type MsgCertificate struct {
 	// ProtocolVersion is checked but not stored
-	RequestContextLength int
-	RequestContext       [256]byte // always enough
+	RequestContext []byte
 
 	CertificatesLength int
 	Certificates       [constants.MaxCertificateChainLength]CertificateEntry
@@ -46,16 +46,11 @@ func (msg *MsgCertificate) parseCertificates(body []byte) (err error) {
 	return nil
 }
 
-// TODO - writeCertificates
-
 func (msg *MsgCertificate) Parse(body []byte) (err error) {
 	offset := 0
-	var requestContextBody []byte
-	if offset, requestContextBody, err = format.ParserReadByteLength(body, offset); err != nil {
+	if offset, msg.RequestContext, err = format.ParserReadByteLength(body, offset); err != nil {
 		return err
 	}
-	msg.RequestContextLength = len(requestContextBody)
-	copy(msg.RequestContext[:], requestContextBody)
 	var certificatesBody []byte
 	if offset, certificatesBody, err = format.ParserReadUint24Length(body, offset); err != nil {
 		return err
@@ -68,7 +63,7 @@ func (msg *MsgCertificate) Parse(body []byte) (err error) {
 
 func (msg *MsgCertificate) Write(body []byte) []byte {
 	body, mark := format.MarkByteOffset(body)
-	body = append(body, msg.RequestContext[:msg.RequestContextLength]...)
+	body = append(body, msg.RequestContext...)
 	format.FillByteOffset(body, mark)
 	body, mark = format.MarkUint24Offset(body)
 	for _, c := range msg.Certificates[:msg.CertificatesLength] {

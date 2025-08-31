@@ -11,6 +11,7 @@ import (
 
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/record"
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
 type SymmetricKeys struct {
@@ -49,6 +50,14 @@ func NewAesCipher(key []byte) cipher.Block {
 	c, err := aes.NewCipher(key)
 	if err != nil {
 		panic("aes.NewCipher fails " + err.Error())
+	}
+	return c
+}
+
+func NewChacha20Poly1305(key []byte) cipher.AEAD {
+	c, err := chacha20poly1305.New(key[:])
+	if err != nil {
+		panic("chacha20poly1305.NewCipher fails " + err.Error())
 	}
 	return c
 }

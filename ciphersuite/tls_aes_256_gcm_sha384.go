@@ -13,7 +13,8 @@ type impl_TLS_AES_256_GCM_SHA384 struct {
 }
 
 func (s *impl_TLS_AES_256_GCM_SHA384) ProtectionLimit() uint64 {
-	return 1 << 36
+	// [rfc8446:5.5] For AES-GCM, up to 2^24.5 full-size records (about 24 million) may be encrypted
+	return 1 << 24
 }
 
 func (s *impl_TLS_AES_256_GCM_SHA384) NewHasher() hash.Hash {

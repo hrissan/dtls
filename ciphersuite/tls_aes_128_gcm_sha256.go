@@ -9,11 +9,14 @@ import (
 	"hash"
 )
 
+//	"golang.org/x/crypto/chacha20poly1305"
+
 type impl_TLS_AES_128_GCM_SHA256 struct {
 }
 
 func (s *impl_TLS_AES_128_GCM_SHA256) ProtectionLimit() uint64 {
-	return 1 << 36
+	// [rfc8446:5.5] For AES-GCM, up to 2^24.5 full-size records (about 24 million) may be encrypted
+	return 1 << 24
 }
 
 func (s *impl_TLS_AES_128_GCM_SHA256) NewHasher() hash.Hash {

@@ -41,8 +41,8 @@ func (conn *Connection) receivedEncryptedAckLocked(opts *options.TransportOption
 		conn.keys.Suite().ResetSymmetricKeys(&conn.keys.Send.Symmetric, conn.keys.Send.ApplicationTrafficSecret)
 		conn.keys.Send.Epoch = 3
 		conn.keys.SendNextSegmentSequence = 0
-		conn.hctx = nil                // TODO - reuse into pool
-		conn.handler.OnConnectLocked() //  = &exampleHandler{toSend: "Hello from client\n"}
+		conn.hctx = nil // TODO - reuse into pool
+		conn.handler.OnConnectLocked()
 		conn.stateID = smIDPostHandshake
 		conn.SignalWriteable()
 	}

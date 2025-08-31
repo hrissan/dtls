@@ -87,7 +87,7 @@ func (conn *Connection) deprotectLocked(hdr record.Encrypted) ([]byte, record.Nu
 	}
 	conn.keys.ExpectReceiveEpochUpdate = false
 
-	// do not free memory, suite will update keys inplace on the next update
+	// do not free memory, suite will update NewReceiveKeys in place next time
 	receiver.Symmetric, conn.keys.NewReceiveKeys = conn.keys.NewReceiveKeys, receiver.Symmetric
 	conn.keys.Receive.Epoch++
 	conn.keys.NewReceiveKeysSet = false

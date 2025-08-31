@@ -11,15 +11,14 @@ import (
 const MaxCiphertextRecordLength = MaxPlaintextRecordLength + 256 // [rfc8446:5.2]
 
 // This does not include CID size and AEAD seal, they are deterministic but depend on runtime parameters
-const OutgoingCiphertextRecordHeader8 = 4    // first byte + 16-bit seqnum + 16-bit length
-const OutgoingCiphertextRecordHeader16 = 5   // first byte + 8-bit seqnum + 16-bit length
-const MaxOutgoingCiphertextRecordPadding = 4 // arbitrary
+const OutgoingCiphertextRecordHeader8 = 4  // first byte + 16-bit seqnum + 16-bit length
+const OutgoingCiphertextRecordHeader16 = 5 // first byte + 8-bit seqnum + 16-bit length
 
-func IsCiphertextRecord(fb byte) bool {
+func IsEncryptedRecord(fb byte) bool {
 	return fb&0b11100000 == 0b00100000
 }
 
-type Ciphertext struct {
+type Encrypted struct {
 	FirstByte byte
 	CID       []byte // alias to original slice
 	SeqNum    []byte // alias to original slice to be encrypted/decrypted in place
@@ -48,12 +47,12 @@ func CiphertextHeaderFirstByte(hasCID bool, has16bitSeqNum bool, hasLength bool,
 	return result
 }
 
-func (hdr *Ciphertext) HasCID() bool         { return hdr.FirstByte&0b00010000 != 0 }
-func (hdr *Ciphertext) Has16BitSeqNum() bool { return hdr.FirstByte&0b00001000 != 0 }
-func (hdr *Ciphertext) HasLength() bool      { return hdr.FirstByte&0b00000100 != 0 }
-func (hdr *Ciphertext) Epoch() byte          { return hdr.FirstByte & 0b00000011 }
+func (hdr *Encrypted) HasCID() bool         { return hdr.FirstByte&0b00010000 != 0 }
+func (hdr *Encrypted) Has16BitSeqNum() bool { return hdr.FirstByte&0b00001000 != 0 }
+func (hdr *Encrypted) HasLength() bool      { return hdr.FirstByte&0b00000100 != 0 }
+func (hdr *Encrypted) Epoch() byte          { return hdr.FirstByte & 0b00000011 }
 
-func (hdr *Ciphertext) MatchesEpoch(epoch uint16) bool {
+func (hdr *Encrypted) MatchesEpoch(epoch uint16) bool {
 	return byte(epoch&0b00000011) == hdr.Epoch() // truncation
 }
 
@@ -69,7 +68,7 @@ func closestSequenceNumber(seq uint16, expectedSN uint64, mask uint64) uint64 {
 	return seqCandidate
 }
 
-func (hdr *Ciphertext) ClosestSequenceNumber(seqNumData []byte, expectedSN uint64) (uint16, uint64) { // return garbage before decryption or after encryption
+func (hdr *Encrypted) ClosestSequenceNumber(seqNumData []byte, expectedSN uint64) (uint16, uint64) { // return garbage before decryption or after encryption
 	if hdr.Has16BitSeqNum() {
 		seq := binary.BigEndian.Uint16(seqNumData)
 		return seq, closestSequenceNumber(seq, expectedSN, 0x10000)
@@ -78,7 +77,7 @@ func (hdr *Ciphertext) ClosestSequenceNumber(seqNumData []byte, expectedSN uint6
 	return seq, closestSequenceNumber(seq, expectedSN, 0x100)
 }
 
-func (hdr *Ciphertext) Parse(datagram []byte, cIDLength int) (n int, err error) {
+func (hdr *Encrypted) Parse(datagram []byte, cIDLength int) (n int, err error) {
 	hdr.FirstByte = datagram[0] // !empty checked elsewhere
 	offset := 1
 	if hdr.HasCID() {

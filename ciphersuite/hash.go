@@ -5,13 +5,14 @@ package ciphersuite
 
 import (
 	"hash"
-
-	"github.com/hrissan/dtls/constants"
 )
 
-// we like static storage, so we do almost no allocations
+const MaxHashLength = 48
+
+// We want fixed-size storage for hashes, as we want to do as few allocations as possible
+// If we ever need very large hashes, we may want to start using allocated storage.
 type Hash struct {
-	data [constants.MaxHashLength]byte
+	data [MaxHashLength]byte
 	size int
 }
 

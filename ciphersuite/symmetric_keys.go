@@ -32,7 +32,7 @@ type SymmetricKeys interface {
 	//        [....plaintext....]
 	// Deencrypts in place, with rec.Header as additional data
 	// len(rec.Body) == plaintextSize + AEADSealSize
-	AEADDecrypt(rec record.Ciphertext, seq uint64) (plaintextSize int, err error)
+	AEADDecrypt(rec record.Encrypted, seq uint64) (plaintextSize int, err error)
 }
 
 // panic if len(iv) is < 8

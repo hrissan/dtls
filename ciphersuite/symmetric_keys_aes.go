@@ -49,7 +49,7 @@ func (keys *SymmetricKeysAES) AEADEncrypt(seq uint64, datagramLeft []byte, hdrSi
 	}
 }
 
-func (keys *SymmetricKeysAES) AEADDecrypt(rec record.Ciphertext, seq uint64) (plaintextSize int, err error) {
+func (keys *SymmetricKeysAES) AEADDecrypt(rec record.Encrypted, seq uint64) (plaintextSize int, err error) {
 	gcm := keys.Write
 	iv := keys.WriteIV // copy, otherwise disaster
 

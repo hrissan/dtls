@@ -41,7 +41,7 @@ func (conn *Connection) checkReceiveLimits() error {
 }
 
 // returns contentType == 0 (which is impossible due to padding format) with err == nil when replay detected
-func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.Number, byte, error) {
+func (conn *Connection) deprotectLocked(hdr record.Encrypted) ([]byte, record.Number, byte, error) {
 	receiver := &conn.keys.Receive
 	if conn.keys.ReceiveEpoch == 0 {
 		return nil, record.Number{}, 0, dtlserrors.WarnCannotDecryptInEpoch0
@@ -106,7 +106,7 @@ func (conn *Connection) deprotectLocked(hdr record.Ciphertext) ([]byte, record.N
 	return recordBody, record.NumberWith(conn.keys.ReceiveEpoch, seq), contentType, nil
 }
 
-func (conn *Connection) deprotectWithKeysLocked(keys ciphersuite.SymmetricKeys, hdr record.Ciphertext, expectedSN uint64) (recordBody []byte, seq uint64, contentType byte, err error) {
+func (conn *Connection) deprotectWithKeysLocked(keys ciphersuite.SymmetricKeys, hdr record.Encrypted, expectedSN uint64) (recordBody []byte, seq uint64, contentType byte, err error) {
 	if !conn.keys.DoNotEncryptSequenceNumbers {
 		mask, err := keys.EncryptSeqMask(hdr.Body)
 		if err != nil {

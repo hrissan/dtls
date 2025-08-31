@@ -10,6 +10,7 @@ import (
 	"github.com/hrissan/dtls/format"
 )
 
+// TODO - support priority
 type CipherSuitesSet struct {
 	// each known CipherSuite is represented by a bool, all unknown are skipped
 	HasCypherSuite_TLS_AES_128_GCM_SHA256       bool

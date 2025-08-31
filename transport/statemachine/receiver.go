@@ -182,8 +182,8 @@ func (t *Transport) processDatagramImpl(datagram []byte, addr netip.AddrPort) (*
 	for recordOffset < len(datagram) { // read records one by one
 		fb := datagram[recordOffset]
 		switch {
-		case record.IsCiphertextRecord(fb):
-			var hdr record.Ciphertext
+		case record.IsEncryptedRecord(fb):
+			var hdr record.Encrypted
 			n, err := hdr.Parse(datagram[recordOffset:], t.opts.CIDLength)
 			if err != nil {
 				t.opts.Stats.BadRecord("ciphertext", recordOffset, len(datagram), addr, err)

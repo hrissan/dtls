@@ -59,7 +59,7 @@ func (keys *SymmetricKeysChaCha20Poly1305) AEADEncrypt(seq uint64, datagramLeft 
 	}
 }
 
-func (keys *SymmetricKeysChaCha20Poly1305) AEADDecrypt(rec record.Ciphertext, seq uint64) (plaintextSize int, err error) {
+func (keys *SymmetricKeysChaCha20Poly1305) AEADDecrypt(rec record.Encrypted, seq uint64) (plaintextSize int, err error) {
 	gcm := keys.Write
 	iv := keys.WriteIV // copy, otherwise disaster
 

@@ -113,8 +113,8 @@ func (c *CookieState) CreateCookie(params Params, addr netip.AddrPort) Cookie {
 	cookie.AppendByteMust(safecast.Cast[byte](params.TranscriptHash.Len()))
 	cookie.AppendMust(params.TranscriptHash.GetValue()[:])
 
-	hash := c.getScratchHash(cookie.GetValue(), addr)
-	cookie.AppendMust(hash[:])
+	actualHash := c.getScratchHash(cookie.GetValue(), addr)
+	cookie.AppendMust(actualHash[:])
 
 	return cookie
 }

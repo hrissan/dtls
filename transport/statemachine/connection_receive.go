@@ -13,7 +13,7 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *Connection) receivedCiphertextRecord(opts *options.TransportOptions, hdr record.Ciphertext) error {
+func (conn *Connection) receivedCiphertextRecord(opts *options.TransportOptions, hdr record.Encrypted) error {
 	conn.mu.Lock()
 	defer conn.mu.Unlock()
 	if err := conn.checkReceiveLimits(); err != nil {

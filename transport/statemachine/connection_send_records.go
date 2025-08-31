@@ -126,3 +126,16 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, hdrS
 	recordSize = conn.keys.Send.Symmetric.Protect(rn, encryptSN, recordType, datagramLeft, hdrSize, insideSize)
 	return recordSize, rn, nil
 }
+
+func encryptSequenceNumbers(seqNum []byte, mask [2]byte) {
+	if len(seqNum) == 1 {
+		seqNum[0] ^= mask[0]
+		return
+	}
+	if len(seqNum) == 2 {
+		seqNum[0] ^= mask[0]
+		seqNum[1] ^= mask[1]
+		return
+	}
+	panic("seqNum must have 1 or 2 bytes")
+}

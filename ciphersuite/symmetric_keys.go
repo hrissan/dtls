@@ -12,6 +12,9 @@ import (
 )
 
 type SymmetricKeys interface {
+	// 1 or 2 bytes of mask actually used, depending on 8-bit or 16-bit sequence number fornat
+	EncryptSequenceNumbersMask(cipherText []byte) ([2]byte, error)
+
 	// datagramLeft is space to the end of datagram
 	// Reserves space for header and padding, returns ok and insideBody to write application data into,
 	// or (if even 0-byte application data will not fit), returns !ok.
@@ -23,6 +26,19 @@ type SymmetricKeys interface {
 
 	// Warning - decrypts in place, seqNumData and body can be garbage after unsuccessfull decryption
 	Deprotect(hdr record.Ciphertext, encryptSN bool, expectedSN uint64) (decrypted []byte, seq uint64, contentType byte, err error)
+}
+
+func encryptSequenceNumbers(seqNum []byte, mask [2]byte) {
+	if len(seqNum) == 1 {
+		seqNum[0] ^= mask[0]
+		return
+	}
+	if len(seqNum) == 2 {
+		seqNum[0] ^= mask[0]
+		seqNum[1] ^= mask[1]
+		return
+	}
+	panic("seqNum must have 1 or 2 bytes")
 }
 
 // panic if len(iv) is < 8

@@ -21,24 +21,6 @@ type SymmetricKeysAES struct {
 	WriteIV [12]byte
 }
 
-func (keys *SymmetricKeysAES) EncryptSequenceNumbers(seqNum []byte, cipherText []byte) error {
-	var mask [32]byte // Some space good for many ciphers, TODO - check constant mush earlier
-	if len(cipherText) < keys.SN.BlockSize() {
-		return dtlserrors.WarnCipherTextTooShortForSNDecryption
-	}
-	keys.SN.Encrypt(mask[:], cipherText)
-	if len(seqNum) == 1 {
-		seqNum[0] ^= mask[0]
-		return nil
-	}
-	if len(seqNum) == 2 {
-		seqNum[0] ^= mask[0]
-		seqNum[1] ^= mask[1]
-		return nil
-	}
-	panic("seqNum must have 1 or 2 bytes")
-}
-
 func NewAesCipher(key []byte) cipher.Block {
 	c, err := aes.NewCipher(key)
 	if err != nil {
@@ -53,6 +35,15 @@ func NewGCMCipher(block cipher.Block) cipher.AEAD {
 		panic("cipher.NewGCM fails " + err.Error())
 	}
 	return c
+}
+
+func (keys *SymmetricKeysAES) EncryptSequenceNumbersMask(cipherText []byte) ([2]byte, error) {
+	var mask [16]byte
+	if len(cipherText) < keys.SN.BlockSize() {
+		return [2]byte{}, dtlserrors.WarnCipherTextTooShortForSNDecryption
+	}
+	keys.SN.Encrypt(mask[:], cipherText)
+	return [2]byte(mask[0:2]), nil
 }
 
 func (keys *SymmetricKeysAES) PrepareProtect(datagramLeft []byte, use8BitSeq bool) (hdrSize int, insideBody []byte, ok bool) {
@@ -112,9 +103,11 @@ func (keys *SymmetricKeysAES) Protect(rn record.Number, encryptSN bool, recordTy
 	}
 
 	if encryptSN {
-		if err := keys.EncryptSequenceNumbers(seqNumData, datagramLeft[hdrSize:]); err != nil {
+		mask, err := keys.EncryptSequenceNumbersMask(datagramLeft[hdrSize:])
+		if err != nil {
 			panic("cipher text too short when sending")
 		}
+		encryptSequenceNumbers(seqNumData, mask)
 	}
 	//	fmt.Printf("dtls: ciphertext %d protected cid(hex): %x from %v, body(hex): %x", hdr, cid, addr, decrypted)
 	return hdrSize + insideSize + constants.AEADSealSize
@@ -122,9 +115,11 @@ func (keys *SymmetricKeysAES) Protect(rn record.Number, encryptSN bool, recordTy
 
 func (keys *SymmetricKeysAES) Deprotect(hdr record.Ciphertext, encryptSN bool, expectedSN uint64) (decrypted []byte, seq uint64, contentType byte, err error) {
 	if encryptSN {
-		if err := keys.EncryptSequenceNumbers(hdr.SeqNum, hdr.Body); err != nil {
+		mask, err := keys.EncryptSequenceNumbersMask(hdr.Body)
+		if err != nil {
 			return nil, 0, 0, err
 		}
+		encryptSequenceNumbers(hdr.SeqNum, mask)
 	}
 	gcm := keys.Write
 	iv := keys.WriteIV // copy, otherwise disaster
@@ -138,7 +133,6 @@ func (keys *SymmetricKeysAES) Deprotect(hdr record.Ciphertext, encryptSN bool, e
 	}
 	paddingOffset, contentType := findPaddingOffsetContentType(decrypted) // [rfc8446:5.4]
 	if paddingOffset < 0 {
-		// TODO - send alert
 		return nil, seq, 0, dtlserrors.ErrCipherTextAllZeroPadding
 	}
 	return decrypted[:paddingOffset], seq, contentType, nil

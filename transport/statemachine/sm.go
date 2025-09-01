@@ -33,33 +33,35 @@ func (hctx *handshakeContext) generateFinished(conn *Connection) handshake.Messa
 type stateMachineStateID byte
 
 const (
-	smIDClosed                                stateMachineStateID = iota // must be 0 for correct default state
-	smIDShutdown                              stateMachineStateID = iota
-	smIDClientSentHello                       stateMachineStateID = iota
-	smIDHandshakeServerCalcServerHello2       stateMachineStateID = iota
-	smIDHandshakeServerExpectFinished         stateMachineStateID = iota
-	smIDHandshakeClientExpectServerHRR        stateMachineStateID = iota
-	smIDHandshakeClientExpectServerHello      stateMachineStateID = iota
-	smIDHandshakeClientExpectServerEE         stateMachineStateID = iota
-	smIDHandshakeClientExpectServerCert       stateMachineStateID = iota
-	smIDHandshakeClientExpectServerCertVerify stateMachineStateID = iota
-	smIDHandshakeClientExpectServerFinished   stateMachineStateID = iota
-	smIDPostHandshake                         stateMachineStateID = iota
+	smIDClosed                           stateMachineStateID = iota // must be 0 for correct default state
+	smIDShutdown                         stateMachineStateID = iota
+	smIDClientSentHello                  stateMachineStateID = iota
+	smIDHandshakeServerCalcServerHello2  stateMachineStateID = iota
+	smIDHandshakeServerExpectFinished    stateMachineStateID = iota
+	smIDHandshakeClientExpectServerHRR   stateMachineStateID = iota
+	smIDHandshakeClientExpectServerHello stateMachineStateID = iota
+	smIDHandshakeClientExpectEE          stateMachineStateID = iota
+	smIDHandshakeClientExpectCert        stateMachineStateID = iota
+	smIDHandshakeClientExpectCertVerify  stateMachineStateID = iota
+	smIDHandshakeClientExpectFinished    stateMachineStateID = iota
+	smIDHandshakeClientExpectFinishedAck stateMachineStateID = iota
+	smIDPostHandshake                    stateMachineStateID = iota
 )
 
 var stateMachineStates = [...]StateMachine{
-	smIDClosed:                                &smClosed{},
-	smIDShutdown:                              &smClosed{},
-	smIDClientSentHello:                       &smClientSentHello1{},
-	smIDHandshakeServerCalcServerHello2:       &smHandshakeServerCalcServerHello2{},
-	smIDHandshakeServerExpectFinished:         &smHandshakeServerExpectFinished{},
-	smIDHandshakeClientExpectServerHRR:        &smHandshakeClientExpectServerHRR{},
-	smIDHandshakeClientExpectServerHello:      &smHandshakeClientExpectServerHello{},
-	smIDHandshakeClientExpectServerEE:         &smHandshakeClientExpectEE{},
-	smIDHandshakeClientExpectServerCert:       &smHandshakeClientExpectCert{},
-	smIDHandshakeClientExpectServerCertVerify: &smHandshakeClientExpectCertVerify{},
-	smIDHandshakeClientExpectServerFinished:   &smHandshakeClientExpectFinished{},
-	smIDPostHandshake:                         &smPostHandshake{},
+	smIDClosed:                           &smClosed{},
+	smIDShutdown:                         &smClosed{},
+	smIDClientSentHello:                  &smClientSentHello1{},
+	smIDHandshakeServerCalcServerHello2:  &smHandshakeServerCalcServerHello2{},
+	smIDHandshakeServerExpectFinished:    &smHandshakeServerExpectFinished{},
+	smIDHandshakeClientExpectServerHRR:   &smHandshakeClientExpectServerHRR{},
+	smIDHandshakeClientExpectServerHello: &smHandshakeClientExpectServerHello{},
+	smIDHandshakeClientExpectEE:          &smHandshakeClientExpectEE{},
+	smIDHandshakeClientExpectCert:        &smHandshakeClientExpectCert{},
+	smIDHandshakeClientExpectCertVerify:  &smHandshakeClientExpectCertVerify{},
+	smIDHandshakeClientExpectFinished:    &smHandshakeClientExpectFinished{},
+	smIDHandshakeClientExpectFinishedAck: &smPostHandshake{},
+	smIDPostHandshake:                    &smPostHandshake{},
 }
 
 type StateMachine interface {

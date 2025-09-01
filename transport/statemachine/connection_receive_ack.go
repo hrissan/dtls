@@ -37,10 +37,13 @@ func (conn *Connection) receivedEncryptedAckLocked(opts *options.TransportOption
 		opts.Stats.Warning(conn.addr, dtlserrors.WarnAckEpochSeqnumOverflow)
 	}
 	// if all messages from epoch 2 acked, then switch sending epoch
-	if conn.hctx != nil && conn.hctx.sendQueue.Len() == 0 && conn.keys.Send.Epoch == 2 {
-		conn.keys.Suite().ResetSymmetricKeys(&conn.keys.Send.Symmetric, conn.keys.Send.ApplicationTrafficSecret)
+	if conn.stateID == smIDHandshakeClientExpectFinishedAck && conn.hctx.sendQueue.Len() == 0 {
+		if conn.keys.Send.Epoch != 2 {
+			panic("expected Send.Epoch to be 2 in this state")
+		}
+		conn.keys.Send.Symmetric, conn.hctx.SendSymmetricEpoch3 = conn.hctx.SendSymmetricEpoch3, nil
+		conn.keys.SendNextSegmentSequence, conn.hctx.SendNextSegmentSequenceEpoch3 = conn.hctx.SendNextSegmentSequenceEpoch3, 0
 		conn.keys.Send.Epoch = 3
-		conn.keys.SendNextSegmentSequence = 0
 		conn.hctx = nil // TODO - reuse into pool
 		conn.handler.OnConnectLocked()
 		conn.stateID = smIDPostHandshake

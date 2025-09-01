@@ -26,6 +26,13 @@ type handshakeContext struct {
 	handshakeTrafficSecretSend    ciphersuite.Hash // we need this to generate finished message.
 	handshakeTrafficSecretReceive ciphersuite.Hash // we need this to check peer's finished message.
 
+	// Client should send his [certificate..finished] flight with epoch 2.
+	// (this is unfortunate is mistake in DTLS standard).
+	// So we keep epoch3 keys here temporarily to send application data.
+	// When handshake is finished, this case are moved into send keys.
+	SendSymmetricEpoch3           ciphersuite.SymmetricKeys
+	SendNextSegmentSequenceEpoch3 uint64
+
 	// it seems we do not need this protection, but standard says we must have it. TODO - decide later
 	// receiveNextSegmentSequenceEpoch0 replay.Window
 

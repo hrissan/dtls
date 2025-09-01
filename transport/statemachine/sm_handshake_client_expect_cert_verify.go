@@ -48,6 +48,6 @@ func (*smHandshakeClientExpectCertVerify) OnCertificateVerify(conn *Connection, 
 	}
 	fmt.Printf("certificate verify ok: %+v\n", msgParsed)
 	msg.AddToHash(hctx.transcriptHasher)
-	conn.stateID = smIDHandshakeClientExpectServerFinished
+	conn.stateID = smIDHandshakeClientExpectFinished
 	return nil
 }

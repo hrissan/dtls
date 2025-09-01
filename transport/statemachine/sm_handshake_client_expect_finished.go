@@ -35,21 +35,13 @@ func (*smHandshakeClientExpectFinished) OnFinished(conn *Connection, msg handsha
 	handshakeTranscriptHash.SetSum(hctx.transcriptHasher)
 
 	conn.keys.ComputeApplicationTrafficSecret(suite, false, hctx.masterSecret, handshakeTranscriptHash)
-	conn.stateID = smIDPostHandshake
 	// TODO - standard must allow sending client "finished" flight with epoch 3. TODO - contact DTLS team?
 	// Otherwise lots of logic and 2 sets of sending keys are mandatory.
 	// Code below does not work with wolfssl, but works with our implementation.
 	// To make wolf happy, we'd have to put a copy of send keys for epoch 2 into hctx
 	// and use them from there.
-	//if conn.hctx != nil && conn.hctx.sendQueue.Len() == 0 && conn.keys.Send.Epoch == 2 {
-	//	conn.keys.Suite().ResetSymmetricKeys(&conn.keys.Send.Symmetric, conn.keys.Send.ApplicationTrafficSecret)
-	//	conn.keys.Send.Epoch = 3
-	//	conn.keys.SendNextSegmentSequence = 0
-	//	conn.hctx = nil // TODO - reuse into pool
-	//	conn.handler.OnConnectLocked()
-	//	conn.stateID = smIDPostHandshake
-	//	conn.SignalWriteable()
-	//}
+	conn.stateID = smIDHandshakeClientExpectFinishedAck
+	conn.keys.Suite().ResetSymmetricKeys(&hctx.SendSymmetricEpoch3, conn.keys.Send.ApplicationTrafficSecret)
 
 	// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here
 	return hctx.PushMessage(conn, hctx.generateFinished(conn))

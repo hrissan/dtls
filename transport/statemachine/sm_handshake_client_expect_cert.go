@@ -15,6 +15,6 @@ func (*smHandshakeClientExpectCert) OnCertificate(conn *Connection, msg handshak
 	hctx := conn.hctx
 	hctx.receivedNextFlight(conn)
 	hctx.certificateChain = msgParsed
-	conn.stateID = smIDHandshakeClientExpectServerCertVerify
+	conn.stateID = smIDHandshakeClientExpectCertVerify
 	return nil
 }

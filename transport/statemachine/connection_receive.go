@@ -9,6 +9,7 @@ import (
 
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/replay"
 	"github.com/hrissan/dtls/transport/options"
@@ -159,6 +160,6 @@ func (conn *Connection) generateNewReceiveKeys() error {
 	conn.keys.NewReceiveKeysSet = true
 	conn.keys.Receive.Epoch++
 	conn.keys.Suite().ResetSymmetricKeys(&conn.keys.NewReceiveKeys, conn.keys.Receive.ApplicationTrafficSecret)
-	conn.keys.Receive.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "receive")
+	conn.keys.Receive.ApplicationTrafficSecret = keys.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "receive", conn.keys.Receive.ApplicationTrafficSecret)
 	return nil
 }

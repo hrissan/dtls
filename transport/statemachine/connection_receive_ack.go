@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/hrissan/dtls/dtlserrors"
+	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/transport/options"
 )
@@ -76,7 +77,7 @@ func (conn *Connection) processKeyUpdateAck(rn record.Number) {
 	conn.sentKeyUpdateRN = record.Number{}
 	conn.sendKeyUpdateUpdateRequested = false // must not be necessary
 	// now when we received ack for KeyUpdate, we must update our keys
-	conn.keys.Send.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "send")
+	conn.keys.Send.ApplicationTrafficSecret = keys.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "send", conn.keys.Send.ApplicationTrafficSecret)
 	conn.keys.Suite().ResetSymmetricKeys(&conn.keys.Send.Symmetric, conn.keys.Send.ApplicationTrafficSecret)
 	conn.keys.Send.Epoch++
 	conn.keys.SendNextSegmentSequence = 0

@@ -109,10 +109,14 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 	keys.Send.Epoch = 2
 	keys.Receive.Epoch = 2
 
-	handshakeTrafficSecretSend = keys.Send.ComputeHandshakeKeys(suite, serverRole, hmacHandshakeSecret, trHash)
+	handshakeTrafficSecretSend = ComputeHandshakeKeys(serverRole, hmacHandshakeSecret, trHash)
+	suite.ResetSymmetricKeys(&keys.Send.Symmetric, handshakeTrafficSecretSend)
+
 	keys.SendNextSegmentSequence = 0
 
-	handshakeTrafficSecretReceive = keys.Receive.ComputeHandshakeKeys(suite, !serverRole, hmacHandshakeSecret, trHash)
+	handshakeTrafficSecretReceive = ComputeHandshakeKeys(!serverRole, hmacHandshakeSecret, trHash)
+	suite.ResetSymmetricKeys(&keys.Receive.Symmetric, handshakeTrafficSecretReceive)
+
 	keys.ReceiveNextSegmentSequence.Reset()
 
 	derivedSecret = deriveSecret(hmacHandshakeSecret, "derived", emptyHash)
@@ -124,8 +128,8 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 }
 
 func (keys *Keys) ComputeApplicationTrafficSecret(suite ciphersuite.Suite, serverRole bool, masterSecret ciphersuite.Hash, trHash ciphersuite.Hash) {
-	keys.Send.ComputeApplicationTrafficSecret(suite, serverRole, masterSecret, trHash)
-	keys.Receive.ComputeApplicationTrafficSecret(suite, !serverRole, masterSecret, trHash)
+	keys.Send.ApplicationTrafficSecret = ComputeApplicationTrafficSecret(suite, serverRole, masterSecret, trHash)
+	keys.Receive.ApplicationTrafficSecret = ComputeApplicationTrafficSecret(suite, !serverRole, masterSecret, trHash)
 }
 
 func deriveSecret(hmacSecret hash.Hash, label string, sum ciphersuite.Hash) (result ciphersuite.Hash) {

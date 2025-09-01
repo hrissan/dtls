@@ -10,6 +10,7 @@ import (
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 	"github.com/hrissan/dtls/record"
+	"github.com/hrissan/dtls/replay"
 	"github.com/hrissan/dtls/transport/options"
 )
 
@@ -121,11 +122,43 @@ func (conn *Connection) receivedKeyUpdate(opts *options.TransportOptions, fragme
 	conn.keys.AddAck(rn)
 	conn.nextMessageSeqReceive++ // never due to check above
 	fmt.Printf("received KeyUpdate (%+v), expecting to receive record with the next epoch\n", msgKeyUpdate)
-	conn.keys.ExpectReceiveEpochUpdate = true // if this leads to epoch overflow, we'll generate error later in the function which actually increments epoch
+	conn.removeOldReceiveKeys()
+	if err := conn.generateNewReceiveKeys(); err != nil {
+		return err
+	}
 	if msgKeyUpdate.UpdateRequested {
 		if err := conn.keyUpdateStart(false); err != nil { // do not request update, when responding to request
 			return err
 		}
 	}
+	return nil
+}
+
+func (conn *Connection) removeOldReceiveKeys() {
+	if conn.keys.NewReceiveKeysSet {
+		// Move keys from "new" slot to "current" slot.
+		conn.keys.NewReceiveKeysSet = false
+
+		// do not free memory, suite will update NewReceiveKeys in place next time
+		conn.keys.Receive.Symmetric, conn.keys.NewReceiveKeys =
+			conn.keys.NewReceiveKeys, conn.keys.Receive.Symmetric
+		conn.keys.ReceiveNextSegmentSequence, conn.keys.NewReceiveNextSegmentSequence =
+			conn.keys.NewReceiveNextSegmentSequence, replay.Window{}
+		conn.keys.FailedDeprotection, conn.keys.NewReceiveFailedDeprotection =
+			conn.keys.NewReceiveFailedDeprotection, 0
+	}
+}
+
+func (conn *Connection) generateNewReceiveKeys() error {
+	if conn.keys.Receive.Epoch == math.MaxUint16 {
+		return dtlserrors.ErrUpdatingKeysWouldOverflowEpoch
+	}
+	if conn.keys.NewReceiveKeysSet {
+		panic("cannot generate new keys more than once, we must first remove old set")
+	}
+	conn.keys.NewReceiveKeysSet = true
+	conn.keys.Receive.Epoch++
+	conn.keys.Suite().ResetSymmetricKeys(&conn.keys.NewReceiveKeys, conn.keys.Receive.ApplicationTrafficSecret)
+	conn.keys.Receive.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "receive")
 	return nil
 }

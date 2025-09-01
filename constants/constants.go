@@ -36,3 +36,8 @@ const MaxPSKIdentities = 32
 // Should be >32 even in tests, otherwise KeyUpdate cannot complete before reaching hard limit.
 const MaxProtectionLimitSend = 32
 const MaxProtectionLimitReceive = 32
+
+// not actual constant, but we do not want a single float in our code base
+func ProtectionSoftLimit(limit uint64) uint64 {
+	return limit * 3 / 4
+}

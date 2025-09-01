@@ -16,17 +16,21 @@ type Keys struct {
 	Send    DirectionKeys
 	Receive DirectionKeys
 	// always correspond to Receive.Epoch + 1 if NewReceiveKeysSet is set
-	NewReceiveKeys ciphersuite.SymmetricKeys
-	// Idea: we now store 2 sets of symmetric keys, so we could keep previous epoch keys for
-	// replay window length, but then we need also 2 replay windows, and 2 SendAcks structs, so no.
 
 	SendNextSegmentSequence uint64
 
 	// It seems, we need no replay protection for Epoch 0. TODO - investigate..
 	ReceiveNextSegmentSequence replay.Window // for Epoch > 0
 
-	FailedDeprotectionCounter               uint64
-	FailedDeprotectionCounterNewReceiveKeys uint64 // separate counter for NewReceiveKeys
+	// We store 2 sets of symmetric keys, in case of epoch 2 from client we must actually
+	// keep replay window and need successful deprotection of records from both epoch 2 and 3.
+	// We cannot do anything about it (in ideal world, client [cert..finished] flight would use epoch 3, not 2),
+	// so we simply adapt to this stupidity, wasting space and brain cells.
+	NewReceiveKeys                ciphersuite.SymmetricKeys
+	NewReceiveNextSegmentSequence replay.Window
+
+	FailedDeprotection           uint64
+	NewReceiveFailedDeprotection uint64 // separate counter for NewReceiveKeys
 
 	SendAcks      replay.Window
 	SendAcksEpoch uint16 // we do not want to lose acks immediately  when switching epoch
@@ -35,11 +39,9 @@ type Keys struct {
 
 	// enabled extensions and saves us 50% memory on crypto contexts
 	DoNotEncryptSequenceNumbers bool
-	// waiting for the next epoch during handshake or key update
-	ExpectReceiveEpochUpdate bool
 	// we should request update only once per epoch, and this must be separate flag from sendKeyUpdateUpdateRequested
 	// otherwise we will request update again after peer's ack, but before actual epoch update
-	RequestedReceiveEpochUpdate bool
+	RequestedReceiveEpochUpdateIn uint16
 	// calculate NewReceiveKeys only once
 	NewReceiveKeysSet bool // we do not deallocate NewReceiveKeys, so cannot use NewReceiveKeys != nil
 }
@@ -112,7 +114,6 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 
 	handshakeTrafficSecretReceive = keys.Receive.ComputeHandshakeKeys(suite, !serverRole, hmacHandshakeSecret, trHash)
 	keys.ReceiveNextSegmentSequence.Reset()
-	keys.ExpectReceiveEpochUpdate = true
 
 	derivedSecret = deriveSecret(hmacHandshakeSecret, "derived", emptyHash)
 	hmacderivedSecret = suite.NewHMAC(derivedSecret.GetValue())

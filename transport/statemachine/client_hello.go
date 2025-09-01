@@ -222,6 +222,10 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 
 	handshakeTranscriptHash.SetSum(hctx.transcriptHasher)
 	conn.keys.ComputeApplicationTrafficSecret(suite, true, hctx.masterSecret, handshakeTranscriptHash)
+
+	if err := conn.generateNewReceiveKeys(); err != nil {
+		panic("we must be able to generate new keys receive here")
+	}
 	conn.stateID = smIDHandshakeServerExpectFinished
 	return nil
 }

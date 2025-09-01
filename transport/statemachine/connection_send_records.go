@@ -100,9 +100,12 @@ func (conn *Connection) checkSendLimit() (uint64, error) {
 	if conn.keys.SendNextSegmentSequence >= sendLimit {
 		return 0, dtlserrors.ErrSendRecordSeqOverflow
 	}
-	seq := conn.keys.SendNextSegmentSequence                                           // we always send 16-bit seqnums for simplicity. TODO - implement 8-bit seqnums, check if we correctly parse/decrypt them from peer
-	conn.keys.SendNextSegmentSequence++                                                // does not overflow due to checkSendLimit() above
-	if conn.keys.Send.Epoch < 3 || conn.keys.SendNextSegmentSequence < sendLimit*3/4 { // simple heuristic
+	seq := conn.keys.SendNextSegmentSequence
+	conn.keys.SendNextSegmentSequence++ // does not overflow due to check obove
+	if conn.keys.SendNextSegmentSequence < constants.ProtectionSoftLimit(sendLimit) {
+		return seq, nil
+	}
+	if conn.keys.Send.Epoch < 3 {
 		return seq, nil
 	}
 	return seq, conn.keyUpdateStart(false)

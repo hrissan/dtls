@@ -30,11 +30,11 @@ type handshakeContext struct {
 	// (this is unfortunate is mistake in DTLS standard).
 	// So we keep epoch3 keys here temporarily to send application data.
 	// When handshake is finished, this case are moved into send keys.
-	SendSymmetricEpoch3           ciphersuite.SymmetricKeys
-	SendNextSegmentSequenceEpoch3 uint64
+	SendSymmetricEpoch3 ciphersuite.SymmetricKeys
+	SendNextSeqEpoch3   uint64
 
 	// it seems we do not need this protection, but standard says we must have it. TODO - decide later
-	// receiveNextSegmentSequenceEpoch0 replay.Window
+	// receiveNextSeqEpoch0 replay.Window
 
 	// for ServerHello retransmit and replay protection
 	// we decided 2^16 ServerHello/ClientHello is enough for all practical purposes,

@@ -120,13 +120,13 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 	keys.ReceiveEpoch = 2
 
 	handshakeTrafficSecretSend = ComputeHandshakeKeys(serverRole, hmacHandshakeSecret, trHash)
-	suite.ResetSymmetricKeys(&keys.SendSymmetric, handshakeTrafficSecretSend)
+	keys.SendSymmetric = suite.ResetSymmetricKeys(keys.SendSymmetric, handshakeTrafficSecretSend)
 
 	keys.SendNextSeq = 0
 
 	handshakeTrafficSecretReceive = ComputeHandshakeKeys(!serverRole, hmacHandshakeSecret, trHash)
 	//	suite.ResetSymmetricKeys(&keys.ReceiveSymmetric, clientEarlyTrafficSecret)
-	suite.ResetSymmetricKeys(&keys.ReceiveSymmetric, handshakeTrafficSecretReceive)
+	keys.ReceiveSymmetric = suite.ResetSymmetricKeys(keys.ReceiveSymmetric, handshakeTrafficSecretReceive)
 
 	keys.ReceiveNextSeq.Reset()
 

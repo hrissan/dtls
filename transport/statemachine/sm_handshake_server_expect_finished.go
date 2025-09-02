@@ -30,7 +30,7 @@ func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handsha
 	}
 	fmt.Printf("finished message verify ok: %+v\n", msgParsed)
 
-	suite.ResetSymmetricKeys(&conn.keys.SendSymmetric, conn.keys.SendApplicationTrafficSecret)
+	conn.keys.SendSymmetric = suite.ResetSymmetricKeys(conn.keys.SendSymmetric, conn.keys.SendApplicationTrafficSecret)
 	conn.keys.SendEpoch = 3
 	conn.keys.SendNextSeq = 0
 	conn.hctx = nil

@@ -159,7 +159,7 @@ func (conn *Connection) generateNewReceiveKeys() error {
 	}
 	conn.keys.NewReceiveKeysSet = true
 	conn.keys.ReceiveEpoch++
-	conn.keys.Suite().ResetSymmetricKeys(&conn.keys.NewReceiveSymmetric, conn.keys.ReceiveApplicationTrafficSecret)
+	conn.keys.NewReceiveSymmetric = conn.keys.Suite().ResetSymmetricKeys(conn.keys.NewReceiveSymmetric, conn.keys.ReceiveApplicationTrafficSecret)
 	conn.keys.ReceiveApplicationTrafficSecret = keys.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "receive", conn.keys.ReceiveApplicationTrafficSecret)
 	return nil
 }

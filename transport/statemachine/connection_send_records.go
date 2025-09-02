@@ -17,7 +17,7 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *Connection) constructRecord(opts *options.TransportOptions, datagramLeft []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSegmentSequenceEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {
+func (conn *Connection) constructRecord(opts *options.TransportOptions, datagramLeft []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSeqEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
 	if fragmentOffset >= handshakeMsg.Len32() {
 		// >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
@@ -36,7 +36,7 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 		Body: handshakeMsg.Body,
 	}
 	if handshakeMsg.MsgType == handshake.MsgTypeClientHello || handshakeMsg.MsgType == handshake.MsgTypeServerHello {
-		if sendNextSegmentSequenceEpoch0 == nil {
+		if sendNextSeqEpoch0 == nil {
 			panic("the same check for plaintext record should be above")
 		}
 		remainingSpace := len(datagramLeft) - handshake.FragmentHeaderSize + record.PlaintextRecordHeaderSize
@@ -47,7 +47,7 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 		if msg.Header.FragmentLength <= constants.MinFragmentBodySize && msg.Header.FragmentLength != maxFragmentLength {
 			return // do not send tiny records at the end of datagram
 		}
-		da, rn, err := conn.constructPlaintextRecord(datagramLeft[:0], msg, sendNextSegmentSequenceEpoch0)
+		da, rn, err := conn.constructPlaintextRecord(datagramLeft[:0], msg, sendNextSeqEpoch0)
 		if len(da) != int(msg.Header.FragmentLength+handshake.FragmentHeaderSize+record.PlaintextRecordHeaderSize) { // safe if Header.FragmentLength is in spec
 			panic("plaintext handshake record construction length invariant failed")
 		}
@@ -76,18 +76,18 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 	return recordSize, msg.Header.FragmentInfo, rn, nil
 }
 
-func (conn *Connection) constructPlaintextRecord(datagramLeft []byte, msg handshake.Fragment, sendNextSegmentSequenceEpoch0 *uint16) ([]byte, record.Number, error) {
-	if *sendNextSegmentSequenceEpoch0 == math.MaxUint16 { // linter does not like >= here
+func (conn *Connection) constructPlaintextRecord(datagramLeft []byte, msg handshake.Fragment, sendNextSeqEpoch0 *uint16) ([]byte, record.Number, error) {
+	if *sendNextSeqEpoch0 == math.MaxUint16 { // linter does not like >= here
 		// We arbitrarily decided that we do not need more outgoing sequence numbers for epoch 0
 		// We needed code to prevent overflow below anyway
 		return nil, record.Number{}, dtlserrors.ErrSendEpoch0RecordSeqOverflow
 	}
-	rn := record.NumberWith(0, uint64(*sendNextSegmentSequenceEpoch0)) // widening
+	rn := record.NumberWith(0, uint64(*sendNextSeqEpoch0)) // widening
 	recordHdr := record.PlaintextHeader{
 		ContentType:    record.RecordTypeHandshake,
-		SequenceNumber: uint64(*sendNextSegmentSequenceEpoch0), // widening
+		SequenceNumber: uint64(*sendNextSeqEpoch0), // widening
 	}
-	*sendNextSegmentSequenceEpoch0++ // never overflows due to check above
+	*sendNextSeqEpoch0++ // never overflows due to check above
 	datagramLeft = recordHdr.Write(datagramLeft, safecast.Cast[uint16](handshake.FragmentHeaderSize+msg.Header.FragmentLength))
 	datagramLeft = msg.Header.Write(datagramLeft)
 	datagramLeft = append(datagramLeft, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)

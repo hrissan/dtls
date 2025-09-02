@@ -26,11 +26,10 @@ func (s *impl_TLS_CHACHA20_POLY1305_SHA256) NewHMAC(key []byte) hash.Hash {
 	return hmac.New(sha256.New, key)
 }
 
-func (s *impl_TLS_CHACHA20_POLY1305_SHA256) ResetSymmetricKeys(keys *SymmetricKeys, secret Hash) {
-	ourKeys, _ := (*keys).(*SymmetricKeysChaCha20Poly1305)
+func (s *impl_TLS_CHACHA20_POLY1305_SHA256) ResetSymmetricKeys(keys SymmetricKeys, secret Hash) SymmetricKeys {
+	ourKeys, _ := keys.(*SymmetricKeysChaCha20Poly1305)
 	if ourKeys == nil {
 		ourKeys = &SymmetricKeysChaCha20Poly1305{}
-		*keys = ourKeys
 	}
 
 	const keySize = 32
@@ -44,6 +43,7 @@ func (s *impl_TLS_CHACHA20_POLY1305_SHA256) ResetSymmetricKeys(keys *SymmetricKe
 	HKDFExpandLabel(ourKeys.SNKey[:], hmacSecret, "sn", nil)
 
 	HKDFExpandLabel(ourKeys.WriteIV[:], hmacSecret, "iv", nil)
+	return ourKeys
 }
 
 func (s *impl_TLS_CHACHA20_POLY1305_SHA256) EmptyHash() Hash {

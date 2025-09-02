@@ -43,7 +43,7 @@ func (conn *Connection) receivedEncryptedAckLocked(opts *options.TransportOption
 			panic("expected Send.Epoch to be 2 in this state")
 		}
 		conn.keys.SendSymmetric, conn.hctx.SendSymmetricEpoch3 = conn.hctx.SendSymmetricEpoch3, nil
-		conn.keys.SendNextSeq, conn.hctx.SendNextSegmentSequenceEpoch3 = conn.hctx.SendNextSegmentSequenceEpoch3, 0
+		conn.keys.SendNextSeq, conn.hctx.SendNextSeqEpoch3 = conn.hctx.SendNextSeqEpoch3, 0
 		conn.keys.SendEpoch = 3
 		conn.hctx = nil // TODO - reuse into pool
 		conn.handler.OnConnectLocked()
@@ -78,7 +78,7 @@ func (conn *Connection) processKeyUpdateAck(rn record.Number) {
 	conn.sendKeyUpdateUpdateRequested = false // must not be necessary
 	// now when we received ack for KeyUpdate, we must update our keys
 	conn.keys.SendApplicationTrafficSecret = keys.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "send", conn.keys.SendApplicationTrafficSecret)
-	conn.keys.Suite().ResetSymmetricKeys(&conn.keys.SendSymmetric, conn.keys.SendApplicationTrafficSecret)
+	conn.keys.SendSymmetric = conn.keys.Suite().ResetSymmetricKeys(conn.keys.SendSymmetric, conn.keys.SendApplicationTrafficSecret)
 	conn.keys.SendEpoch++
 	conn.keys.SendNextSeq = 0
 }

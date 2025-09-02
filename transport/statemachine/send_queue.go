@@ -75,10 +75,10 @@ func (sq *sendQueue) ConstructDatagram(conn *Connection, opts *options.Transport
 			break
 		}
 		outgoing := sq.messages.IndexRef(sq.messagesStorage[:], sq.messageOffset)
-		var sendNextSegmentSequenceEpoch0 *uint16
+		var sendNextSeqEpoch0 *uint16
 		if outgoing.Msg.MsgType == handshake.MsgTypeClientHello || outgoing.Msg.MsgType == handshake.MsgTypeServerHello {
 			if conn.hctx != nil {
-				sendNextSegmentSequenceEpoch0 = &conn.hctx.sendNextRecordSequenceEpoch0
+				sendNextSeqEpoch0 = &conn.hctx.sendNextRecordSequenceEpoch0
 			} else {
 				// We only can send that if we are still in handshake.
 				// If not, we simply pretend we sent it.
@@ -93,7 +93,7 @@ func (sq *sendQueue) ConstructDatagram(conn *Connection, opts *options.Transport
 			continue
 		}
 		recordSize, fragmentInfo, rn, err := conn.constructRecord(opts, datagram[datagramSize:],
-			outgoing.Msg, fragmentOffset, fragmentLength, sendNextSegmentSequenceEpoch0)
+			outgoing.Msg, fragmentOffset, fragmentLength, sendNextSeqEpoch0)
 		if err != nil {
 			return 0, err
 		}

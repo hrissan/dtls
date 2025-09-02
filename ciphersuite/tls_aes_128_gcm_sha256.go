@@ -25,15 +25,15 @@ func (s *impl_TLS_AES_128_GCM_SHA256) NewHMAC(key []byte) hash.Hash {
 	return hmac.New(sha256.New, key)
 }
 
-func (s *impl_TLS_AES_128_GCM_SHA256) ResetSymmetricKeys(keys *SymmetricKeys, secret Hash) {
-	ourKeys, _ := (*keys).(*SymmetricKeysAES)
+func (s *impl_TLS_AES_128_GCM_SHA256) ResetSymmetricKeys(keys SymmetricKeys, secret Hash) SymmetricKeys {
+	ourKeys, _ := keys.(*SymmetricKeysAES)
 	if ourKeys == nil {
 		ourKeys = &SymmetricKeysAES{}
-		*keys = ourKeys
 	}
 	hmacSecret := s.NewHMAC(secret.GetValue())
 
 	ourKeys.fillWithSecret(hmacSecret, make([]byte, 16)) // on stack
+	return ourKeys
 }
 
 var emptySha256Hash Hash

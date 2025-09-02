@@ -96,11 +96,16 @@ func ComputeEarlySecret(suite ciphersuite.Suite, psk []byte, extOrResLabel strin
 	return
 }
 
-func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool, earlySecret ciphersuite.Hash, sharedSecret []byte, trHash ciphersuite.Hash) (
+func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
+	earlySecret ciphersuite.Hash, sharedSecret []byte,
+	trHash ciphersuite.Hash) (
 	masterSecret ciphersuite.Hash, handshakeTrafficSecretSend ciphersuite.Hash, handshakeTrafficSecretReceive ciphersuite.Hash) {
+	// [rfc8446:7.1] Key Schedule
 	emptyHash := suite.EmptyHash()
 
 	hmacEarlySecret := suite.NewHMAC(earlySecret.GetValue())
+
+	// clientEarlyTrafficSecret := deriveSecret(hmacEarlySecret, "c e traffic", clientHelloHash)
 
 	derivedSecret := deriveSecret(hmacEarlySecret, "derived", emptyHash)
 	hmacderivedSecret := suite.NewHMAC(derivedSecret.GetValue())
@@ -120,6 +125,7 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 	keys.SendNextSeq = 0
 
 	handshakeTrafficSecretReceive = ComputeHandshakeKeys(!serverRole, hmacHandshakeSecret, trHash)
+	//	suite.ResetSymmetricKeys(&keys.ReceiveSymmetric, clientEarlyTrafficSecret)
 	suite.ResetSymmetricKeys(&keys.ReceiveSymmetric, handshakeTrafficSecretReceive)
 
 	keys.ReceiveNextSeq.Reset()

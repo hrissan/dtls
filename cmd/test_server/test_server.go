@@ -23,6 +23,7 @@ func main() {
 	rnd := dtlsrand.CryptoRand()
 	opts := options.DefaultTransportOptions(true, rnd, st)
 
+	opts.ServerDisableHRR = true
 	opts.PSKAppendSecret = chat.PSKAppendSecret
 
 	if err := opts.LoadServerCertificate(

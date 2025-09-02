@@ -41,7 +41,8 @@ type TransportOptions struct {
 
 	ServerCertificate tls.Certificate // some shortcut
 
-	// Should not
+	// Must be set to enable early data.
+	ServerDisableHRR    bool
 	PSKClientIdentities []string
 	// Must append secret to scratch and return it, or return nil.
 	// On client, called for each one of PSKClientIdentities set to build pre_shared_key extension.

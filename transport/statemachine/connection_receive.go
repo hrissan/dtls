@@ -59,7 +59,7 @@ func (conn *Connection) receivedAlertLocked(encrypted bool, recordBody []byte) e
 
 func (conn *Connection) receivedApplicationDataLocked(recordBody []byte) error {
 	fmt.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q\n", len(recordBody), conn.addr, recordBody)
-	return conn.handler.OnReadRecordLocked(recordBody)
+	return conn.handler.OnReadRecordLocked(false, recordBody)
 }
 
 func (conn *Connection) receivedEncryptedHandshakeRecordLocked(opts *options.TransportOptions, recordBody []byte, rn record.Number) error {

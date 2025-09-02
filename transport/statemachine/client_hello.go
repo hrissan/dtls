@@ -227,5 +227,6 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 		panic("we must be able to generate new keys receive here")
 	}
 	conn.stateID = smIDHandshakeServerExpectFinished
+	conn.handler.OnConnectLocked()
 	return nil
 }

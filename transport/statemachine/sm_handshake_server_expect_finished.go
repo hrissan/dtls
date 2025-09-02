@@ -37,7 +37,7 @@ func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handsha
 	// TODO - why wolf closes connection if we send application data immediately
 	// in the same datagram as ack. Reproduce on the latest version of us?
 	conn.stateID = smIDPostHandshake
-	conn.handler.OnConnectLocked()
+	conn.handler.OnHandshakeLocked()
 	conn.SignalWriteable()
 	return nil
 }

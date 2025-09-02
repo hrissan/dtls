@@ -158,7 +158,7 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	if !ok || len(insideBody) < constants.MinFragmentBodySize {
 		return datagramSize, true, nil
 	}
-	insideSize, send, wr, err := conn.handler.OnWriteRecordLocked(insideBody)
+	insideSize, send, wr, err := conn.handler.OnWriteRecordLocked(false, insideBody)
 	if err != nil {
 		return datagramSize, wr, err
 	}

@@ -19,31 +19,31 @@ type Conn struct {
 	messagesToSend []string // protected by chatRoom lock
 }
 
-func (conn *Conn) OnStartConnectionFailedLocked(err error) {
-	// not used for server connections
+func (conn *Conn) OnConnectLocked() {
+	fmt.Printf("chat room OnConnectLocked from %q\n", conn.AddrLocked())
 }
 
-func (conn *Conn) OnConnectLocked() {
-	fmt.Printf("chat room connection from %q\n", conn.AddrLocked())
+func (conn *Conn) OnHandshakeLocked() {
+	fmt.Printf("chat room OnHandshakeLocked from %q\n", conn.AddrLocked())
 	conn.chatRoom.mu.Lock()
 	defer conn.chatRoom.mu.Unlock()
 	conn.chatRoom.connections[conn] = struct{}{}
 }
 
 func (conn *Conn) OnDisconnectLocked(err error) {
-	fmt.Printf("chat room disconnecting from %q with err: %v\n", conn.AddrLocked(), err)
+	fmt.Printf("chat room OnDisconnectLocked from %q with err: %v\n", conn.AddrLocked(), err)
 	conn.chatRoom.mu.Lock()
 	defer conn.chatRoom.mu.Unlock()
 	delete(conn.chatRoom.connections, conn)
 }
 
-func (conn *Conn) OnWriteRecordLocked(recordBody []byte) (recordSize int, send bool, signalWriteable bool, err error) {
+func (conn *Conn) OnWriteRecordLocked(earlyData bool, recordBody []byte) (recordSize int, send bool, signalWriteable bool, err error) {
 	conn.chatRoom.mu.Lock()
 	defer conn.chatRoom.mu.Unlock()
 	return onWriteMessages(&conn.messagesToSend, recordBody)
 }
 
-func (conn *Conn) OnReadRecordLocked(recordBody []byte) error {
+func (conn *Conn) OnReadRecordLocked(earlyData bool, recordBody []byte) error {
 	if len(recordBody) == 0 {
 		return nil
 	}
@@ -91,23 +91,3 @@ func onWriteMessages(messagesToSend *[]string, recordBody []byte) (recordSize in
 	}
 	return toSend, true, len(*messagesToSend) != 0, nil
 }
-
-/*
-func (conn *Client) addMessage(msg string) {
-	conn.Lock()
-	defer conn.Unlock()
-	if msg == "updc" {
-		conn.DebugKeyUpdateLocked(false)
-		return
-	}
-	if msg == "updcr" {
-		conn.DebugKeyUpdateLocked(true)
-		return
-	}
-
-	conn.messagesToSend = append(conn.messagesToSend, msg)
-	fmt.Printf("chat client message from keyboard: %q\n", msg)
-
-	conn.SignalWriteable()
-}
-*/

@@ -36,18 +36,22 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	// rc.opts.Stats.ClientHelloMessage(msg.Header, msgClientHello, addr)
 
 	suiteID, err := t.IsSupportedClientHello(&msgClientHello)
+	suite := ciphersuite.GetSuite(suiteID)
 	if err != nil {
 		return conn, err
+	}
+	if !msgClientHello.Extensions.CookieSet && msg.MsgSeq != 0 {
+		return conn, dtlserrors.ErrClientHelloUnsupportedParams
+	}
+	if msgClientHello.Extensions.CookieSet && msg.MsgSeq != 1 {
+		return conn, dtlserrors.ErrClientHelloUnsupportedParams
 	}
 	// ClientHello is stateless, so we cannot check record sequence number.
 	// If client follows protocol and sends the same client hello,
 	// we will reply with the same server hello.
 	// so, setting record sequence number to 0 equals to retransmission of the same message
 	if !msgClientHello.Extensions.CookieSet {
-		if msg.MsgSeq != 0 {
-			return conn, dtlserrors.ErrClientHelloUnsupportedParams
-		}
-		transcriptHasher := ciphersuite.GetSuite(suiteID).NewHasher() // allocation
+		transcriptHasher := suite.NewHasher() // allocation
 		msg.AddToHash(transcriptHasher)
 
 		params := cookie.Params{
@@ -74,9 +78,6 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		t.snd.SendHelloRetryDatagram(hrrStorage, len(hrrDatagram), addr)
 		return conn, nil
 	}
-	if msg.MsgSeq != 1 {
-		return conn, dtlserrors.ErrClientHelloUnsupportedParams
-	}
 	if !msgClientHello.Extensions.KeyShare.X25519PublicKeySet {
 		// we asked for this key_share above, but client disrespected our demand
 		return conn, dtlserrors.ErrParamsSupportKeyShare
@@ -91,7 +92,6 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	}
 	// TODO - seems wolfssl always uses TLS_AES_128_GCM_SHA256 for PSK.
 	// should investigate why so, check with openssl
-	suite := ciphersuite.GetSuite(suiteID)
 	transcriptHasher := suite.NewHasher()
 	var earlySecret ciphersuite.Hash
 	pskSelected := false

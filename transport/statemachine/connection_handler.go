@@ -14,16 +14,22 @@ package statemachine
 // you must call Connection.Lock() / defer Connection.Unlock()
 // See examples
 type ConnectionHandler interface {
-	// For client connection, after you call StartConnection
-	// 1. if handshake fails, OnStartConnectionFailedLocked is called.
-	// 2. if handshake successfull, first OnConnectLocked and then later OnDisconnectLocked is called.
-	// For server connection, on failed handshake nothing is called.
-	// If handshake successfull, first OnConnectLocked and then later OnDisconnectLocked is called.
-	OnStartConnectionFailedLocked(err error)
-
+	// For server connection, you will first get OnConnectLocked(), then OnReadRecordLocked(true) for
+	// early data and OnWriteRecordLocked(true) for early data, and you can provide as much early data
+	// as possible, and iether process or discard early data of the peer.
+	// Then if handshake is successful, you get get OnHandshakeLocked(), then you will start getting
+	// OnWriteRecordLocked(false), OnReadRecordLocked(false) until connection is closed, and you get
+	// final OnDisconnectLocked.
+	// If handshake does not succeed, you will also get OnDisconnectLocked() instead of OnHandshakeLocked().
+	//
+	// For client connection, if you receive error from StartConnection, you get no callbacks.
+	// If StartConnection succeeds, lifecycle is exactly the same as with server connection.
+	// Beware though, handler methods might be called before StartConnection finishes.
 	OnConnectLocked()
-	// application must remove connection from all data structures
-	// connection will be reused and become invalid immediately after method returns
+	OnHandshakeLocked()
+
+	// application must remove connection from all data structures.
+	// connection will be reused immediately after method returns
 	OnDisconnectLocked(err error)
 
 	// if connection was register for send with transport, this method will be called
@@ -34,13 +40,13 @@ type ConnectionHandler interface {
 	// Application sets moreData if it still has more data to send.
 	// Application can set send = false, and moreData = true only in case it did not want
 	// to send short record (application may prefer to send longer record on the next call).
-	OnWriteRecordLocked(recordBody []byte) (recordSize int, send bool, signalWriteable bool, err error)
+	OnWriteRecordLocked(earlyData bool, recordBody []byte) (recordSize int, send bool, signalWriteable bool, err error)
 
 	// every record sent will be delivered as is. Sent empty records are delivered as empty records.
 	// record points to buffer inside transport and must not be retained.
 	// bytes are guaranteed to be valid only during the call.
 	// if application returns error, connection close will be initiated, expect OnDisconnect in the near future.
-	OnReadRecordLocked(recordBody []byte) error
+	OnReadRecordLocked(earlyData bool, recordBody []byte) error
 }
 
 type TransportHandler interface {

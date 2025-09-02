@@ -128,7 +128,7 @@ func (c *Conn) closeLocked(err error) {
 	c.tc.SignalWriteable()
 }
 
-func (c *Conn) OnStartConnectionFailedLocked(err error) {
+func (c *Conn) OnHandshakeLocked() {
 	signalCond(c.condDial)
 }
 
@@ -140,7 +140,7 @@ func (c *Conn) OnDisconnectLocked(err error) {
 	c.closeLocked(err)
 }
 
-func (c *Conn) OnWriteRecordLocked(recordBody []byte) (recordSize int, send bool, signalWriteable bool, err error) {
+func (c *Conn) OnWriteRecordLocked(earlyData bool, recordBody []byte) (recordSize int, send bool, signalWriteable bool, err error) {
 	if c.closed {
 		return 0, false, false, net.ErrClosed
 	}
@@ -159,7 +159,7 @@ func (c *Conn) OnWriteRecordLocked(recordBody []byte) (recordSize int, send bool
 	return recordSize, true, false, nil
 }
 
-func (conn *Conn) OnReadRecordLocked(recordBody []byte) error {
+func (conn *Conn) OnReadRecordLocked(earlyData bool, recordBody []byte) error {
 	if conn.closed {
 		return io.EOF
 	}

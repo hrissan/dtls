@@ -144,7 +144,7 @@ Howto test with Wolfssl.
 wolfssl % ./autogen.sh
 
 add --enable-debug if you want detailed log
-wolfssl % ./configure CFLAGS="-DOPENSSL_EXTRA -DHAVE_SECRET_CALLBACK -DWOLFSSL_KEYLOG_EXPORT_WARNED -DSHOW_SECRETS -DWOLFSSL_SSLKEYLOGFILE" --enable-dtls13 --enable-dtls --enable-tls13 --enable-session-ticket --enable-dtlscid --enable-curve25519 --enable-psk
+wolfssl % ./configure CFLAGS="-DWOLFSSL_DTLS13_NO_HRR_ON_RESUME -DOPENSSL_EXTRA -DHAVE_SECRET_CALLBACK -DWOLFSSL_KEYLOG_EXPORT_WARNED -DSHOW_SECRETS -DWOLFSSL_SSLKEYLOGFILE" --enable-earlydata --enable-dtls13 --enable-dtls --enable-tls13 --enable-session-ticket --enable-dtlscid --enable-curve25519 --enable-psk
 
 wolfssl %  sudo make install
 

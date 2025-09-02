@@ -39,12 +39,12 @@ func (conn *Connection) receivedEncryptedAckLocked(opts *options.TransportOption
 	}
 	// if all messages from epoch 2 acked, then switch sending epoch
 	if conn.stateID == smIDHandshakeClientExpectFinishedAck && conn.hctx.sendQueue.Len() == 0 {
-		if conn.keys.Send.Epoch != 2 {
+		if conn.keys.SendEpoch != 2 {
 			panic("expected Send.Epoch to be 2 in this state")
 		}
-		conn.keys.Send.Symmetric, conn.hctx.SendSymmetricEpoch3 = conn.hctx.SendSymmetricEpoch3, nil
-		conn.keys.SendNextSegmentSequence, conn.hctx.SendNextSegmentSequenceEpoch3 = conn.hctx.SendNextSegmentSequenceEpoch3, 0
-		conn.keys.Send.Epoch = 3
+		conn.keys.SendSymmetric, conn.hctx.SendSymmetricEpoch3 = conn.hctx.SendSymmetricEpoch3, nil
+		conn.keys.SendNextSeq, conn.hctx.SendNextSegmentSequenceEpoch3 = conn.hctx.SendNextSegmentSequenceEpoch3, 0
+		conn.keys.SendEpoch = 3
 		conn.hctx = nil // TODO - reuse into pool
 		conn.handler.OnConnectLocked()
 		conn.stateID = smIDPostHandshake
@@ -77,8 +77,8 @@ func (conn *Connection) processKeyUpdateAck(rn record.Number) {
 	conn.sentKeyUpdateRN = record.Number{}
 	conn.sendKeyUpdateUpdateRequested = false // must not be necessary
 	// now when we received ack for KeyUpdate, we must update our keys
-	conn.keys.Send.ApplicationTrafficSecret = keys.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "send", conn.keys.Send.ApplicationTrafficSecret)
-	conn.keys.Suite().ResetSymmetricKeys(&conn.keys.Send.Symmetric, conn.keys.Send.ApplicationTrafficSecret)
-	conn.keys.Send.Epoch++
-	conn.keys.SendNextSegmentSequence = 0
+	conn.keys.SendApplicationTrafficSecret = keys.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "send", conn.keys.SendApplicationTrafficSecret)
+	conn.keys.Suite().ResetSymmetricKeys(&conn.keys.SendSymmetric, conn.keys.SendApplicationTrafficSecret)
+	conn.keys.SendEpoch++
+	conn.keys.SendNextSeq = 0
 }

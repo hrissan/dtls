@@ -30,9 +30,9 @@ func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handsha
 	}
 	fmt.Printf("finished message verify ok: %+v\n", msgParsed)
 
-	suite.ResetSymmetricKeys(&conn.keys.Send.Symmetric, conn.keys.Send.ApplicationTrafficSecret)
-	conn.keys.Send.Epoch = 3
-	conn.keys.SendNextSegmentSequence = 0
+	suite.ResetSymmetricKeys(&conn.keys.SendSymmetric, conn.keys.SendApplicationTrafficSecret)
+	conn.keys.SendEpoch = 3
+	conn.keys.SendNextSeq = 0
 	conn.hctx = nil
 	// TODO - why wolf closes connection if we send application data immediately
 	// in the same datagram as ack. Reproduce on the latest version of us?

@@ -140,26 +140,26 @@ func (conn *Connection) removeOldReceiveKeys() {
 		// Move keys from "new" slot to "current" slot.
 		conn.keys.NewReceiveKeysSet = false
 
-		// do not free memory, suite will update NewReceiveKeys in place next time
-		conn.keys.Receive.Symmetric, conn.keys.NewReceiveKeys =
-			conn.keys.NewReceiveKeys, conn.keys.Receive.Symmetric
-		conn.keys.ReceiveNextSegmentSequence, conn.keys.NewReceiveNextSegmentSequence =
-			conn.keys.NewReceiveNextSegmentSequence, replay.Window{}
+		// do not free memory, suite will update NewReceiveSymmetric in place next time
+		conn.keys.ReceiveSymmetric, conn.keys.NewReceiveSymmetric =
+			conn.keys.NewReceiveSymmetric, conn.keys.ReceiveSymmetric
+		conn.keys.ReceiveNextSeq, conn.keys.NewReceiveNextSeq =
+			conn.keys.NewReceiveNextSeq, replay.Window{}
 		conn.keys.FailedDeprotection, conn.keys.NewReceiveFailedDeprotection =
 			conn.keys.NewReceiveFailedDeprotection, 0
 	}
 }
 
 func (conn *Connection) generateNewReceiveKeys() error {
-	if conn.keys.Receive.Epoch == math.MaxUint16 {
+	if conn.keys.ReceiveEpoch == math.MaxUint16 {
 		return dtlserrors.ErrUpdatingKeysWouldOverflowEpoch
 	}
 	if conn.keys.NewReceiveKeysSet {
 		panic("cannot generate new keys more than once, we must first remove old set")
 	}
 	conn.keys.NewReceiveKeysSet = true
-	conn.keys.Receive.Epoch++
-	conn.keys.Suite().ResetSymmetricKeys(&conn.keys.NewReceiveKeys, conn.keys.Receive.ApplicationTrafficSecret)
-	conn.keys.Receive.ApplicationTrafficSecret = keys.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "receive", conn.keys.Receive.ApplicationTrafficSecret)
+	conn.keys.ReceiveEpoch++
+	conn.keys.Suite().ResetSymmetricKeys(&conn.keys.NewReceiveSymmetric, conn.keys.ReceiveApplicationTrafficSecret)
+	conn.keys.ReceiveApplicationTrafficSecret = keys.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "receive", conn.keys.ReceiveApplicationTrafficSecret)
 	return nil
 }

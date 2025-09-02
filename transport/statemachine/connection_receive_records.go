@@ -16,9 +16,9 @@ import (
 // reaching limit, and close connection if limit reached
 func (conn *Connection) checkReceiveLimits() error {
 	receiveLimit := min(conn.keys.SequenceNumberLimit(), constants.MaxProtectionLimitReceive)
-	received := conn.keys.FailedDeprotection + conn.keys.ReceiveNextSegmentSequence.GetNextReceivedSeq()
+	received := conn.keys.FailedDeprotection + conn.keys.ReceiveNextSeq.GetNextReceivedSeq()
 	if conn.keys.NewReceiveKeysSet && received >= constants.ProtectionSoftLimit(receiveLimit) &&
-		conn.keys.NewReceiveNextSegmentSequence.GetNextReceivedSeq() != 0 {
+		conn.keys.NewReceiveNextSeq.GetNextReceivedSeq() != 0 {
 		// Remove our old keys to stop attack, but only if we know peer updated keys.
 		// Without last condition, as soon as the new keys will be generated after reaching soft limit,
 		// they will immediately replace current keys before peer actually updated them, leading to deadlock.
@@ -29,8 +29,8 @@ func (conn *Connection) checkReceiveLimits() error {
 		conn.removeOldReceiveKeys()
 	}
 	// calculate again, because conn.removeOldReceiveKeys() could move keys
-	received = conn.keys.FailedDeprotection + conn.keys.ReceiveNextSegmentSequence.GetNextReceivedSeq()
-	receivedNew := conn.keys.NewReceiveFailedDeprotection + conn.keys.NewReceiveNextSegmentSequence.GetNextReceivedSeq()
+	received = conn.keys.FailedDeprotection + conn.keys.ReceiveNextSeq.GetNextReceivedSeq()
+	receivedNew := conn.keys.NewReceiveFailedDeprotection + conn.keys.NewReceiveNextSeq.GetNextReceivedSeq()
 	if received >= receiveLimit || receivedNew >= receiveLimit {
 		return dtlserrors.ErrReceiveRecordSeqOverflowNextEpoch
 	}
@@ -40,51 +40,51 @@ func (conn *Connection) checkReceiveLimits() error {
 	if !conn.keys.NewReceiveKeysSet && received < constants.ProtectionSoftLimit(receiveLimit) {
 		return nil
 	}
-	if conn.keys.Receive.Epoch < 3 {
+	if conn.keys.ReceiveEpoch < 3 {
 		return nil
 	}
 	if conn.keyUpdateInProgress() {
 		// wait for previous key update to finish, it could be one with updateRequested = false
 		return nil
 	}
-	if conn.keys.RequestedReceiveEpochUpdateIn == conn.keys.Receive.Epoch {
+	if conn.keys.RequestedReceiveEpochUpdateIn == conn.keys.ReceiveEpoch {
 		return nil
 	}
-	conn.keys.RequestedReceiveEpochUpdateIn = conn.keys.Receive.Epoch
+	conn.keys.RequestedReceiveEpochUpdateIn = conn.keys.ReceiveEpoch
 	return conn.keyUpdateStart(true)
 }
 
 // returns contentType == 0 (which is impossible due to padding format) with err == nil when replay detected
 func (conn *Connection) deprotectLocked(hdr record.Encrypted) ([]byte, record.Number, byte, error) {
-	if conn.keys.Receive.Epoch == 0 {
+	if conn.keys.ReceiveEpoch == 0 {
 		return nil, record.Number{}, 0, dtlserrors.WarnCannotDecryptInEpoch0
 	}
-	receivedEpoch := conn.keys.Receive.Epoch
+	receivedEpoch := conn.keys.ReceiveEpoch
 	if conn.keys.NewReceiveKeysSet {
 		// Receive.Epoch corresponds to new keys if they are set, and to the
 		// old keys otherwise. This is convenient in all places, except here.
 		receivedEpoch-- // safe due to check above
 	}
 	if hdr.MatchesEpoch(receivedEpoch) {
-		nextSeq := conn.keys.ReceiveNextSegmentSequence.GetNextReceivedSeq()
-		recordBody, seq, contentType, err := conn.deprotectWithKeysLocked(conn.keys.Receive.Symmetric, hdr, nextSeq)
+		nextSeq := conn.keys.ReceiveNextSeq.GetNextReceivedSeq()
+		recordBody, seq, contentType, err := conn.deprotectWithKeysLocked(conn.keys.ReceiveSymmetric, hdr, nextSeq)
 		if err != nil {
 			// [rfc9147:4.5.3] check against AEAD limit
 			conn.keys.FailedDeprotection++
 			return nil, record.Number{}, 0, err
 		}
-		conn.keys.ReceiveNextSegmentSequence.SetNextReceived(seq + 1)
-		if conn.keys.ReceiveNextSegmentSequence.IsSetBit(seq) {
+		conn.keys.ReceiveNextSeq.SetNextReceived(seq + 1)
+		if conn.keys.ReceiveNextSeq.IsSetBit(seq) {
 			return nil, record.Number{}, 0, nil // replay protection
 		}
-		conn.keys.ReceiveNextSegmentSequence.SetBit(seq)
+		conn.keys.ReceiveNextSeq.SetBit(seq)
 		return recordBody, record.NumberWith(receivedEpoch, seq), contentType, nil
 	}
 	if !conn.keys.NewReceiveKeysSet {
 		// simply ignore, probably garbage or keys from previous epoch
 		return nil, record.Number{}, 0, dtlserrors.WarnEpochDoesNotMatch
 	}
-	if !hdr.MatchesEpoch(conn.keys.Receive.Epoch) {
+	if !hdr.MatchesEpoch(conn.keys.ReceiveEpoch) {
 		// simply ignore, probably garbage or keys from previous epoch
 		return nil, record.Number{}, 0, dtlserrors.WarnEpochDoesNotMatch
 	}
@@ -92,19 +92,19 @@ func (conn *Connection) deprotectLocked(hdr record.Encrypted) ([]byte, record.Nu
 	// so we have to calculate new keys here. But if we fail decryption, then we
 	// either should store new keys, or recompute them on each (attacker's) packet.
 	// So, we decided we better store new keys
-	nextSeq := conn.keys.NewReceiveNextSegmentSequence.GetNextReceivedSeq()
-	recordBody, seq, contentType, err := conn.deprotectWithKeysLocked(conn.keys.NewReceiveKeys, hdr, nextSeq)
+	nextSeq := conn.keys.NewReceiveNextSeq.GetNextReceivedSeq()
+	recordBody, seq, contentType, err := conn.deprotectWithKeysLocked(conn.keys.NewReceiveSymmetric, hdr, nextSeq)
 	if err != nil {
 		// [rfc9147:4.5.3] check against AEAD limit
 		conn.keys.NewReceiveFailedDeprotection++
 		return nil, record.Number{}, 0, err
 	}
-	conn.keys.NewReceiveNextSegmentSequence.SetNextReceived(seq + 1)
-	if conn.keys.NewReceiveNextSegmentSequence.IsSetBit(seq) {
+	conn.keys.NewReceiveNextSeq.SetNextReceived(seq + 1)
+	if conn.keys.NewReceiveNextSeq.IsSetBit(seq) {
 		return nil, record.Number{}, 0, nil // replay protection
 	}
-	conn.keys.NewReceiveNextSegmentSequence.SetBit(seq)
-	return recordBody, record.NumberWith(conn.keys.Receive.Epoch, seq), contentType, nil
+	conn.keys.NewReceiveNextSeq.SetBit(seq)
+	return recordBody, record.NumberWith(conn.keys.ReceiveEpoch, seq), contentType, nil
 }
 
 func (conn *Connection) deprotectWithKeysLocked(keys ciphersuite.SymmetricKeys, hdr record.Encrypted, expectedSN uint64) (recordBody []byte, seq uint64, contentType byte, err error) {

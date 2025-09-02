@@ -97,15 +97,15 @@ func (conn *Connection) constructPlaintextRecord(datagramLeft []byte, msg handsh
 // returns seq number to use
 func (conn *Connection) checkSendLimit() (uint64, error) {
 	sendLimit := min(conn.keys.SequenceNumberLimit(), constants.MaxProtectionLimitSend)
-	if conn.keys.SendNextSegmentSequence >= sendLimit {
+	if conn.keys.SendNextSeq >= sendLimit {
 		return 0, dtlserrors.ErrSendRecordSeqOverflow
 	}
-	seq := conn.keys.SendNextSegmentSequence
-	conn.keys.SendNextSegmentSequence++ // does not overflow due to check obove
-	if conn.keys.SendNextSegmentSequence < constants.ProtectionSoftLimit(sendLimit) {
+	seq := conn.keys.SendNextSeq
+	conn.keys.SendNextSeq++ // does not overflow due to check obove
+	if conn.keys.SendNextSeq < constants.ProtectionSoftLimit(sendLimit) {
 		return seq, nil
 	}
-	if conn.keys.Send.Epoch < 3 {
+	if conn.keys.SendEpoch < 3 {
 		return seq, nil
 	}
 	return seq, conn.keyUpdateStart(false)
@@ -116,7 +116,7 @@ func (conn *Connection) checkSendLimit() (uint64, error) {
 // or (if even 0-byte application data will not fit), returns !ok.
 // Caller should check if his data fits into insideBody, put it there.
 func (conn *Connection) prepareProtect(datagramLeft []byte, use8BitSeq bool, userPadding int) (hdrSize int, insideBody []byte, ok bool) {
-	sealSize, minCiphertextSize := conn.keys.Send.Symmetric.RecordOverhead()
+	sealSize, minCiphertextSize := conn.keys.SendSymmetric.RecordOverhead()
 	hdrSize = record.OutgoingCiphertextRecordHeader16
 	if use8BitSeq {
 		hdrSize = record.OutgoingCiphertextRecordHeader8
@@ -144,8 +144,8 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, user
 	if err != nil {
 		return 0, record.Number{}, err
 	}
-	rn := record.NumberWith(conn.keys.Send.Epoch, seq)
-	sealSize, minCiphertextSize := conn.keys.Send.Symmetric.RecordOverhead()
+	rn := record.NumberWith(conn.keys.SendEpoch, seq)
+	sealSize, minCiphertextSize := conn.keys.SendSymmetric.RecordOverhead()
 
 	// format of our encrypted record is fixed.
 	// Saving 1 byte for the sequence number seems very niche.
@@ -179,9 +179,9 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, user
 		binary.BigEndian.PutUint16(datagramLeft[3:], cipherTextLength)
 	}
 	fmt.Printf("constructing ciphertext type %d with rn={%d,%d} hdrSize = %d body: %x\n", recordType, rn.Epoch(), rn.SeqNum(), hdrSize, datagramLeft[hdrSize:hdrSize+insideSize])
-	conn.keys.Send.Symmetric.AEADEncrypt(rn.SeqNum(), datagramLeft, hdrSize, insideSize)
+	conn.keys.SendSymmetric.AEADEncrypt(rn.SeqNum(), datagramLeft, hdrSize, insideSize)
 	if !conn.keys.DoNotEncryptSequenceNumbers {
-		mask, err := conn.keys.Send.Symmetric.EncryptSeqMask(datagramLeft[hdrSize:])
+		mask, err := conn.keys.SendSymmetric.EncryptSeqMask(datagramLeft[hdrSize:])
 		if err != nil {
 			panic("cipher text too short when sending")
 		}

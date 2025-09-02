@@ -13,24 +13,29 @@ import (
 
 type Keys struct {
 	// fields sorted to minimize padding
-	Send    DirectionKeys
-	Receive DirectionKeys
-	// always correspond to Receive.Epoch + 1 if NewReceiveKeysSet is set
+	SendApplicationTrafficSecret ciphersuite.Hash // we need to keep this for key update
+	SendEpoch                    uint16
 
-	SendNextSegmentSequence uint64
+	ReceiveApplicationTrafficSecret ciphersuite.Hash // we need to keep this for key update
+	ReceiveEpoch                    uint16
 
-	// It seems, we need no replay protection for Epoch 0. TODO - investigate..
-	ReceiveNextSegmentSequence replay.Window // for Epoch > 0
+	ReceiveSymmetric   ciphersuite.SymmetricKeys
+	ReceiveNextSeq     replay.Window // for Epoch > 0
+	FailedDeprotection uint64
 
 	// We store 2 sets of symmetric keys, in case of epoch 2 from client we must actually
 	// keep replay window and need successful deprotection of records from both epoch 2 and 3.
 	// We cannot do anything about it (in ideal world, client [cert..finished] flight would use epoch 3, not 2),
 	// so we simply adapt to this stupidity, wasting space and brain cells.
-	NewReceiveKeys                ciphersuite.SymmetricKeys
-	NewReceiveNextSegmentSequence replay.Window
+	// ReceiveEpoch corresponds to new keys, if NewReceiveKeysSet is set, or to old keys if not.
+	NewReceiveSymmetric          ciphersuite.SymmetricKeys
+	NewReceiveNextSeq            replay.Window
+	NewReceiveFailedDeprotection uint64 // separate counter for NewReceiveSymmetric
 
-	FailedDeprotection           uint64
-	NewReceiveFailedDeprotection uint64 // separate counter for NewReceiveKeys
+	// It seems, we need no replay protection for Epoch 0. TODO - investigate..
+
+	SendSymmetric ciphersuite.SymmetricKeys
+	SendNextSeq   uint64
 
 	SendAcks      replay.Window
 	SendAcksEpoch uint16 // we do not want to lose acks immediately  when switching epoch
@@ -42,8 +47,8 @@ type Keys struct {
 	// we should request update only once per epoch, and this must be separate flag from sendKeyUpdateUpdateRequested
 	// otherwise we will request update again after peer's ack, but before actual epoch update
 	RequestedReceiveEpochUpdateIn uint16
-	// calculate NewReceiveKeys only once
-	NewReceiveKeysSet bool // we do not deallocate NewReceiveKeys, so cannot use NewReceiveKeys != nil
+	// calculate NewReceiveSymmetric only once
+	NewReceiveKeysSet bool // we do not deallocate NewReceiveSymmetric, so cannot use NewReceiveSymmetric != nil
 }
 
 func (keys *Keys) Suite() ciphersuite.Suite {
@@ -103,21 +108,21 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 	handshakeSecret := ciphersuite.HKDFExtract(hmacderivedSecret, sharedSecret)
 	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret.GetValue())
 
-	if keys.Send.Epoch != 0 || keys.Receive.Epoch != 0 {
+	if keys.SendEpoch != 0 || keys.ReceiveEpoch != 0 {
 		panic("handshake keys state machine violation")
 	}
-	keys.Send.Epoch = 2
-	keys.Receive.Epoch = 2
+	keys.SendEpoch = 2
+	keys.ReceiveEpoch = 2
 
 	handshakeTrafficSecretSend = ComputeHandshakeKeys(serverRole, hmacHandshakeSecret, trHash)
-	suite.ResetSymmetricKeys(&keys.Send.Symmetric, handshakeTrafficSecretSend)
+	suite.ResetSymmetricKeys(&keys.SendSymmetric, handshakeTrafficSecretSend)
 
-	keys.SendNextSegmentSequence = 0
+	keys.SendNextSeq = 0
 
 	handshakeTrafficSecretReceive = ComputeHandshakeKeys(!serverRole, hmacHandshakeSecret, trHash)
-	suite.ResetSymmetricKeys(&keys.Receive.Symmetric, handshakeTrafficSecretReceive)
+	suite.ResetSymmetricKeys(&keys.ReceiveSymmetric, handshakeTrafficSecretReceive)
 
-	keys.ReceiveNextSegmentSequence.Reset()
+	keys.ReceiveNextSeq.Reset()
 
 	derivedSecret = deriveSecret(hmacHandshakeSecret, "derived", emptyHash)
 	hmacderivedSecret = suite.NewHMAC(derivedSecret.GetValue())
@@ -128,8 +133,8 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 }
 
 func (keys *Keys) ComputeApplicationTrafficSecret(suite ciphersuite.Suite, serverRole bool, masterSecret ciphersuite.Hash, trHash ciphersuite.Hash) {
-	keys.Send.ApplicationTrafficSecret = ComputeApplicationTrafficSecret(suite, serverRole, masterSecret, trHash)
-	keys.Receive.ApplicationTrafficSecret = ComputeApplicationTrafficSecret(suite, !serverRole, masterSecret, trHash)
+	keys.SendApplicationTrafficSecret = ComputeApplicationTrafficSecret(suite, serverRole, masterSecret, trHash)
+	keys.ReceiveApplicationTrafficSecret = ComputeApplicationTrafficSecret(suite, !serverRole, masterSecret, trHash)
 }
 
 func deriveSecret(hmacSecret hash.Hash, label string, sum ciphersuite.Hash) (result ciphersuite.Hash) {

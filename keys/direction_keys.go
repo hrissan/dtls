@@ -10,12 +10,6 @@ import (
 	"github.com/hrissan/dtls/ciphersuite"
 )
 
-type DirectionKeys struct {
-	Symmetric                ciphersuite.SymmetricKeys
-	ApplicationTrafficSecret ciphersuite.Hash // we need to keep this for key update
-	Epoch                    uint16
-}
-
 func ComputeHandshakeKeys(roleServer bool, hmacHandshakeSecret hash.Hash, trHash ciphersuite.Hash) (handshakeTrafficSecret ciphersuite.Hash) {
 	if roleServer {
 		handshakeTrafficSecret = deriveSecret(hmacHandshakeSecret, "s hs traffic", trHash)

@@ -64,7 +64,7 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	hctx.earlySecret, _ = keys.ComputeEarlySecret(conn.keys.Suite(), psk, "")
+	hctx.earlySecret = keys.ComputeEarlySecret(conn.keys.Suite(), psk)
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
 		conn.keys.ComputeHandshakeKeys(conn.keys.Suite(), false, hctx.earlySecret, sharedSecret, handshakeTranscriptHash)
 

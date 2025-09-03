@@ -39,6 +39,10 @@ func (conn *Connection) receivedEncryptedAckLocked(opts *options.TransportOption
 	}
 	// if all messages from epoch 2 acked, then switch sending epoch
 	if conn.stateID == smIDHandshakeClientExpectFinishedAck && conn.hctx.sendQueue.Len() == 0 {
+		if !conn.keys.NewReceiveKeysSet || conn.keys.ReceiveEpoch != 3 { // should be [2] [3] here
+			panic("unexpected key set at client finished ack")
+		}
+		conn.removeOldReceiveKeys() // [2] [3] -> [3] [.]
 		if conn.keys.SendEpoch != 2 {
 			panic("expected Send.Epoch to be 2 in this state")
 		}

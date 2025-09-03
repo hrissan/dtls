@@ -125,7 +125,8 @@ func generateServerCertificateVerify(opts *options.TransportOptions, conn *Conne
 
 func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, addr netip.AddrPort,
 	earlySecret ciphersuite.Hash, pskSelected bool, pskSelectedIdentity uint16,
-	msgClientHello handshake.MsgClientHello, params cookie.Params, transcriptHasher hash.Hash) error {
+	msgClientHello handshake.MsgClientHello, params cookie.Params,
+	transcriptHasher hash.Hash, clientEarlyTrafficSecret ciphersuite.Hash) error {
 
 	if conn.stateID != smIDClosed {
 		// Attacker cannot control age for addr, so will not be able to disrupt connection by sending
@@ -157,6 +158,12 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	opts.Rnd.ReadMust(hctx.localRandom[:])
 	hctx.ComputeKeyShare(opts.Rnd)
 	hctx.earlySecret = earlySecret
+
+	if clientEarlyTrafficSecret != (ciphersuite.Hash{}) {
+		conn.keys.ReceiveSymmetric = suite.ResetSymmetricKeys(conn.keys.ReceiveSymmetric, clientEarlyTrafficSecret)
+		conn.keys.ReceiveEpoch = 1
+	}
+	fmt.Printf("server early traffic secret: %x\n", clientEarlyTrafficSecret)
 
 	serverHello := handshake.MsgServerHello{
 		Random:      hctx.localRandom,
@@ -223,9 +230,6 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	handshakeTranscriptHash.SetSum(hctx.transcriptHasher)
 	conn.keys.ComputeApplicationTrafficSecret(suite, true, hctx.masterSecret, handshakeTranscriptHash)
 
-	if err := conn.generateNewReceiveKeys(); err != nil {
-		panic("we must be able to generate new keys receive here")
-	}
 	conn.stateID = smIDHandshakeServerExpectFinished
 	conn.handler.OnConnectLocked()
 	return nil

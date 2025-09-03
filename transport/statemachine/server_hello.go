@@ -116,7 +116,9 @@ func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions
 		if len(psk) == 0 {
 			panic("empty PSH is prohibited on client") // TODO - return error
 		}
-		_, binderKey := keys.ComputeEarlySecret(suite, psk, "ext binder")
+		earlySecret := keys.ComputeEarlySecret(suite, psk)
+		hmacEarlySecret := suite.NewHMAC(earlySecret.GetValue())
+		binderKey := keys.DeriveSecret(hmacEarlySecret, "ext binder", suite.EmptyHash())
 		binders[num] = keys.ComputeFinished(suite, binderKey, partialHash)
 		clientHello.Extensions.PreSharedKey.Identities[num].Binder = binders[num].GetValue()
 		fmt.Printf("PSK binder calculated, identity num=%d identity=%q binder=%x\n", num, identity.Identity, binders[num].GetValue())

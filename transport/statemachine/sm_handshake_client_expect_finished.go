@@ -36,7 +36,10 @@ func (*smHandshakeClientExpectFinished) OnFinished(conn *Connection, msg handsha
 
 	conn.keys.ComputeApplicationTrafficSecret(suite, false, hctx.masterSecret, handshakeTranscriptHash)
 
-	if err := conn.generateNewReceiveKeys(); err != nil {
+	if conn.keys.NewReceiveKeysSet { // should be [2] [.] here
+		panic("at this point there must be no new key set")
+	}
+	if err := conn.generateNewReceiveKeys(); err != nil { // [2] [.] -> [2] [3]
 		panic("we must be able to generate new keys receive here")
 	}
 

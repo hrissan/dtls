@@ -134,8 +134,10 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		// rather, they SHOULD select a single PSK and validate solely the
 		// binder that corresponds to that PSK
 		if ok {
-			var binderKey ciphersuite.Hash
-			earlySecret, binderKey = keys.ComputeEarlySecret(suite, psk, "ext binder")
+			earlySecret = keys.ComputeEarlySecret(suite, psk)
+			hmacEarlySecret := suite.NewHMAC(earlySecret.GetValue())
+			binderKey := keys.DeriveSecret(hmacEarlySecret, "ext binder", suite.EmptyHash())
+
 			mustBeFinished := keys.ComputeFinished(suite, binderKey, partialHash)
 			if string(identity.Binder) == string(mustBeFinished.GetValue()) {
 				pskSelected = true
@@ -145,13 +147,13 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		}
 	}
 	if !pskSelected {
-		earlySecret, _ = keys.ComputeEarlySecret(suite, nil, "")
+		earlySecret = keys.ComputeEarlySecret(suite, nil)
 		fmt.Printf("certificate auth selected\n")
 	}
 	// we should check all parameters above, so that we do not create connection for unsupported params
 	conn, err = t.finishReceivedClientHello(conn, addr,
 		earlySecret, pskSelected, pskSelectedIdentity,
-		msgClientHello, params, transcriptHasher)
+		msgClientHello, params, transcriptHasher, ciphersuite.Hash{})
 	if conn != nil {
 		t.snd.RegisterConnectionForSend(conn)
 	}
@@ -160,7 +162,8 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 
 func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrPort,
 	earlySecret ciphersuite.Hash, pskSelected bool, pskSelectedIdentity uint16,
-	msgClientHello handshake.MsgClientHello, params cookie.Params, transcriptHasher hash.Hash) (*Connection, error) {
+	msgClientHello handshake.MsgClientHello, params cookie.Params,
+	transcriptHasher hash.Hash, clientEarlyTrafficSecret ciphersuite.Hash) (*Connection, error) {
 	if conn != nil {
 		// Connection could switch to closed state and be removed from the map,
 		// while we were holding it, iterating through records. This is rare.
@@ -169,7 +172,7 @@ func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrP
 			defer conn.Unlock()
 			return conn, conn.onClientHello2Locked(t.opts, addr,
 				earlySecret, pskSelected, pskSelectedIdentity,
-				msgClientHello, params, transcriptHasher)
+				msgClientHello, params, transcriptHasher, clientEarlyTrafficSecret)
 		}
 		conn.Unlock()
 		// We cannot resurrect it, because we cannot remove it from random location in the pool,
@@ -184,7 +187,7 @@ func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrP
 	defer conn.Unlock()
 	return conn, conn.onClientHello2Locked(t.opts, addr,
 		earlySecret, pskSelected, pskSelectedIdentity,
-		msgClientHello, params, transcriptHasher)
+		msgClientHello, params, transcriptHasher, clientEarlyTrafficSecret)
 }
 
 func selectPSKIdentity(pskStorage []byte, opts *options.TransportOptions, ext *handshake.ExtensionsSet) (uint16, []byte, handshake.PSKIdentity, bool) {

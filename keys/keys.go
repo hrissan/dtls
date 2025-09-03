@@ -73,27 +73,18 @@ func (keys *Keys) SequenceNumberLimit() uint64 {
 	return min(keys.Suite().ProtectionLimit(), record.MaxSeq)
 }
 
-func ComputeEarlySecret(suite ciphersuite.Suite, psk []byte, extOrResLabel string) (earlySecret ciphersuite.Hash, binderKey ciphersuite.Hash) {
+func ComputeEarlySecret(suite ciphersuite.Suite, psk []byte) ciphersuite.Hash {
 	// [rfc8446:4.2.11.2] PSK Binder
 	// Derive-Secret(., "ext binder" | "res binder", "") = binder_key
 	// finished_key = HKDF-Expand-Label(binder_key, "finished", "", Hash.length)
-	emptyHash := suite.EmptyHash()
-
 	hmacSalt := suite.NewHMAC(nil) // empty salt
 
 	if len(psk) != 0 {
-		earlySecret = ciphersuite.HKDFExtract(hmacSalt, psk)
-	} else {
-		var zeroHash ciphersuite.Hash
-		zeroHash.SetZero(hmacSalt.Size())
-		earlySecret = ciphersuite.HKDFExtract(hmacSalt, zeroHash.GetValue())
+		return ciphersuite.HKDFExtract(hmacSalt, psk)
 	}
-
-	if len(extOrResLabel) != 0 { // optimization
-		hmacEarlySecret := suite.NewHMAC(earlySecret.GetValue())
-		binderKey = DeriveSecret(hmacEarlySecret, extOrResLabel, emptyHash)
-	}
-	return
+	var zeroHash ciphersuite.Hash
+	zeroHash.SetZero(hmacSalt.Size())
+	return ciphersuite.HKDFExtract(hmacSalt, zeroHash.GetValue())
 }
 
 func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleServer bool,
@@ -105,31 +96,35 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleServer bool,
 
 	hmacEarlySecret := suite.NewHMAC(earlySecret.GetValue())
 
-	// clientEarlyTrafficSecret := deriveSecret(hmacEarlySecret, "c e traffic", clientHelloHash)
-
 	derivedSecret := DeriveSecret(hmacEarlySecret, "derived", emptyHash)
 	hmacderivedSecret := suite.NewHMAC(derivedSecret.GetValue())
 
 	handshakeSecret := ciphersuite.HKDFExtract(hmacderivedSecret, sharedSecret)
 	hmacHandshakeSecret := suite.NewHMAC(handshakeSecret.GetValue())
 
-	if keys.SendEpoch != 0 || keys.ReceiveEpoch != 0 {
-		panic("handshake keys state machine violation")
+	handshakeTrafficSecretSend = ComputeHandshakeKeys(roleServer, hmacHandshakeSecret, trHash)
+	handshakeTrafficSecretReceive = ComputeHandshakeKeys(!roleServer, hmacHandshakeSecret, trHash)
+
+	if keys.SendEpoch != 0 {
+		panic("handshake send keys state machine violation")
 	}
 	keys.SendEpoch = 2
-	keys.ReceiveEpoch = 2
-
-	handshakeTrafficSecretSend = ComputeHandshakeKeys(roleServer, hmacHandshakeSecret, trHash)
 	keys.SendSymmetric = suite.ResetSymmetricKeys(keys.SendSymmetric, handshakeTrafficSecretSend)
-
 	keys.SendNextSeq = 0
 
-	handshakeTrafficSecretReceive = ComputeHandshakeKeys(!roleServer, hmacHandshakeSecret, trHash)
-	//	suite.ResetSymmetricKeys(&keys.ReceiveSymmetric, clientEarlyTrafficSecret)
-	keys.ReceiveSymmetric = suite.ResetSymmetricKeys(keys.ReceiveSymmetric, handshakeTrafficSecretReceive)
-
-	keys.ReceiveNextSeq.Reset()
-
+	switch keys.ReceiveEpoch {
+	case 0: // client and server if no early data negotiated
+		keys.ReceiveEpoch = 2
+		keys.ReceiveSymmetric = suite.ResetSymmetricKeys(keys.ReceiveSymmetric, handshakeTrafficSecretReceive)
+		keys.ReceiveNextSeq.Reset()
+	case 1: // server if early data negotiated
+		keys.NewReceiveKeysSet = true
+		keys.ReceiveEpoch = 2
+		keys.NewReceiveSymmetric = suite.ResetSymmetricKeys(keys.NewReceiveSymmetric, handshakeTrafficSecretReceive)
+		keys.NewReceiveNextSeq.Reset()
+	default:
+		panic("handshake receive keys state machine violation")
+	}
 	derivedSecret = DeriveSecret(hmacHandshakeSecret, "derived", emptyHash)
 	hmacderivedSecret = suite.NewHMAC(derivedSecret.GetValue())
 	var zeroHash ciphersuite.Hash

@@ -13,10 +13,10 @@ import (
 func ComputeHandshakeKeys(roleServer bool, hmacHandshakeSecret hash.Hash, trHash ciphersuite.Hash) (handshakeTrafficSecret ciphersuite.Hash) {
 	if roleServer {
 		handshakeTrafficSecret = DeriveSecret(hmacHandshakeSecret, "s hs traffic", trHash)
-		fmt.Printf("server2 handshake traffic secret: %x\n", handshakeTrafficSecret)
+		fmt.Printf("server handshake traffic secret: %x\n", handshakeTrafficSecret.GetValue())
 	} else {
 		handshakeTrafficSecret = DeriveSecret(hmacHandshakeSecret, "c hs traffic", trHash)
-		fmt.Printf("client2 handshake traffic secret: %x\n", handshakeTrafficSecret)
+		fmt.Printf("client handshake traffic secret: %x\n", handshakeTrafficSecret.GetValue())
 	}
 	return handshakeTrafficSecret
 }

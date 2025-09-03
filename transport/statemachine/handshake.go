@@ -44,6 +44,7 @@ type handshakeContext struct {
 	// state machine sets this to true or false depending on state.
 	CanDeliveryMessages bool
 
+	pskSelected   bool // we must adapt our state machine to it
 	serverUsedHRR bool // we must store this to validate state transition
 
 	// We need more than 1 message, otherwise we will lose them, while

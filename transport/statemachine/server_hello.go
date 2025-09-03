@@ -4,9 +4,13 @@
 package statemachine
 
 import (
+	"fmt"
+
 	"github.com/hrissan/dtls/ciphersuite"
+	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
+	"github.com/hrissan/dtls/keys"
 	"github.com/hrissan/dtls/record"
 	"github.com/hrissan/dtls/transport/options"
 )
@@ -33,6 +37,27 @@ func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions
 	clientHello.Extensions.SupportedGroups.SECP256R1 = false
 	clientHello.Extensions.SupportedGroups.SECP384R1 = false
 	clientHello.Extensions.SupportedGroups.SECP512R1 = false
+
+	suite := ciphersuite.GetSuite(ciphersuite.TLS_AES_128_GCM_SHA256) // TODO - negotiate suites, but how?
+	emptyHash := suite.EmptyHash()                                    // Binder[] byte slices point here to avoid allocations
+	if len(opts.PSKClientIdentities) != 0 && opts.PSKAppendSecret != nil {
+		clientHello.Extensions.PreSharedKeySet = true
+
+		clientHello.Extensions.PskExchangeModesSet = true
+		clientHello.Extensions.PskExchangeModes.ECDHE = true
+
+		for _, name := range opts.PSKClientIdentities {
+			identity := handshake.PSKIdentity{
+				Identity:            name,
+				ObfuscatedTicketAge: 0,
+				Binder:              emptyHash.GetValue(), // any value is OK, we only need correct size of ClientHello
+			}
+			if err := clientHello.Extensions.PreSharedKey.AddIdentity(identity); err != nil {
+				panic("error adding client PSK identity: " + err.Error()) // TODO - return error
+			}
+		}
+		clientHello.Extensions.EarlyDataSet = true
+	}
 
 	// We'd like to postpone ECC until HRR, but wolfssl requires key_share in the first client_hello
 	// TODO - offload to separate goroutine
@@ -66,12 +91,52 @@ func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions
 		clientHello.Extensions.Cookie = ck
 	}
 
-	var bindersListLength2 int
-	messageBody := clientHello.Write(nil, &bindersListLength2) // TODO - reuse message bodies in a rope
-	return handshake.Message{
+	var bindersListLength int
+	messageBody := clientHello.Write(nil, &bindersListLength) // TODO - reuse message bodies in a rope
+
+	msgClientHello := handshake.Message{
 		MsgType: handshake.MsgTypeClientHello,
 		Body:    messageBody,
 	}
+
+	if !clientHello.Extensions.PreSharedKeySet {
+		return msgClientHello
+	}
+
+	transcriptHasher := suite.NewHasher()
+
+	partialHash := msgClientHello.AddToHashPartial(transcriptHasher, bindersListLength)
+	// fmt.Printf("partial hash for len=%d %x\n", bindersListLength, partialHash.GetValue())
+	// debugPrintSum(transcriptHasher)
+
+	var pskStorage [256]byte
+	var binders [constants.MaxPSKIdentities]ciphersuite.Hash // Binder[] byte slices point here to avoid allocations
+	for num, identity := range clientHello.Extensions.PreSharedKey.GetIdentities() {
+		psk := opts.PSKAppendSecret(identity.Identity, pskStorage[:0]) // allocates if secret very long
+		if len(psk) == 0 {
+			panic("empty PSH is prohibited on client") // TODO - return error
+		}
+		_, binderKey := keys.ComputeEarlySecret(suite, psk, "ext binder")
+		binders[num] = keys.ComputeFinished(suite, binderKey, partialHash)
+		clientHello.Extensions.PreSharedKey.Identities[num].Binder = binders[num].GetValue()
+		fmt.Printf("PSK binder calculated, identity num=%d identity=%q binder=%x\n", num, identity.Identity, binders[num].GetValue())
+	}
+
+	var bindersListLength2 int
+	messageBody = clientHello.Write(messageBody[:0], &bindersListLength2) // TODO - reuse message bodies in a rope
+
+	msgClientHello = handshake.Message{
+		MsgType: handshake.MsgTypeClientHello,
+		Body:    messageBody,
+	}
+	transcriptHasher = suite.NewHasher()
+
+	// partialHash = msgClientHello.AddToHashPartial(transcriptHasher, bindersListLength2)
+	// fmt.Printf("partial hash for len=%d %x\n", bindersListLength2, partialHash.GetValue())
+	// fmt.Printf("message body %x\n", messageBody)
+	// debugPrintSum(transcriptHasher)
+
+	return msgClientHello
 }
 
 func (tr *Transport) IsSupportedServerHello(msgParsed *handshake.MsgServerHello) error {

@@ -28,6 +28,7 @@ func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg han
 	{
 		clientHello1Msg := hctx.generateClientHello(conn.tr.opts, false, nil)
 		clientHello1Msg.AddToHash(hctx.transcriptHasher)
+		debugPrintSum(hctx.transcriptHasher)
 	}
 	if msgParsed.IsHelloRetryRequest() {
 		conn.keys.SendAcks.Reset() // we do not want to ack HRR, and we do not send unencrypted acks anyway

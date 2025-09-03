@@ -42,6 +42,14 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	if !msgParsed.Extensions.KeyShare.X25519PublicKeySet {
 		return dtlserrors.ErrParamsSupportKeyShare
 	}
+	var pskStorage [256]byte
+	var psk []byte
+	if msgParsed.Extensions.PreSharedKeySet && conn.tr.opts.PSKAppendSecret != nil &&
+		int(msgParsed.Extensions.PreSharedKey.SelectedIdentity) < len(conn.tr.opts.PSKClientIdentities) { // widen
+		psk = conn.tr.opts.PSKAppendSecret(conn.tr.opts.PSKClientIdentities[msgParsed.Extensions.PreSharedKey.SelectedIdentity], pskStorage[:0])
+		hctx.pskSelected = true
+	}
+
 	msg.AddToHash(hctx.transcriptHasher)
 
 	var handshakeTranscriptHash ciphersuite.Hash
@@ -56,7 +64,7 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
-	hctx.earlySecret, _ = keys.ComputeEarlySecret(conn.keys.Suite(), nil, "")
+	hctx.earlySecret, _ = keys.ComputeEarlySecret(conn.keys.Suite(), psk, "")
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
 		conn.keys.ComputeHandshakeKeys(conn.keys.Suite(), false, hctx.earlySecret, sharedSecret, handshakeTranscriptHash)
 

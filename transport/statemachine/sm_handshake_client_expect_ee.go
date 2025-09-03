@@ -14,6 +14,10 @@ type smHandshakeClientExpectEE struct {
 func (*smHandshakeClientExpectEE) OnEncryptedExtensions(conn *Connection, msg handshake.Message, msgParsed handshake.ExtensionsSet) error {
 	hctx := conn.hctx
 	hctx.receivedNextFlight(conn)
-	conn.stateID = smIDHandshakeClientExpectCert
+	if conn.hctx.pskSelected {
+		conn.stateID = smIDHandshakeClientExpectFinished
+	} else {
+		conn.stateID = smIDHandshakeClientExpectCert
+	}
 	return nil
 }

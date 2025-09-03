@@ -60,7 +60,7 @@ func (msg *ExtensionsSet) parseCookie(body []byte) (err error) {
 	return format.ParserReadFinish(body, offset)
 }
 
-func (msg *ExtensionsSet) parseInside(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool, bindersListLength *int) (err error) {
+func (msg *ExtensionsSet) parseInside(body []byte, isClientHello bool, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool, bindersListLength *int) (err error) {
 	offset := 0
 	for offset < len(body) {
 		var extensionType uint16
@@ -124,22 +124,21 @@ func (msg *ExtensionsSet) parseInside(body []byte, isNewSessionTicket bool, isSe
 			}
 			msg.PreSharedKeySet = true
 			// "pre_shared_key" must be last [rfc8446:4.2.11] (which MUST be the last extension in the ClientHello)
-			if offset != len(body) {
+			if isClientHello && offset != len(body) {
 				return ErrPreSharedKeyExtensionMustBeLast
 			}
-			return nil
 		}
 	}
 	return nil
 }
 
-func (msg *ExtensionsSet) Parse(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool, bindersListLength *int) (err error) {
+func (msg *ExtensionsSet) Parse(body []byte, isClientHello bool, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool, bindersListLength *int) (err error) {
 	offset := 0
 	var extensionsBody []byte
 	if offset, extensionsBody, err = format.ParserReadUint16Length(body, offset); err != nil {
 		return err
 	}
-	if err = msg.parseInside(extensionsBody, isNewSessionTicket, isServerHello, isHelloRetryRequest, bindersListLength); err != nil {
+	if err = msg.parseInside(extensionsBody, isClientHello, isNewSessionTicket, isServerHello, isHelloRetryRequest, bindersListLength); err != nil {
 		return err
 	}
 	return format.ParserReadFinish(body, offset)

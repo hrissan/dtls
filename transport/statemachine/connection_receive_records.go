@@ -15,6 +15,9 @@ import (
 // [rfc9147:4.5.3] we check against AEAD limit, initiate key update well before
 // reaching limit, and close connection if limit reached
 func (conn *Connection) checkReceiveLimits() error {
+	if conn.keys.ReceiveEpoch == 0 {
+		return dtlserrors.WarnCannotDecryptInEpoch0
+	}
 	receiveLimit := min(conn.keys.SequenceNumberLimit(), constants.MaxProtectionLimitReceive)
 	received := conn.keys.FailedDeprotection + conn.keys.ReceiveNextSeq.GetNextReceivedSeq()
 	if conn.keys.NewReceiveKeysSet && received >= constants.ProtectionSoftLimit(receiveLimit) &&

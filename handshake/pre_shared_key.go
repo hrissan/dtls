@@ -142,11 +142,13 @@ func (msg *PreSharedKey) Write(body []byte, isServerHello bool, bindersListLengt
 	body, externalMark = format.MarkUint16Offset(body)
 	body = msg.writeIdentities(body)
 	format.FillUint16Offset(body, externalMark)
+
+	bindersOffset := len(body)
 	body, externalMark = format.MarkUint16Offset(body)
 	body = msg.writeBinders(body)
 	format.FillUint16Offset(body, externalMark)
 	if bindersListLength != nil {
-		*bindersListLength = len(body) - externalMark
+		*bindersListLength = len(body) - bindersOffset
 	}
 	return body
 }
@@ -155,14 +157,14 @@ func (msg *PreSharedKey) GetIdentities() []PSKIdentity {
 	return msg.Identities[:msg.IdentitiesSize]
 }
 
-func (msg *PreSharedKey) AddIdentity(identity []byte) error {
-	if len(identity) == 0 {
+func (msg *PreSharedKey) AddIdentity(identity PSKIdentity) error {
+	if len(identity.Identity) == 0 {
 		return ErrPSKEmptyIdentity
 	}
 	if msg.IdentitiesSize >= len(msg.Identities) {
 		return ErrPSKTooManyIdentities
 	}
-	msg.Identities[msg.IdentitiesSize].Identity = identity
+	msg.Identities[msg.IdentitiesSize] = identity
 	msg.IdentitiesSize++ // no overflow due to check above
 	return nil
 }

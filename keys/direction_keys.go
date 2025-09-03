@@ -12,10 +12,10 @@ import (
 
 func ComputeHandshakeKeys(roleServer bool, hmacHandshakeSecret hash.Hash, trHash ciphersuite.Hash) (handshakeTrafficSecret ciphersuite.Hash) {
 	if roleServer {
-		handshakeTrafficSecret = deriveSecret(hmacHandshakeSecret, "s hs traffic", trHash)
+		handshakeTrafficSecret = DeriveSecret(hmacHandshakeSecret, "s hs traffic", trHash)
 		fmt.Printf("server2 handshake traffic secret: %x\n", handshakeTrafficSecret)
 	} else {
-		handshakeTrafficSecret = deriveSecret(hmacHandshakeSecret, "c hs traffic", trHash)
+		handshakeTrafficSecret = DeriveSecret(hmacHandshakeSecret, "c hs traffic", trHash)
 		fmt.Printf("client2 handshake traffic secret: %x\n", handshakeTrafficSecret)
 	}
 	return handshakeTrafficSecret
@@ -36,11 +36,11 @@ func ComputeFinished(suite ciphersuite.Suite, HandshakeTrafficSecret ciphersuite
 func ComputeApplicationTrafficSecret(suite ciphersuite.Suite, roleServer bool, masterSecret ciphersuite.Hash, trHash ciphersuite.Hash) ciphersuite.Hash {
 	hmacMasterSecret := suite.NewHMAC(masterSecret.GetValue())
 	if roleServer {
-		applicationTrafficSecret := deriveSecret(hmacMasterSecret, "s ap traffic", trHash)
+		applicationTrafficSecret := DeriveSecret(hmacMasterSecret, "s ap traffic", trHash)
 		fmt.Printf("server2 application traffic secret: %x\n", applicationTrafficSecret)
 		return applicationTrafficSecret
 	}
-	applicationTrafficSecret := deriveSecret(hmacMasterSecret, "c ap traffic", trHash)
+	applicationTrafficSecret := DeriveSecret(hmacMasterSecret, "c ap traffic", trHash)
 	fmt.Printf("client2 application traffic secret: %x\n", applicationTrafficSecret)
 	return applicationTrafficSecret
 }

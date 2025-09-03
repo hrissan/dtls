@@ -91,12 +91,12 @@ func ComputeEarlySecret(suite ciphersuite.Suite, psk []byte, extOrResLabel strin
 
 	if len(extOrResLabel) != 0 { // optimization
 		hmacEarlySecret := suite.NewHMAC(earlySecret.GetValue())
-		binderKey = deriveSecret(hmacEarlySecret, extOrResLabel, emptyHash)
+		binderKey = DeriveSecret(hmacEarlySecret, extOrResLabel, emptyHash)
 	}
 	return
 }
 
-func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
+func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleServer bool,
 	earlySecret ciphersuite.Hash, sharedSecret []byte,
 	trHash ciphersuite.Hash) (
 	masterSecret ciphersuite.Hash, handshakeTrafficSecretSend ciphersuite.Hash, handshakeTrafficSecretReceive ciphersuite.Hash) {
@@ -107,7 +107,7 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 
 	// clientEarlyTrafficSecret := deriveSecret(hmacEarlySecret, "c e traffic", clientHelloHash)
 
-	derivedSecret := deriveSecret(hmacEarlySecret, "derived", emptyHash)
+	derivedSecret := DeriveSecret(hmacEarlySecret, "derived", emptyHash)
 	hmacderivedSecret := suite.NewHMAC(derivedSecret.GetValue())
 
 	handshakeSecret := ciphersuite.HKDFExtract(hmacderivedSecret, sharedSecret)
@@ -119,18 +119,18 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 	keys.SendEpoch = 2
 	keys.ReceiveEpoch = 2
 
-	handshakeTrafficSecretSend = ComputeHandshakeKeys(serverRole, hmacHandshakeSecret, trHash)
+	handshakeTrafficSecretSend = ComputeHandshakeKeys(roleServer, hmacHandshakeSecret, trHash)
 	keys.SendSymmetric = suite.ResetSymmetricKeys(keys.SendSymmetric, handshakeTrafficSecretSend)
 
 	keys.SendNextSeq = 0
 
-	handshakeTrafficSecretReceive = ComputeHandshakeKeys(!serverRole, hmacHandshakeSecret, trHash)
+	handshakeTrafficSecretReceive = ComputeHandshakeKeys(!roleServer, hmacHandshakeSecret, trHash)
 	//	suite.ResetSymmetricKeys(&keys.ReceiveSymmetric, clientEarlyTrafficSecret)
 	keys.ReceiveSymmetric = suite.ResetSymmetricKeys(keys.ReceiveSymmetric, handshakeTrafficSecretReceive)
 
 	keys.ReceiveNextSeq.Reset()
 
-	derivedSecret = deriveSecret(hmacHandshakeSecret, "derived", emptyHash)
+	derivedSecret = DeriveSecret(hmacHandshakeSecret, "derived", emptyHash)
 	hmacderivedSecret = suite.NewHMAC(derivedSecret.GetValue())
 	var zeroHash ciphersuite.Hash
 	zeroHash.SetZero(hmacderivedSecret.Size())
@@ -138,12 +138,12 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, serverRole bool,
 	return
 }
 
-func (keys *Keys) ComputeApplicationTrafficSecret(suite ciphersuite.Suite, serverRole bool, masterSecret ciphersuite.Hash, trHash ciphersuite.Hash) {
-	keys.SendApplicationTrafficSecret = ComputeApplicationTrafficSecret(suite, serverRole, masterSecret, trHash)
-	keys.ReceiveApplicationTrafficSecret = ComputeApplicationTrafficSecret(suite, !serverRole, masterSecret, trHash)
+func (keys *Keys) ComputeApplicationTrafficSecret(suite ciphersuite.Suite, roleServer bool, masterSecret ciphersuite.Hash, trHash ciphersuite.Hash) {
+	keys.SendApplicationTrafficSecret = ComputeApplicationTrafficSecret(suite, roleServer, masterSecret, trHash)
+	keys.ReceiveApplicationTrafficSecret = ComputeApplicationTrafficSecret(suite, !roleServer, masterSecret, trHash)
 }
 
-func deriveSecret(hmacSecret hash.Hash, label string, sum ciphersuite.Hash) (result ciphersuite.Hash) {
+func DeriveSecret(hmacSecret hash.Hash, label string, sum ciphersuite.Hash) (result ciphersuite.Hash) {
 	result.SetZero(sum.Len())
 	ciphersuite.HKDFExpandLabel(result.GetValue(), hmacSecret, label, sum.GetValue())
 	return result

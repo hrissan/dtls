@@ -18,34 +18,25 @@ func (conn *Connection) checkReceiveLimits() error {
 	if conn.keys.ReceiveEpoch == 0 {
 		return dtlserrors.WarnCannotDecryptInEpoch0
 	}
-	receiveLimit := min(conn.keys.SequenceNumberLimit(), constants.MaxProtectionLimitReceive)
+	hardLimit := min(conn.keys.SequenceNumberLimit(), constants.MaxProtectionLimitReceive)
+	softLimit := constants.ProtectionSoftLimit(hardLimit)
+
 	received := conn.keys.FailedDeprotection + conn.keys.ReceiveNextSeq.GetNextReceivedSeq()
-	if conn.keys.NewReceiveKeysSet && received >= constants.ProtectionSoftLimit(receiveLimit) &&
-		conn.keys.NewReceiveNextSeq.GetNextReceivedSeq() != 0 {
-		// Remove our old keys to stop attack, but only if we know peer updated keys.
-		// Without last condition, as soon as the new keys will be generated after reaching soft limit,
-		// they will immediately replace current keys before peer actually updated them, leading to deadlock.
-		// TODO - we cannot remove old keys right after first datagram received with the new keys,
-		// only because client will retransmit flight [cert..finished] in epoch 2 forever until we ack it,
-		// and we cannot ack without decrypting at least seqnum, so we have to remember epoch 2 keys for
-		// some time.
-		conn.removeOldReceiveKeys()
-	}
-	// calculate again, because conn.removeOldReceiveKeys() could move keys
-	received = conn.keys.FailedDeprotection + conn.keys.ReceiveNextSeq.GetNextReceivedSeq()
 	receivedNew := conn.keys.NewReceiveFailedDeprotection + conn.keys.NewReceiveNextSeq.GetNextReceivedSeq()
-	if received >= receiveLimit || receivedNew >= receiveLimit {
+	if received >= hardLimit || receivedNew >= hardLimit {
 		return dtlserrors.ErrReceiveRecordSeqOverflowNextEpoch
 	}
-	if conn.keys.NewReceiveKeysSet && receivedNew < constants.ProtectionSoftLimit(receiveLimit) {
+	if conn.keys.ReceiveEpoch < 3 { // no KeyUpdate before epoch 3
 		return nil
 	}
-	if !conn.keys.NewReceiveKeysSet && received < constants.ProtectionSoftLimit(receiveLimit) {
+	if (received >= softLimit || receivedNew >= softLimit) && conn.keys.ReceiveEpoch == 3 && conn.keys.NewReceiveKeysSet {
+		conn.removeOldReceiveKeys() // [2] [3] -> [3] [.] we keep epoch 2 keys for the long time to send acks
 		return nil
 	}
-	if conn.keys.ReceiveEpoch < 3 {
+	if received < softLimit || conn.keys.NewReceiveKeysSet {
 		return nil
 	}
+	// [3+] [.]
 	if conn.keyUpdateInProgress() {
 		// wait for previous key update to finish, it could be one with updateRequested = false
 		return nil
@@ -110,12 +101,7 @@ func (conn *Connection) deprotectLocked(hdr record.Encrypted) ([]byte, record.Nu
 	conn.keys.NewReceiveNextSeq.SetBit(seq)
 	if conn.keys.ReceiveEpoch > 3 { //  && conn.keys.NewReceiveKeysSet
 		// [3] [4] -> [4] [.]
-		// also
-		// [1] [2] -> [2] [3]
 		conn.removeOldReceiveKeys()
-		if err := conn.generateNewReceiveKeys(); err != nil {
-			panic("we must be able to generate new keys receive here")
-		}
 	}
 	return recordBody, record.NumberWith(conn.keys.ReceiveEpoch, seq), contentType, nil
 }

@@ -124,11 +124,8 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		debugPrintSum(transcriptHasher)
 
 		// then add second client hello, but only up to binders, if they are present
-		msg.AddToHashPartial(transcriptHasher, len(msg.Body)-bindersListLength)
+		partialHash := msg.AddToHashPartial(transcriptHasher, bindersListLength)
 		debugPrintSum(transcriptHasher)
-
-		var transcriptHash ciphersuite.Hash
-		transcriptHash.SetSum(transcriptHasher)
 
 		var pskStorage [256]byte
 		pskNum, psk, identity, ok := selectPSKIdentity(pskStorage[:], t.opts, &msgClientHello.Extensions)
@@ -139,17 +136,13 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		if ok {
 			var binderKey ciphersuite.Hash
 			earlySecret, binderKey = keys.ComputeEarlySecret(suite, psk, "ext binder")
-			mustBeFinished := keys.ComputeFinished(suite, binderKey, transcriptHash)
+			mustBeFinished := keys.ComputeFinished(suite, binderKey, partialHash)
 			if string(identity.Binder) == string(mustBeFinished.GetValue()) {
 				pskSelected = true
 				pskSelectedIdentity = pskNum
 				fmt.Printf("PSK auth selected, identity %d (%q) binders length=%d\n", pskNum, identity.Identity, bindersListLength)
 			}
 		}
-
-		// add hash of binders
-		_, _ = transcriptHasher.Write(msg.Body[len(msg.Body)-bindersListLength:])
-		debugPrintSum(transcriptHasher)
 	}
 	if !pskSelected {
 		earlySecret, _ = keys.ComputeEarlySecret(suite, nil, "")

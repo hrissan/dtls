@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"hash"
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/safecast"
 )
 
@@ -22,10 +23,10 @@ func (msg *Message) Len32() uint32 {
 
 // MsgSeq is not part of original TLSv3.0, so not included in transcript
 func (msg *Message) AddToHash(transcriptHasher hash.Hash) {
-	msg.AddToHashPartial(transcriptHasher, len(msg.Body))
+	_ = msg.AddToHashPartial(transcriptHasher, 0)
 }
 
-func (msg *Message) AddToHashPartial(transcriptHasher hash.Hash, partialLength int) {
+func (msg *Message) AddToHashPartial(transcriptHasher hash.Hash, bindersListLength int) (partialHash ciphersuite.Hash) {
 	if len(msg.Body) > 0xFFFFFF {
 		panic("message body too large")
 	}
@@ -33,5 +34,14 @@ func (msg *Message) AddToHashPartial(transcriptHasher hash.Hash, partialLength i
 	first4Bytes := (uint32(msg.MsgType) << 24) + uint32(len(msg.Body)) // widening, safe due to check above
 	binary.BigEndian.PutUint32(result[:], first4Bytes)
 	_, _ = transcriptHasher.Write(result[:])
-	_, _ = transcriptHasher.Write(msg.Body[:partialLength])
+	_, _ = transcriptHasher.Write(msg.Body[:len(msg.Body)-bindersListLength])
+
+	if bindersListLength == 0 {
+		return
+	}
+
+	partialHash.SetSum(transcriptHasher)
+
+	_, _ = transcriptHasher.Write(msg.Body[len(msg.Body)-bindersListLength:])
+	return
 }

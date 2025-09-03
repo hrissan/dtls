@@ -43,10 +43,11 @@ type TransportOptions struct {
 
 	// Must be set to enable early data.
 	ServerDisableHRR    bool
-	PSKClientIdentities []string
-	// Must append secret to scratch and return it, or return nil.
+	PSKClientIdentities [][]byte
 	// On client, called for each one of PSKClientIdentities set to build pre_shared_key extension.
+	// Must append secret to scratch and return it.
 	// On server, called for each one of identity sent in pre_shared_key extension.
+	// Must append secret to scratch and return it, or return nil.
 	PSKAppendSecret func(clientIdentity []byte, scratch []byte) []byte
 }
 

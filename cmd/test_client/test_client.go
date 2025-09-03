@@ -27,7 +27,7 @@ func main() {
 	rnd := dtlsrand.CryptoRand()
 	opts := options.DefaultTransportOptions(false, rnd, st)
 
-	opts.PSKClientIdentities = []string{chat.PSKClientIdentity}
+	opts.PSKClientIdentities = append(opts.PSKClientIdentities, []byte(chat.PSKClientIdentity))
 	opts.PSKAppendSecret = chat.PSKAppendSecret
 
 	t := statemachine.NewTransport(opts, nil)

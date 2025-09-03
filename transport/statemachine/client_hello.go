@@ -76,7 +76,7 @@ func generateEncryptedExtensions() handshake.Message {
 	ee.SupportedGroups.SECP512R1 = true
 	ee.SupportedGroups.X25519 = true
 
-	messageBody := ee.Write(nil, false, false, false) // TODO - reuse message bodies in a rope
+	messageBody := ee.Write(nil, false, false, false, nil) // TODO - reuse message bodies in a rope
 	return handshake.Message{
 		MsgType: handshake.MsgTypeEncryptedExtensions,
 		Body:    messageBody,

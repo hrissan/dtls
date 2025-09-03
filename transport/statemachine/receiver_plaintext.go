@@ -22,6 +22,7 @@ func (t *Transport) receivedPlaintextRecord(conn *Connection, hdr record.Plainte
 	case record.RecordTypeAck:
 		fmt.Printf("dtls: got ack record (plaintext) %d bytes from %v, message(hex): %x\n", len(hdr.Body), addr, hdr.Body)
 		// unencrypted acks can only acknowledge unencrypted messaged, so very niche, we simply ignore them
+		return conn, nil
 	case record.RecordTypeHandshake:
 		return t.receivedPlaintextHandshake(conn, hdr, addr)
 	}

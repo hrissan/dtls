@@ -21,7 +21,6 @@ func ComputeHandshakeKeys(roleServer bool, hmacHandshakeSecret hash.Hash, trHash
 	return handshakeTrafficSecret
 }
 
-// TODO - remove allocations
 func ComputeFinished(suite ciphersuite.Suite, HandshakeTrafficSecret ciphersuite.Hash, transcriptHash ciphersuite.Hash) ciphersuite.Hash {
 	hmacHandshakeTrafficSecret := suite.NewHMAC(HandshakeTrafficSecret.GetValue())
 	var finishedKey ciphersuite.Hash

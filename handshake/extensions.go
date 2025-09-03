@@ -145,7 +145,7 @@ func (msg *ExtensionsSet) Parse(body []byte, isNewSessionTicket bool, isServerHe
 	return format.ParserReadFinish(body, offset)
 }
 
-func (msg *ExtensionsSet) WriteInside(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) []byte {
+func (msg *ExtensionsSet) WriteInside(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool, bindersListLength *int) []byte {
 	var mark int
 	if msg.SupportedVersionsSet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_SUPPORTED_VERSIONS)
@@ -201,15 +201,15 @@ func (msg *ExtensionsSet) WriteInside(body []byte, isNewSessionTicket bool, isSe
 	if msg.PreSharedKeySet {
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_PRE_SHARED_KEY)
 		body, mark = format.MarkUint16Offset(body)
-		body = msg.PreSharedKey.Write(body, isServerHello)
+		body = msg.PreSharedKey.Write(body, isServerHello, bindersListLength)
 		format.FillUint16Offset(body, mark)
 	}
 	return body
 }
 
-func (msg *ExtensionsSet) Write(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool) []byte {
+func (msg *ExtensionsSet) Write(body []byte, isNewSessionTicket bool, isServerHello bool, isHelloRetryRequest bool, bindersListLength *int) []byte {
 	body, mark := format.MarkUint16Offset(body)
-	body = msg.WriteInside(body, isNewSessionTicket, isServerHello, isHelloRetryRequest)
+	body = msg.WriteInside(body, isNewSessionTicket, isServerHello, isHelloRetryRequest, bindersListLength)
 	format.FillUint16Offset(body, mark)
 	return body
 }

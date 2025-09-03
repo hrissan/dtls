@@ -51,7 +51,7 @@ func (msg *MsgClientHello) Parse(body []byte, bindersListLength *int) (err error
 	return msg.Extensions.Parse(body[offset:], false, false, false, bindersListLength)
 }
 
-func (msg *MsgClientHello) Write(body []byte) []byte {
+func (msg *MsgClientHello) Write(body []byte, bindersListLength *int) []byte {
 	body = binary.BigEndian.AppendUint16(body, 0xFEFD)
 
 	body = append(body, msg.Random[:]...)
@@ -64,7 +64,7 @@ func (msg *MsgClientHello) Write(body []byte) []byte {
 
 	body = binary.BigEndian.AppendUint16(body, 0x0100) // legacy_compression_methods
 
-	body = msg.Extensions.Write(body, false, false, false)
+	body = msg.Extensions.Write(body, false, false, false, bindersListLength)
 
 	return body
 }

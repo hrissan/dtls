@@ -13,6 +13,7 @@ import (
 )
 
 var ErrPSKTooManyIdentities = fmt.Errorf("too many identities, only %d is supported", constants.MaxPSKIdentities)
+var ErrPSKEmptyIdentity = fmt.Errorf("empty identity")
 var ErrPSKBindersMismatch = errors.New("there must be equal number of identities and binders")
 var ErrPSKBinderTooLong = errors.New("binder length is larger than implementation supports")
 
@@ -69,7 +70,7 @@ func (msg *PreSharedKey) parseIdentities(body []byte) (err error) {
 }
 
 func (msg *PreSharedKey) writeIdentities(body []byte) []byte {
-	for _, identity := range msg.Identities {
+	for _, identity := range msg.GetIdentities() {
 		body = identity.write(body)
 	}
 	return body
@@ -97,7 +98,7 @@ func (msg *PreSharedKey) parseBinders(body []byte) (err error) {
 
 func (msg *PreSharedKey) writeBinders(body []byte) []byte {
 	var mark int
-	for _, identity := range msg.Identities {
+	for _, identity := range msg.GetIdentities() {
 		body, mark = format.MarkByteOffset(body)
 		body = append(body, identity.Binder...)
 		format.FillByteOffset(body, mark)
@@ -132,7 +133,7 @@ func (msg *PreSharedKey) Parse(body []byte, isServerHello bool, bindersListLengt
 	return format.ParserReadFinish(body, offset)
 }
 
-func (msg *PreSharedKey) Write(body []byte, isServerHello bool) []byte {
+func (msg *PreSharedKey) Write(body []byte, isServerHello bool, bindersListLength *int) []byte {
 	if isServerHello {
 		body = binary.BigEndian.AppendUint16(body, msg.SelectedIdentity)
 		return body
@@ -144,5 +145,24 @@ func (msg *PreSharedKey) Write(body []byte, isServerHello bool) []byte {
 	body, externalMark = format.MarkUint16Offset(body)
 	body = msg.writeBinders(body)
 	format.FillUint16Offset(body, externalMark)
+	if bindersListLength != nil {
+		*bindersListLength = len(body) - externalMark
+	}
 	return body
+}
+
+func (msg *PreSharedKey) GetIdentities() []PSKIdentity {
+	return msg.Identities[:msg.IdentitiesSize]
+}
+
+func (msg *PreSharedKey) AddIdentity(identity []byte) error {
+	if len(identity) == 0 {
+		return ErrPSKEmptyIdentity
+	}
+	if msg.IdentitiesSize >= len(msg.Identities) {
+		return ErrPSKTooManyIdentities
+	}
+	msg.Identities[msg.IdentitiesSize].Identity = identity
+	msg.IdentitiesSize++ // no overflow due to check above
+	return nil
 }

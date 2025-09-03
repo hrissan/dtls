@@ -200,7 +200,7 @@ func selectPSKIdentity(pskStorage []byte, opts *options.TransportOptions, ext *h
 		!ext.PreSharedKeySet || opts.PSKAppendSecret == nil {
 		return 0, nil, handshake.PSKIdentity{}, false
 	}
-	for num, identity := range ext.PreSharedKey.Identities[:ext.PreSharedKey.IdentitiesSize] {
+	for num, identity := range ext.PreSharedKey.GetIdentities() {
 		psk := opts.PSKAppendSecret(identity.Identity, pskStorage[:0]) // allocates if secret very long
 		if len(psk) != 0 {
 			return safecast.Cast[uint16](num), psk, identity, true // limited to constants.MaxPSKIdentities

@@ -66,7 +66,8 @@ func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions
 		clientHello.Extensions.Cookie = ck
 	}
 
-	messageBody := clientHello.Write(nil) // TODO - reuse message bodies in a rope
+	var bindersListLength2 int
+	messageBody := clientHello.Write(nil, &bindersListLength2) // TODO - reuse message bodies in a rope
 	return handshake.Message{
 		MsgType: handshake.MsgTypeClientHello,
 		Body:    messageBody,

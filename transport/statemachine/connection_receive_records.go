@@ -82,12 +82,6 @@ func (conn *Connection) deprotectLocked(hdr record.Encrypted) ([]byte, record.Nu
 		}
 		conn.keys.ReceiveNextSeq.SetBit(seq)
 
-		if conn.tr.opts.RoleServer && receivedEpoch == 2 && !conn.keys.NewReceiveKeysSet {
-			// [2] [.] -> [2] [3]
-			if err := conn.generateNewReceiveKeys(); err != nil {
-				panic("we must be able to generate new keys receive here")
-			}
-		}
 		return recordBody, record.NumberWith(receivedEpoch, seq), contentType, nil
 	}
 	if !conn.keys.NewReceiveKeysSet {
@@ -114,7 +108,7 @@ func (conn *Connection) deprotectLocked(hdr record.Encrypted) ([]byte, record.Nu
 		return nil, record.Number{}, 0, nil // replay protection
 	}
 	conn.keys.NewReceiveNextSeq.SetBit(seq)
-	if conn.keys.ReceiveEpoch > 3 || (conn.tr.opts.RoleServer && conn.keys.ReceiveEpoch == 2) { //  && conn.keys.NewReceiveKeysSet
+	if conn.keys.ReceiveEpoch > 3 { //  && conn.keys.NewReceiveKeysSet
 		// [3] [4] -> [4] [.]
 		// also
 		// [1] [2] -> [2] [3]

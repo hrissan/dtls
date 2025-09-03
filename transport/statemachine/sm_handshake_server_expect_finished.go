@@ -30,6 +30,14 @@ func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handsha
 	}
 	fmt.Printf("finished message verify ok: %+v\n", msgParsed)
 
+	if conn.keys.ReceiveEpoch != 2 { // should be [2] [.] or [1] [2] here
+		panic("unexpected receive epoch here")
+	}
+	conn.removeOldReceiveKeys()
+	if err := conn.generateNewReceiveKeys(); err != nil {
+		panic("we must be able to generate new keys receive here")
+	}
+
 	conn.keys.SendSymmetric = suite.ResetSymmetricKeys(conn.keys.SendSymmetric, conn.keys.SendApplicationTrafficSecret)
 	conn.keys.SendEpoch = 3
 	conn.keys.SendNextSeq = 0

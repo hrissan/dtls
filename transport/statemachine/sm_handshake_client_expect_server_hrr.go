@@ -26,7 +26,7 @@ func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg han
 	hctx.transcriptHasher = conn.keys.Suite().NewHasher()
 	// only after we know ciphersuite, can we now hash ClientHello1
 	{
-		clientHello1Msg := hctx.generateClientHello(conn.tr.opts, false, nil)
+		clientHello1Msg := hctx.generateClientHello(conn, false, conn.tr.opts, false, nil)
 		clientHello1Msg.AddToHash(hctx.transcriptHasher)
 		debugPrintSum(hctx.transcriptHasher)
 	}
@@ -52,7 +52,7 @@ func (*smHandshakeClientExpectServerHRR) OnServerHello(conn *Connection, msg han
 
 		msg.AddToHash(hctx.transcriptHasher)
 
-		clientHelloMsg := hctx.generateClientHello(conn.tr.opts, true, msgParsed.Extensions.Cookie)
+		clientHelloMsg := hctx.generateClientHello(conn, false, conn.tr.opts, true, msgParsed.Extensions.Cookie)
 		if err := hctx.PushMessage(conn, clientHelloMsg); err != nil {
 			return err
 		}

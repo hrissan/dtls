@@ -40,7 +40,8 @@ func main() {
 	// go client.GoStart(t, peerAddr)
 
 	go func() {
-		dtlsConn, err := dtls.Dial(t, "udp4", "127.0.0.1:11111")
+		dtlsConn, err := dtls.DialTimeoutEarlyData(t, "udp4", "127.0.0.1:11111",
+			0, []byte("Early (0-RTT) data"))
 		chat.Check(err)
 		defer func() {
 			chat.Check(dtlsConn.Close())

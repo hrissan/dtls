@@ -125,7 +125,7 @@ func (msg *ExtensionsSet) parseInside(body []byte, isClientHello bool, isNewSess
 			msg.PreSharedKeySet = true
 			// "pre_shared_key" must be last [rfc8446:4.2.11] (which MUST be the last extension in the ClientHello)
 			if isClientHello && offset != len(body) {
-				return ErrPreSharedKeyExtensionMustBeLast
+				return ErrPreSharedKeyExtensionMustBeLast // TODO - illegal_parameter alert
 			}
 		}
 	}

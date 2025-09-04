@@ -111,7 +111,6 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 			MsgSeq:  conn.sendKeyUpdateMessageSeq,
 			Body:    msgBody,
 		}
-
 		recordSize, fragmentInfo, rn, err := conn.constructHandshakeRecord(
 			conn.keys.SendSymmetric, conn.keys.SendEpoch, &conn.keys.SendNextSeq,
 			opts, datagram[datagramSize:],
@@ -146,9 +145,10 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 		//	return datagramSize, true, nil
 		//}
 	}
-	if conn.stateID != smIDPostHandshake { // application data
+	if conn.keys.SendSymmetric == nil {
 		return datagramSize, conn.hasDataToSendLocked(), nil
 	}
+	earlyData := conn.keys.SendEpoch == 1
 	// If we remove "if" below, we put ack for client finished together with
 	// application data into the same datagram. Then wolfSSL_connect will return
 	// err = -441, Application data is available for reading
@@ -161,7 +161,7 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	if !ok || len(insideBody) < constants.MinFragmentBodySize {
 		return datagramSize, true, nil
 	}
-	insideSize, send, wr, err := conn.handler.OnWriteRecordLocked(false, insideBody)
+	insideSize, send, wr, err := conn.handler.OnWriteRecordLocked(earlyData, insideBody)
 	if err != nil {
 		return datagramSize, wr, err
 	}
@@ -248,7 +248,6 @@ func (conn *Connection) constructDatagramAlert(opts *options.TransportOptions, d
 		// TODO - unencrypted alert
 		return 0, nil
 	}
-
 	userPadding := rand.Intn(4) // TODO - remove
 	hdrSize, insideBody, ok := prepareProtect(sendSymmetric, datagramLeft, opts.Use8BitSeq, userPadding)
 	if !ok || len(insideBody) < record.AlertSize {

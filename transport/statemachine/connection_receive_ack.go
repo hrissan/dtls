@@ -43,13 +43,7 @@ func (conn *Connection) receivedEncryptedAckLocked(opts *options.TransportOption
 			panic("unexpected key set at client finished ack")
 		}
 		conn.removeOldReceiveKeys() // [2] [3] -> [3] [.]
-		if conn.keys.SendEpoch >= 2 {
-			panic("expected Send.Epoch to be 0 or 1 in this state")
-		}
-		//conn.keys.SendSymmetric, conn.hctx.SendSymmetricEpoch3 = conn.hctx.SendSymmetricEpoch3, nil
-		//conn.keys.SendNextSeq, conn.hctx.SendNextSeqEpoch3 = conn.hctx.SendNextSeqEpoch3, 0
-		//conn.keys.SendEpoch = 3
-		conn.hctx = nil // TODO - reuse into pool
+		conn.hctx = nil             // TODO - reuse into pool
 		conn.handler.OnHandshakeLocked()
 		conn.stateID = smIDPostHandshake
 		conn.SignalWriteable()

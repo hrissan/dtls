@@ -5,6 +5,7 @@ package statemachine
 
 import (
 	"fmt"
+	"hash"
 
 	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/constants"
@@ -22,7 +23,7 @@ func (conn *Connection) receivedServerHelloFragment(opts *options.TransportOptio
 	return conn.state().OnHandshakeMsgFragment(conn, opts, fragment, rn)
 }
 
-func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions, setCookie bool, ck []byte) handshake.Message {
+func (hctx *handshakeContext) generateClientHello(conn *Connection, setEpoch1Keys bool, opts *options.TransportOptions, setCookie bool, ck []byte) handshake.Message {
 	// [rfc8446:4.1.2] the client MUST send the same ClientHello without modification, except as follows
 	clientHello := handshake.MsgClientHello{
 		Random: hctx.localRandom,
@@ -38,8 +39,9 @@ func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions
 	clientHello.Extensions.SupportedGroups.SECP384R1 = false
 	clientHello.Extensions.SupportedGroups.SECP512R1 = false
 
-	suite := ciphersuite.GetSuite(ciphersuite.TLS_AES_128_GCM_SHA256) // TODO - negotiate suites, but how?
-	emptyHash := suite.EmptyHash()                                    // Binder[] byte slices point here to avoid allocations
+	conn.keys.SuiteID = ciphersuite.TLS_AES_128_GCM_SHA256 // TODO - negotiate suites for PSK, but how?
+	suite := ciphersuite.GetSuite(conn.keys.SuiteID)
+	emptyHash := suite.EmptyHash() // Binder[] byte slices point here to avoid allocations
 	if len(opts.PSKClientIdentities) != 0 && opts.PSKAppendSecret != nil {
 		clientHello.Extensions.PreSharedKeySet = true
 
@@ -111,6 +113,7 @@ func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions
 
 	var pskStorage [256]byte
 	var binders [constants.MaxPSKIdentities]ciphersuite.Hash // Binder[] byte slices point here to avoid allocations
+	var hmacEarlySecret0 hash.Hash
 	for num, identity := range clientHello.Extensions.PreSharedKey.GetIdentities() {
 		psk := opts.PSKAppendSecret(identity.Identity, pskStorage[:0]) // allocates if secret very long
 		if len(psk) == 0 {
@@ -118,6 +121,9 @@ func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions
 		}
 		earlySecret := keys.ComputeEarlySecret(suite, psk)
 		hmacEarlySecret := suite.NewHMAC(earlySecret.GetValue())
+		if num == 0 {
+			hmacEarlySecret0 = hmacEarlySecret
+		}
 		binderKey := keys.DeriveSecret(hmacEarlySecret, "ext binder", suite.EmptyHash())
 		binders[num] = keys.ComputeFinished(suite, binderKey, partialHash)
 		clientHello.Extensions.PreSharedKey.Identities[num].Binder = binders[num].GetValue()
@@ -132,7 +138,19 @@ func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions
 		Body:    messageBody,
 	}
 
-	// transcriptHasher = suite.NewHasher()
+	if hmacEarlySecret0 != nil && setEpoch1Keys {
+		transcriptHasher.Reset()
+		msgClientHello.AddToHash(transcriptHasher)
+		debugPrintSum(transcriptHasher)
+		var clientHelloTranscriptHash ciphersuite.Hash
+		clientHelloTranscriptHash.SetSum(transcriptHasher)
+
+		clientEarlyTrafficSecret := keys.DeriveSecret(hmacEarlySecret0, "c e traffic", clientHelloTranscriptHash)
+		fmt.Printf("client early traffic secret: %x\n", clientEarlyTrafficSecret.GetValue())
+		conn.keys.SendSymmetric = suite.ResetSymmetricKeys(conn.keys.SendSymmetric, clientEarlyTrafficSecret)
+		conn.keys.SendEpoch = 1
+		conn.debugPrintKeys()
+	}
 	// partialHash = msgClientHello.AddToHashPartial(transcriptHasher, bindersListLength2)
 	// fmt.Printf("partial hash for len=%d %x\n", bindersListLength2, partialHash.GetValue())
 	// fmt.Printf("message body %x\n", messageBody)

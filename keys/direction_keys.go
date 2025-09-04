@@ -37,11 +37,11 @@ func ComputeApplicationTrafficSecret(suite ciphersuite.Suite, roleServer bool, m
 	hmacMasterSecret := suite.NewHMAC(masterSecret.GetValue())
 	if roleServer {
 		applicationTrafficSecret := DeriveSecret(hmacMasterSecret, "s ap traffic", trHash)
-		fmt.Printf("server2 application traffic secret: %x\n", applicationTrafficSecret)
+		fmt.Printf("server2 application traffic secret: %x\n", applicationTrafficSecret.GetValue())
 		return applicationTrafficSecret
 	}
 	applicationTrafficSecret := DeriveSecret(hmacMasterSecret, "c ap traffic", trHash)
-	fmt.Printf("client2 application traffic secret: %x\n", applicationTrafficSecret)
+	fmt.Printf("client2 application traffic secret: %x\n", applicationTrafficSecret.GetValue())
 	return applicationTrafficSecret
 }
 

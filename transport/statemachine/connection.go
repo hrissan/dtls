@@ -151,7 +151,7 @@ func (conn *Connection) startConnection(tr *Transport, handler ConnectionHandler
 
 	conn.hctx = hctx
 
-	clientHelloMsg := hctx.generateClientHello(tr.opts, false, nil)
+	clientHelloMsg := hctx.generateClientHello(conn, true, tr.opts, false, nil)
 
 	if err := hctx.PushMessageNoHasher(conn, clientHelloMsg); err != nil {
 		conn.hctx = nil // TODO - reuse

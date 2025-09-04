@@ -107,10 +107,6 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleServer bool,
 	handshakeTrafficSecretSend = ComputeHandshakeKeys(roleServer, hmacHandshakeSecret, trHash)
 	handshakeTrafficSecretReceive = ComputeHandshakeKeys(!roleServer, hmacHandshakeSecret, trHash)
 
-	if keys.SendEpoch != 0 {
-		panic("handshake send keys state machine violation")
-	}
-
 	switch keys.ReceiveEpoch {
 	case 0: // client and server if no early data negotiated
 		keys.ReceiveEpoch = 2

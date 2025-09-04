@@ -9,6 +9,7 @@ import (
 	"math"
 	"math/rand"
 
+	"github.com/hrissan/dtls/ciphersuite"
 	"github.com/hrissan/dtls/constants"
 	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
@@ -17,7 +18,11 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *Connection) constructRecord(opts *options.TransportOptions, datagramLeft []byte, handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32, sendNextSeqEpoch0 *uint16) (recordSize int, fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {
+func (conn *Connection) constructHandshakeRecord(
+	sendSymmetric ciphersuite.SymmetricKeys, sendEpoch uint16, sendNextSeq *uint64,
+	opts *options.TransportOptions, datagramLeft []byte,
+	handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32) (recordSize int,
+	fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {
 	// during fragmenting we always write header at the start of the message, and then part of the body
 	if fragmentOffset >= handshakeMsg.Len32() {
 		// >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
@@ -36,9 +41,6 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 		Body: handshakeMsg.Body,
 	}
 	if handshakeMsg.MsgType == handshake.MsgTypeClientHello || handshakeMsg.MsgType == handshake.MsgTypeServerHello {
-		if sendNextSeqEpoch0 == nil {
-			panic("the same check for plaintext record should be above")
-		}
 		remainingSpace := len(datagramLeft) - handshake.FragmentHeaderSize + record.PlaintextRecordHeaderSize
 		if remainingSpace <= 0 {
 			return
@@ -47,7 +49,7 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 		if msg.Header.FragmentLength <= constants.MinFragmentBodySize && msg.Header.FragmentLength != maxFragmentLength {
 			return // do not send tiny records at the end of datagram
 		}
-		da, rn, err := conn.constructPlaintextRecord(datagramLeft[:0], msg, sendNextSeqEpoch0)
+		da, rn, err := conn.constructPlaintextRecord(datagramLeft[:0], msg)
 		if len(da) != int(msg.Header.FragmentLength+handshake.FragmentHeaderSize+record.PlaintextRecordHeaderSize) { // safe if Header.FragmentLength is in spec
 			panic("plaintext handshake record construction length invariant failed")
 		}
@@ -57,7 +59,7 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 		return len(da), msg.Header.FragmentInfo, rn, nil
 	}
 	userPadding := rand.Intn(4) // TODO - remove
-	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq, userPadding)
+	hdrSize, insideBody, ok := prepareProtect(sendSymmetric, datagramLeft, opts.Use8BitSeq, userPadding)
 	if !ok || len(insideBody) <= handshake.FragmentHeaderSize {
 		return
 	}
@@ -68,26 +70,26 @@ func (conn *Connection) constructRecord(opts *options.TransportOptions, datagram
 	insideBody = msg.Header.Write(insideBody[:0])
 	insideBody = append(insideBody, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
 
-	recordSize, rn, err = conn.protectRecord(record.RecordTypeHandshake,
-		datagramLeft, userPadding, hdrSize, len(insideBody))
+	recordSize, rn, err = conn.protectRecord(sendSymmetric, sendEpoch, sendNextSeq,
+		record.RecordTypeHandshake, datagramLeft, userPadding, hdrSize, len(insideBody))
 	if err != nil {
 		return 0, handshake.FragmentInfo{}, record.Number{}, err
 	}
 	return recordSize, msg.Header.FragmentInfo, rn, nil
 }
 
-func (conn *Connection) constructPlaintextRecord(datagramLeft []byte, msg handshake.Fragment, sendNextSeqEpoch0 *uint16) ([]byte, record.Number, error) {
-	if *sendNextSeqEpoch0 == math.MaxUint16 { // linter does not like >= here
+func (conn *Connection) constructPlaintextRecord(datagramLeft []byte, msg handshake.Fragment) ([]byte, record.Number, error) {
+	if conn.hctx.sendNextSeqEpoch0 == math.MaxUint16 { // linter does not like >= here
 		// We arbitrarily decided that we do not need more outgoing sequence numbers for epoch 0
 		// We needed code to prevent overflow below anyway
 		return nil, record.Number{}, dtlserrors.ErrSendEpoch0RecordSeqOverflow
 	}
-	rn := record.NumberWith(0, uint64(*sendNextSeqEpoch0)) // widening
+	rn := record.NumberWith(0, uint64(conn.hctx.sendNextSeqEpoch0)) // widening
 	recordHdr := record.PlaintextHeader{
 		ContentType:    record.RecordTypeHandshake,
-		SequenceNumber: uint64(*sendNextSeqEpoch0), // widening
+		SequenceNumber: uint64(conn.hctx.sendNextSeqEpoch0), // widening
 	}
-	*sendNextSeqEpoch0++ // never overflows due to check above
+	conn.hctx.sendNextSeqEpoch0++ // never overflows due to check above
 	datagramLeft = recordHdr.Write(datagramLeft, safecast.Cast[uint16](handshake.FragmentHeaderSize+msg.Header.FragmentLength))
 	datagramLeft = msg.Header.Write(datagramLeft)
 	datagramLeft = append(datagramLeft, msg.Body[msg.Header.FragmentOffset:msg.Header.FragmentOffset+msg.Header.FragmentLength]...)
@@ -95,17 +97,17 @@ func (conn *Connection) constructPlaintextRecord(datagramLeft []byte, msg handsh
 }
 
 // returns seq number to use
-func (conn *Connection) checkSendLimit() (uint64, error) {
+func (conn *Connection) checkSendLimit(sendEpoch uint16, sendNextSeq *uint64) (uint64, error) {
 	sendLimit := min(conn.keys.SequenceNumberLimit(), constants.MaxProtectionLimitSend)
-	if conn.keys.SendNextSeq >= sendLimit {
+	if *sendNextSeq >= sendLimit {
 		return 0, dtlserrors.ErrSendRecordSeqOverflow
 	}
-	seq := conn.keys.SendNextSeq
-	conn.keys.SendNextSeq++ // does not overflow due to check obove
-	if conn.keys.SendNextSeq < constants.ProtectionSoftLimit(sendLimit) {
+	seq := *sendNextSeq
+	*sendNextSeq++ // does not overflow due to check obove
+	if *sendNextSeq < constants.ProtectionSoftLimit(sendLimit) {
 		return seq, nil
 	}
-	if conn.keys.SendEpoch < 3 {
+	if sendEpoch < 3 {
 		return seq, nil
 	}
 	return seq, conn.keyUpdateStart(false)
@@ -115,8 +117,8 @@ func (conn *Connection) checkSendLimit() (uint64, error) {
 // Reserves space for header and padding, returns ok and insideBody to write application data into,
 // or (if even 0-byte application data will not fit), returns !ok.
 // Caller should check if his data fits into insideBody, put it there.
-func (conn *Connection) prepareProtect(datagramLeft []byte, use8BitSeq bool, userPadding int) (hdrSize int, insideBody []byte, ok bool) {
-	sealSize, minCiphertextSize := conn.keys.SendSymmetric.RecordOverhead()
+func prepareProtect(sendSymmetric ciphersuite.SymmetricKeys, datagramLeft []byte, use8BitSeq bool, userPadding int) (hdrSize int, insideBody []byte, ok bool) {
+	sealSize, minCiphertextSize := sendSymmetric.RecordOverhead()
 	hdrSize = record.OutgoingCiphertextRecordHeader16
 	if use8BitSeq {
 		hdrSize = record.OutgoingCiphertextRecordHeader8
@@ -133,19 +135,21 @@ func (conn *Connection) prepareProtect(datagramLeft []byte, use8BitSeq bool, use
 	return hdrSize, datagramLeft[hdrSize : hdrSize+userSpace], true
 }
 
-func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, userPadding int, hdrSize int, insideSize int) (recordSize int, _ record.Number, _ error) {
+func (conn *Connection) protectRecord(
+	sendSymmetric ciphersuite.SymmetricKeys, sendEpoch uint16, sendNextSeq *uint64,
+	recordType byte, datagramLeft []byte, userPadding int, hdrSize int, insideSize int) (recordSize int, _ record.Number, _ error) {
 	if hdrSize != record.OutgoingCiphertextRecordHeader8 && hdrSize != record.OutgoingCiphertextRecordHeader16 {
 		panic("outgoing record header size must be 4 or 5 bytes")
 	}
 	if insideSize > record.MaxPlaintextRecordLength {
 		panic("outgoing record size too big")
 	}
-	seq, err := conn.checkSendLimit()
+	seq, err := conn.checkSendLimit(sendEpoch, sendNextSeq)
 	if err != nil {
 		return 0, record.Number{}, err
 	}
-	rn := record.NumberWith(conn.keys.SendEpoch, seq)
-	sealSize, minCiphertextSize := conn.keys.SendSymmetric.RecordOverhead()
+	rn := record.NumberWith(sendEpoch, seq)
+	sealSize, minCiphertextSize := sendSymmetric.RecordOverhead()
 
 	// format of our encrypted record is fixed.
 	// Saving 1 byte for the sequence number seems very niche.
@@ -179,9 +183,9 @@ func (conn *Connection) protectRecord(recordType byte, datagramLeft []byte, user
 		binary.BigEndian.PutUint16(datagramLeft[3:], cipherTextLength)
 	}
 	fmt.Printf("constructing ciphertext type %d with rn={%d,%d} hdrSize = %d body: %x\n", recordType, rn.Epoch(), rn.SeqNum(), hdrSize, datagramLeft[hdrSize:hdrSize+insideSize])
-	conn.keys.SendSymmetric.AEADEncrypt(rn.SeqNum(), datagramLeft, hdrSize, insideSize)
+	sendSymmetric.AEADEncrypt(rn.SeqNum(), datagramLeft, hdrSize, insideSize)
 	if !conn.keys.DoNotEncryptSequenceNumbers {
-		mask, err := conn.keys.SendSymmetric.EncryptSeqMask(datagramLeft[hdrSize:])
+		mask, err := sendSymmetric.EncryptSeqMask(datagramLeft[hdrSize:])
 		if err != nil {
 			panic("cipher text too short when sending")
 		}

@@ -14,7 +14,8 @@ import (
 type Keys struct {
 	// fields sorted to minimize padding
 	SendApplicationTrafficSecret ciphersuite.Hash // we need to keep this for key update
-	SendEpoch                    uint16
+	// these epoch is for application data only (epoch 1 or 3+)
+	SendEpoch uint16
 
 	ReceiveApplicationTrafficSecret ciphersuite.Hash // we need to keep this for key update
 	ReceiveEpoch                    uint16
@@ -34,6 +35,8 @@ type Keys struct {
 
 	// It seems, we need no replay protection for Epoch 0. TODO - investigate..
 
+	// these keys are for application data only (epoch 1 or 3+)
+	// send keys for epoch 2 are stored in Handshake.
 	SendSymmetric ciphersuite.SymmetricKeys
 	SendNextSeq   uint64
 
@@ -88,8 +91,7 @@ func ComputeEarlySecret(suite ciphersuite.Suite, psk []byte) ciphersuite.Hash {
 }
 
 func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleServer bool,
-	earlySecret ciphersuite.Hash, sharedSecret []byte,
-	trHash ciphersuite.Hash) (
+	earlySecret ciphersuite.Hash, sharedSecret []byte, trHash ciphersuite.Hash) (
 	masterSecret ciphersuite.Hash, handshakeTrafficSecretSend ciphersuite.Hash, handshakeTrafficSecretReceive ciphersuite.Hash) {
 	// [rfc8446:7.1] Key Schedule
 	emptyHash := suite.EmptyHash()
@@ -108,9 +110,6 @@ func (keys *Keys) ComputeHandshakeKeys(suite ciphersuite.Suite, roleServer bool,
 	if keys.SendEpoch != 0 {
 		panic("handshake send keys state machine violation")
 	}
-	keys.SendEpoch = 2
-	keys.SendSymmetric = suite.ResetSymmetricKeys(keys.SendSymmetric, handshakeTrafficSecretSend)
-	keys.SendNextSeq = 0
 
 	switch keys.ReceiveEpoch {
 	case 0: // client and server if no early data negotiated

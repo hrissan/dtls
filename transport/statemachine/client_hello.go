@@ -150,7 +150,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	// formally this is the next flight, but as there were no state, do not call it
 	// hctx.receivedNextFlight(conn)
 
-	conn.hctx.sendNextRecordSequenceEpoch0 = 1 // sequence 0 was HRR
+	conn.hctx.sendNextSeqEpoch0 = 1 // sequence 0 was HRR
 
 	conn.nextMessageSeqSend = 1    // message 0 was HRR
 	conn.nextMessageSeqReceive = 2 // message 0, 1 were initial client_hello, client_hello
@@ -162,6 +162,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	if clientEarlyTrafficSecret != (ciphersuite.Hash{}) {
 		conn.keys.ReceiveSymmetric = suite.ResetSymmetricKeys(conn.keys.ReceiveSymmetric, clientEarlyTrafficSecret)
 		conn.keys.ReceiveEpoch = 1
+		conn.debugPrintKeys()
 	}
 	fmt.Printf("server early traffic secret: %x\n", clientEarlyTrafficSecret)
 
@@ -204,7 +205,8 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
 		conn.keys.ComputeHandshakeKeys(suite, true, hctx.earlySecret, sharedSecret, handshakeTranscriptHash)
-
+	hctx.SendSymmetricEpoch2 = suite.ResetSymmetricKeys(hctx.SendSymmetricEpoch2, hctx.handshakeTrafficSecretSend)
+	conn.debugPrintKeys()
 	if err := hctx.PushMessage(conn, generateEncryptedExtensions()); err != nil {
 		return err
 	}

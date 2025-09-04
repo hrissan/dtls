@@ -29,7 +29,7 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	if conn.keys.SuiteID != msgParsed.CipherSuite {
 		return dtlserrors.ErrClientHelloUnsupportedParams
 	}
-
+	suite := conn.keys.Suite()
 	// ServerHello can have messageSeq 0 or 1, depending on whether server used HRR
 	if !hctx.serverUsedHRR && msg.MsgSeq != 0 {
 		fmt.Printf("ServerHello after ServerHelloRetryRequest has msgSeq != 1\n")
@@ -66,7 +66,9 @@ func (*smHandshakeClientExpectServerHello) OnServerHello(conn *Connection, msg h
 	}
 	hctx.earlySecret = keys.ComputeEarlySecret(conn.keys.Suite(), psk)
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
-		conn.keys.ComputeHandshakeKeys(conn.keys.Suite(), false, hctx.earlySecret, sharedSecret, handshakeTranscriptHash)
+		conn.keys.ComputeHandshakeKeys(suite, false, hctx.earlySecret, sharedSecret, handshakeTranscriptHash)
+	hctx.SendSymmetricEpoch2 = suite.ResetSymmetricKeys(hctx.SendSymmetricEpoch2, hctx.handshakeTrafficSecretSend)
+	conn.debugPrintKeys()
 
 	conn.stateID = smIDHandshakeClientExpectEE
 	fmt.Printf("processed server hello\n")

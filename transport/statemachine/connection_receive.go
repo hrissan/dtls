@@ -147,6 +147,7 @@ func (conn *Connection) removeOldReceiveKeys() {
 			conn.keys.NewReceiveNextSeq, replay.Window{}
 		conn.keys.FailedDeprotection, conn.keys.NewReceiveFailedDeprotection =
 			conn.keys.NewReceiveFailedDeprotection, 0
+		conn.debugPrintKeys()
 	}
 }
 
@@ -161,5 +162,6 @@ func (conn *Connection) generateNewReceiveKeys() error {
 	conn.keys.ReceiveEpoch++
 	conn.keys.NewReceiveSymmetric = conn.keys.Suite().ResetSymmetricKeys(conn.keys.NewReceiveSymmetric, conn.keys.ReceiveApplicationTrafficSecret)
 	conn.keys.ReceiveApplicationTrafficSecret = keys.ComputeNextApplicationTrafficSecret(conn.keys.Suite(), "receive", conn.keys.ReceiveApplicationTrafficSecret)
+	conn.debugPrintKeys()
 	return nil
 }

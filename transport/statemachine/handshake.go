@@ -27,11 +27,10 @@ type handshakeContext struct {
 	handshakeTrafficSecretReceive ciphersuite.Hash // we need this to check peer's finished message.
 
 	// Client should send his [certificate..finished] flight with epoch 2.
-	// (this is unfortunate is mistake in DTLS standard).
-	// So we keep epoch3 keys here temporarily to send application data.
-	// When handshake is finished, this case are moved into send keys.
-	SendSymmetricEpoch3 ciphersuite.SymmetricKeys
-	SendNextSeqEpoch3   uint64
+	// (this is unfortunately mistake in DTLS standard).
+	// So we keep epoch2 keys here temporarily to send handshake. Also for server.
+	SendSymmetricEpoch2 ciphersuite.SymmetricKeys
+	SendNextSeqEpoch2   uint64
 
 	// it seems we do not need this protection, but standard says we must have it. TODO - decide later
 	// receiveNextSeqEpoch0 replay.Window
@@ -39,7 +38,7 @@ type handshakeContext struct {
 	// for ServerHello retransmit and replay protection
 	// we decided 2^16 ServerHello/ClientHello is enough for all practical purposes,
 	// see dtlserrors.ErrSendEpoch0RecordSeqOverflow
-	sendNextRecordSequenceEpoch0 uint16
+	sendNextSeqEpoch0 uint16
 
 	// state machine sets this to true or false depending on state.
 	CanDeliveryMessages bool

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"net/netip"
+	"strconv"
 	"sync"
 
 	"github.com/hrissan/dtls/dtlserrors"
@@ -157,6 +158,27 @@ func (conn *Connection) startConnection(tr *Transport, handler ConnectionHandler
 		return err
 	}
 	return nil
+}
+
+func (conn *Connection) debugPrintKeys() {
+	sendEpoch2 := "."
+	sendSeq2 := "."
+	if conn.hctx != nil && conn.hctx.SendSymmetricEpoch2 != nil {
+		sendEpoch2 = "2"
+		sendSeq2 = strconv.Itoa(int(conn.hctx.SendNextSeqEpoch2)) // widening
+	}
+	receiveEpoch := conn.keys.ReceiveEpoch
+	receiveSeq := conn.keys.ReceiveNextSeq.GetNextReceivedSeq()
+	receiveEpoch2 := "."
+	receiveSeq2 := "."
+	if conn.keys.NewReceiveKeysSet {
+		receiveEpoch2 = strconv.Itoa(int(receiveEpoch)) // widening
+		receiveEpoch--
+		receiveSeq2 = strconv.Itoa(int(conn.keys.NewReceiveNextSeq.GetNextReceivedSeq())) // truncate
+	}
+	fmt.Printf("send [%d:%d] (hctx=[%s:%s]) receive [%d:%d] [%s:%s]\n",
+		conn.keys.SendEpoch, conn.keys.SendNextSeq, sendEpoch2, sendSeq2,
+		receiveEpoch, receiveSeq, receiveEpoch2, receiveSeq2)
 }
 
 func (conn *Connection) state() StateMachine { return stateMachineStates[conn.stateID] }

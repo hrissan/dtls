@@ -49,7 +49,9 @@ func (*smHandshakeClientExpectFinished) OnFinished(conn *Connection, msg handsha
 	// To make wolf happy, we'd have to put a copy of send keys for epoch 2 into hctx
 	// and use them from there.
 	conn.stateID = smIDHandshakeClientExpectFinishedAck
-	hctx.SendSymmetricEpoch3 = conn.keys.Suite().ResetSymmetricKeys(hctx.SendSymmetricEpoch3, conn.keys.SendApplicationTrafficSecret)
+	conn.keys.SendSymmetric = conn.keys.Suite().ResetSymmetricKeys(conn.keys.SendSymmetric, conn.keys.SendApplicationTrafficSecret)
+	conn.keys.SendEpoch = 3
+	conn.debugPrintKeys()
 
 	// TODO - if server sent certificate_request, we should generate certificate, certificate_verify here
 	return hctx.PushMessage(conn, hctx.generateFinished(conn))

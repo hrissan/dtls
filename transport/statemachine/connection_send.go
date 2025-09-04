@@ -111,8 +111,11 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 			MsgSeq:  conn.sendKeyUpdateMessageSeq,
 			Body:    msgBody,
 		}
-		recordSize, fragmentInfo, rn, err := conn.constructRecord(opts, datagram[datagramSize:],
-			msg, 0, lenBody, nil)
+
+		recordSize, fragmentInfo, rn, err := conn.constructHandshakeRecord(
+			conn.keys.SendSymmetric, conn.keys.SendEpoch, &conn.keys.SendNextSeq,
+			opts, datagram[datagramSize:],
+			msg, 0, lenBody)
 		if err != nil {
 			return 0, false, err
 		}
@@ -154,7 +157,7 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	//	return datagramSize, true, nil
 	//}
 	userPadding := rand.Intn(4) // TODO - remove
-	hdrSize, insideBody, ok := conn.prepareProtect(datagram[datagramSize:], opts.Use8BitSeq, userPadding)
+	hdrSize, insideBody, ok := prepareProtect(conn.keys.SendSymmetric, datagram[datagramSize:], opts.Use8BitSeq, userPadding)
 	if !ok || len(insideBody) < constants.MinFragmentBodySize {
 		return datagramSize, true, nil
 	}
@@ -166,8 +169,9 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 		panic("ciphertext user handler overflows allowed record")
 	}
 	if send {
-		recordSize, _, err := conn.protectRecord(record.RecordTypeApplicationData,
-			datagram[datagramSize:], userPadding, hdrSize, insideSize)
+		recordSize, _, err := conn.protectRecord(
+			conn.keys.SendSymmetric, conn.keys.SendEpoch, &conn.keys.SendNextSeq,
+			record.RecordTypeApplicationData, datagram[datagramSize:], userPadding, hdrSize, insideSize)
 		if err != nil {
 			return 0, false, err
 		}
@@ -177,16 +181,26 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 }
 
 func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, datagramLeft []byte) (int, error) {
-	if conn.keys.SendEpoch == 0 {
-		return 0, nil // no one should believe unencrypted acks, so we never send them
-	}
 	acks := &conn.keys.SendAcks
 	acksSize := acks.GetBitCount()
 	if acksSize == 0 {
 		return 0, nil
 	}
+	// [rfc9147:7] Implementations SHOULD simply use the highest current sending epoch, which will generally be the highest available
+	sendSymmetric := conn.keys.SendSymmetric
+	sendEpoch := conn.keys.SendEpoch
+	sendNextSeq := &conn.keys.SendNextSeq
+	if conn.hctx != nil && sendEpoch < 2 {
+		sendSymmetric = conn.hctx.SendSymmetricEpoch2
+		sendEpoch = 2
+		sendNextSeq = &conn.hctx.SendNextSeqEpoch2
+	}
+	if sendSymmetric == nil {
+		return 0, nil // no one should believe unencrypted acks, so we never send them
+	}
+
 	userPadding := rand.Intn(4) // TODO - remove
-	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq, userPadding)
+	hdrSize, insideBody, ok := prepareProtect(sendSymmetric, datagramLeft, opts.Use8BitSeq, userPadding)
 	if !ok || len(insideBody) < record.AckHeaderSize+record.AckElementSize { // not a single one fits
 		return 0, nil
 	}
@@ -213,8 +227,8 @@ func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, da
 	if offset != record.AckHeaderSize+acksCount*record.AckElementSize {
 		panic("error calculating space for acks")
 	}
-	recordSize, _, err := conn.protectRecord(record.RecordTypeAck,
-		datagramLeft, userPadding, hdrSize, offset)
+	recordSize, _, err := conn.protectRecord(sendSymmetric, sendEpoch, sendNextSeq,
+		record.RecordTypeAck, datagramLeft, userPadding, hdrSize, offset)
 	if err != nil {
 		return 0, err
 	}
@@ -222,18 +236,27 @@ func (conn *Connection) constructDatagramAcks(opts *options.TransportOptions, da
 }
 
 func (conn *Connection) constructDatagramAlert(opts *options.TransportOptions, datagramLeft []byte, alert record.Alert) (int, error) {
-	if conn.keys.SendEpoch == 0 {
+	sendSymmetric := conn.keys.SendSymmetric
+	sendEpoch := conn.keys.SendEpoch
+	sendNextSeq := &conn.keys.SendNextSeq
+	if conn.hctx != nil && sendEpoch < 2 {
+		sendSymmetric = conn.hctx.SendSymmetricEpoch2
+		sendEpoch = 2
+		sendNextSeq = &conn.hctx.SendNextSeqEpoch2
+	}
+	if sendSymmetric == nil {
 		// TODO - unencrypted alert
 		return 0, nil
 	}
+
 	userPadding := rand.Intn(4) // TODO - remove
-	hdrSize, insideBody, ok := conn.prepareProtect(datagramLeft, opts.Use8BitSeq, userPadding)
+	hdrSize, insideBody, ok := prepareProtect(sendSymmetric, datagramLeft, opts.Use8BitSeq, userPadding)
 	if !ok || len(insideBody) < record.AlertSize {
 		return 0, nil
 	}
 	_ = alert.Write(insideBody[:0])
-	recordSize, _, err := conn.protectRecord(record.RecordTypeAlert,
-		datagramLeft, userPadding, hdrSize, record.AlertSize)
+	recordSize, _, err := conn.protectRecord(sendSymmetric, sendEpoch, sendNextSeq,
+		record.RecordTypeAlert, datagramLeft, userPadding, hdrSize, record.AlertSize)
 	if err != nil {
 		return 0, err
 	}

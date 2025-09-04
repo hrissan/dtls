@@ -17,6 +17,10 @@ func Dial(t *statemachine.Transport, network, address string) (*Conn, error) {
 }
 
 func DialTimeout(t *statemachine.Transport, network, address string, timeout time.Duration) (*Conn, error) {
+	return DialTimeoutEarlyData(t, network, address, timeout, nil)
+}
+
+func DialTimeoutEarlyData(t *statemachine.Transport, network, address string, timeout time.Duration, earlyData []byte) (*Conn, error) {
 	netipAddr, err := netip.ParseAddrPort(address)
 	if err != nil {
 		return nil, err
@@ -26,6 +30,9 @@ func DialTimeout(t *statemachine.Transport, network, address string, timeout tim
 		return nil, err
 	}
 	conn := newConn(netAddr, netAddr)
+	if len(earlyData) != 0 {
+		conn.writing = append(conn.writing, append([]byte{}, earlyData...))
+	}
 	err = t.StartConnection(&conn.tc, conn, netipAddr)
 	if err != nil {
 		return nil, err

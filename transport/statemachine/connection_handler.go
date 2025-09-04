@@ -22,9 +22,10 @@ type ConnectionHandler interface {
 	// final OnDisconnectLocked.
 	// If handshake does not succeed, you will also get OnDisconnectLocked() instead of OnHandshakeLocked().
 	//
-	// For client connection, if you receive error from StartConnection, you get no callbacks.
-	// If StartConnection succeeds, lifecycle is exactly the same as with server connection.
-	// Beware though, handler methods might be called before StartConnection finishes.
+	// Client connection starts in conneced state, there is no OnConnectLocked() call, otherwise state machine
+	// is exactly the same as server connection.
+	// If StartConnection fails immediately, you receive OnDisconnectLocked before it returns.
+	// Other handler methods might also be called before StartConnection finishes.
 	OnConnectLocked()
 	OnHandshakeLocked()
 

@@ -243,9 +243,11 @@ var ErrRegisterConnectionTwice = errors.New("client connection is registered in 
 
 func (t *Transport) StartConnection(conn *Connection, handler ConnectionHandler, addr netip.AddrPort) error {
 	if t.opts.RoleServer { // TODO - combined in/out transport
+		handler.OnDisconnectLocked(ErrServerCannotStartConnection)
 		return ErrServerCannotStartConnection
 	}
 	if err := conn.startConnection(t, handler, addr); err != nil {
+		handler.OnDisconnectLocked(err)
 		return err
 	}
 	t.snd.RegisterConnectionForSend(conn)

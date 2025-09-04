@@ -12,22 +12,22 @@ import (
 
 // crypto/internal/fips140/aes/aes.go
 type aesBlock struct {
-	rounds int
+	Rounds int
 	// Round keys, where only the first (rounds + 1) * (128 / 32) words are used.
-	enc [60]uint32
-	dec [60]uint32
+	Enc [60]uint32
+	Dec [60]uint32
 }
 
 // crypto/internal/fips140/aes/gcm/gcm_asm.go
 type gcmPlatformData struct {
-	productTable [256]byte
+	ProductTable [256]byte
 }
 
 // crypto/internal/fips140/aes/gcm/gcm.go
 type gcm struct {
-	cipher    aesBlock
-	nonceSize int
-	tagSize   int
+	Cipher    aesBlock
+	NonceSize int
+	TagSize   int
 	gcmPlatformData
 }
 
@@ -35,7 +35,7 @@ type gcm struct {
 const chacha20poly1305KeySize = 32
 
 type chacha20poly1305 struct {
-	key [chacha20poly1305KeySize]byte
+	Key [chacha20poly1305KeySize]byte
 }
 
 // TODO - move this file to tests too check we did not accidentally increased sizeof()

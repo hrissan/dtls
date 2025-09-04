@@ -131,8 +131,8 @@ func (hctx *handshakeContext) generateClientHello(opts *options.TransportOptions
 		MsgType: handshake.MsgTypeClientHello,
 		Body:    messageBody,
 	}
-	transcriptHasher = suite.NewHasher()
 
+	// transcriptHasher = suite.NewHasher()
 	// partialHash = msgClientHello.AddToHashPartial(transcriptHasher, bindersListLength2)
 	// fmt.Printf("partial hash for len=%d %x\n", bindersListLength2, partialHash.GetValue())
 	// fmt.Printf("message body %x\n", messageBody)

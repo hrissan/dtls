@@ -133,10 +133,10 @@ func (c *Conn) OnHandshakeLocked() {
 }
 
 func (c *Conn) OnConnectLocked() {
-	signalCond(c.condDial)
 }
 
 func (c *Conn) OnDisconnectLocked(err error) {
+	signalCond(c.condDial)
 	c.closeLocked(err)
 }
 

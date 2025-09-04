@@ -50,7 +50,7 @@ func (conn *Connection) receivedEncryptedAckLocked(opts *options.TransportOption
 		conn.keys.SendNextSeq, conn.hctx.SendNextSeqEpoch3 = conn.hctx.SendNextSeqEpoch3, 0
 		conn.keys.SendEpoch = 3
 		conn.hctx = nil // TODO - reuse into pool
-		conn.handler.OnConnectLocked()
+		conn.handler.OnHandshakeLocked()
 		conn.stateID = smIDPostHandshake
 		conn.SignalWriteable()
 	}

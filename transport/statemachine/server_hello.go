@@ -39,7 +39,11 @@ func (hctx *handshakeContext) generateClientHello(conn *Connection, setEpoch1Key
 	clientHello.Extensions.SupportedGroups.SECP384R1 = false
 	clientHello.Extensions.SupportedGroups.SECP512R1 = false
 
-	conn.keys.SuiteID = ciphersuite.TLS_AES_128_GCM_SHA256 // TODO - negotiate suites for PSK, but how?
+	// We have sha256 associated with external PSK.
+	// So server can select any cipher compatible with the hash.
+	// wolfssl has this broken. To debug, set opts.TLS_AES_128_GCM_SHA256 = false on client
+	// and try connecting to wolfssl server, it will respond with missing_extension(109).
+	conn.keys.SuiteID = ciphersuite.TLS_AES_128_GCM_SHA256
 	suite := ciphersuite.GetSuite(conn.keys.SuiteID)
 	emptyHash := suite.EmptyHash() // Binder[] byte slices point here to avoid allocations
 	if len(opts.PSKClientIdentities) != 0 && opts.PSKAppendSecret != nil {

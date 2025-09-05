@@ -36,7 +36,7 @@ func (conn *Connection) receivedCiphertextRecord(opts *options.TransportOptions,
 		return conn.receivedEncryptedAckLocked(opts, recordBody, rn)
 	case record.RecordTypeApplicationData:
 		// TODO - allow or drop based on early data state
-		return conn.receivedApplicationDataLocked(recordBody)
+		return conn.receivedApplicationDataLocked(recordBody, rn)
 	case record.RecordTypeHandshake:
 		return conn.receivedEncryptedHandshakeRecordLocked(opts, recordBody, rn)
 	}
@@ -57,9 +57,9 @@ func (conn *Connection) receivedAlertLocked(encrypted bool, recordBody []byte) e
 	return nil
 }
 
-func (conn *Connection) receivedApplicationDataLocked(recordBody []byte) error {
+func (conn *Connection) receivedApplicationDataLocked(recordBody []byte, rn record.Number) error {
 	fmt.Printf("dtls: got application data record (encrypted) %d bytes from %v, message: %q\n", len(recordBody), conn.addr, recordBody)
-	return conn.handler.OnReadRecordLocked(false, recordBody)
+	return conn.handler.OnReadRecordLocked(rn.Epoch() == 1, recordBody)
 }
 
 func (conn *Connection) receivedEncryptedHandshakeRecordLocked(opts *options.TransportOptions, recordBody []byte, rn record.Number) error {

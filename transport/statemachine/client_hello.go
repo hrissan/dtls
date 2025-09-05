@@ -123,7 +123,7 @@ func generateServerCertificateVerify(opts *options.TransportOptions, conn *Conne
 	}, nil
 }
 
-func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, addr netip.AddrPort,
+func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, addr netip.AddrPort, serverUsedHRR bool,
 	earlySecret ciphersuite.Hash, pskSelected bool, pskSelectedIdentity uint16,
 	msgClientHello handshake.MsgClientHello, params cookie.Params,
 	transcriptHasher hash.Hash, clientEarlyTrafficSecret ciphersuite.Hash) error {
@@ -145,26 +145,28 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 
 	hctx := newHandshakeContext(transcriptHasher)
 	conn.hctx = hctx
+	hctx.serverUsedHRR = serverUsedHRR // we do not use it anywhere for now, but set anyway
 
 	suite := conn.keys.Suite()
-	// formally this is the next flight, but as there were no state, do not call it
-	// hctx.receivedNextFlight(conn)
 
-	conn.hctx.sendNextSeqEpoch0 = 1 // sequence 0 was HRR
-
-	conn.nextMessageSeqSend = 1    // message 0 was HRR
-	conn.nextMessageSeqReceive = 2 // message 0, 1 were initial client_hello, client_hello
-	fmt.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x\n", params.KeyShareSet, params.TranscriptHash)
+	conn.nextMessageSeqSend = 0
+	conn.nextMessageSeqReceive = 1 // message 0 was initial client_hello
+	if serverUsedHRR {
+		conn.hctx.sendNextSeqEpoch0++ // sequence 0 was HRR
+		conn.nextMessageSeqSend++     // message 0 was HRR
+		conn.nextMessageSeqReceive++  // 1 was client_hello2
+	}
+	fmt.Printf("start handshake keyShareSet=%v initial hello transcript hash(hex): %x\n", params.KeyShareSet, params.TranscriptHash.GetValue())
 	opts.Rnd.ReadMust(hctx.localRandom[:])
 	hctx.ComputeKeyShare(opts.Rnd)
 	hctx.earlySecret = earlySecret
 
 	if clientEarlyTrafficSecret != (ciphersuite.Hash{}) {
+		fmt.Printf("server early traffic secret: %x\n", clientEarlyTrafficSecret.GetValue())
 		conn.keys.ReceiveSymmetric = suite.ResetSymmetricKeys(conn.keys.ReceiveSymmetric, clientEarlyTrafficSecret)
 		conn.keys.ReceiveEpoch = 1
 		conn.debugPrintKeys()
 	}
-	fmt.Printf("server early traffic secret: %x\n", clientEarlyTrafficSecret)
 
 	serverHello := handshake.MsgServerHello{
 		Random:      hctx.localRandom,
@@ -190,8 +192,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 		panic("pushing ServerHello must never fail")
 	}
 
-	var handshakeTranscriptHash ciphersuite.Hash
-	handshakeTranscriptHash.SetSum(hctx.transcriptHasher)
+	conn.handler.OnConnectLocked()
 
 	// TODO - move to calculator goroutine
 	remotePublic, err := ecdh.X25519().NewPublicKey(msgClientHello.Extensions.KeyShare.X25519PublicKey[:])
@@ -202,6 +203,9 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	if err != nil {
 		panic("curve25519.X25519 failed")
 	}
+
+	var handshakeTranscriptHash ciphersuite.Hash
+	handshakeTranscriptHash.SetSum(hctx.transcriptHasher)
 
 	hctx.masterSecret, hctx.handshakeTrafficSecretSend, hctx.handshakeTrafficSecretReceive =
 		conn.keys.ComputeHandshakeKeys(suite, true, hctx.earlySecret, sharedSecret, handshakeTranscriptHash)
@@ -233,6 +237,5 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	conn.keys.ComputeApplicationTrafficSecret(suite, true, hctx.masterSecret, handshakeTranscriptHash)
 
 	conn.stateID = smIDHandshakeServerExpectFinished
-	conn.handler.OnConnectLocked()
 	return nil
 }

@@ -55,6 +55,6 @@ func ComputeNextApplicationTrafficSecret(suite ciphersuite.Suite, direction stri
 	hmacApplicationTrafficSecret := suite.NewHMAC(applicationTrafficSecret.GetValue())
 	applicationTrafficSecret.SetZero(hmacApplicationTrafficSecret.Size())
 	ciphersuite.HKDFExpandLabel(applicationTrafficSecret.GetValue(), hmacApplicationTrafficSecret, "traffic upd", nil)
-	fmt.Printf("next %s application traffic secret: %x\n", direction, applicationTrafficSecret)
+	fmt.Printf("next %s application traffic secret: %x\n", direction, applicationTrafficSecret.GetValue())
 	return applicationTrafficSecret
 }

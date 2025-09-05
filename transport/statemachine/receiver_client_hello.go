@@ -50,9 +50,41 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	// If client follows protocol and sends the same client hello,
 	// we will reply with the same server hello.
 	// so, setting record sequence number to 0 equals to retransmission of the same message
+	var earlySecret ciphersuite.Hash
+	pskSelected := false
+	var pskSelectedIdentity uint16
+
 	if !msgClientHello.Extensions.CookieSet {
+		// TODO - remove allocation at least on this fast path
 		transcriptHasher := suite.NewHasher() // allocation
-		msg.AddToHash(transcriptHasher)
+		var hmacEarlySecret hash.Hash
+
+		if t.opts.ServerDisableHRR && msgClientHello.Extensions.EarlyDataSet {
+			partialHash := msg.AddToHashPartial(transcriptHasher, bindersListLength)
+			debugPrintSum(transcriptHasher)
+
+			var pskStorage [256]byte
+			pskNum, psk, identity, ok := selectPSKIdentity(pskStorage[:], t.opts, &msgClientHello.Extensions)
+			// [rfc8446:4.2.11]
+			// Servers SHOULD NOT attempt to validate multiple binders;
+			// rather, they SHOULD select a single PSK and validate solely the
+			// binder that corresponds to that PSK
+			if ok {
+				earlySecret = keys.ComputeEarlySecret(suite, psk)
+				hmacEarlySecret = suite.NewHMAC(earlySecret.GetValue())
+				binderKey := keys.DeriveSecret(hmacEarlySecret, "ext binder", suite.EmptyHash())
+
+				mustBeFinished := keys.ComputeFinished(suite, binderKey, partialHash)
+				if string(identity.Binder) == string(mustBeFinished.GetValue()) {
+					pskSelected = true
+					pskSelectedIdentity = pskNum
+					fmt.Printf("PSK auth selected, identity %d (%q) binders length=%d\n", pskNum, identity.Identity, bindersListLength)
+				}
+			}
+		} else {
+			msg.AddToHash(transcriptHasher)
+			debugPrintSum(transcriptHasher)
+		}
 
 		params := cookie.Params{
 			TimestampUnixNano: time.Now().UnixNano(),
@@ -60,6 +92,19 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 			CipherSuite:       suiteID,
 		}
 		params.TranscriptHash.SetSum(transcriptHasher)
+
+		if pskSelected {
+			// we should check all parameters above, so that we do not create connection for unsupported params
+			clientEarlyTrafficSecret := keys.DeriveSecret(hmacEarlySecret, "c e traffic", params.TranscriptHash)
+
+			conn, err = t.finishReceivedClientHello(conn, addr, false,
+				earlySecret, pskSelected, pskSelectedIdentity,
+				msgClientHello, params, transcriptHasher, clientEarlyTrafficSecret)
+			if conn != nil {
+				t.snd.RegisterConnectionForSend(conn)
+			}
+			return conn, err
+		}
 
 		ck := make([]byte, 0, cookie.CookieStorageSize)
 		ck = t.cookieState.AppendCookie(ck, params, addr)
@@ -93,9 +138,6 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	// TODO - seems wolfssl always uses TLS_AES_128_GCM_SHA256 for PSK.
 	// should investigate why so, check with openssl
 	transcriptHasher := suite.NewHasher()
-	var earlySecret ciphersuite.Hash
-	pskSelected := false
-	var pskSelectedIdentity uint16
 	{
 		var hrrDatagramStorage [constants.MaxOutgoingHRRDatagramLength]byte
 		hrrDatagram, msgBody := GenerateStatelessHRR(params, hrrDatagramStorage[:0], msgClientHello.Extensions.Cookie)
@@ -151,7 +193,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 		fmt.Printf("certificate auth selected\n")
 	}
 	// we should check all parameters above, so that we do not create connection for unsupported params
-	conn, err = t.finishReceivedClientHello(conn, addr,
+	conn, err = t.finishReceivedClientHello(conn, addr, true,
 		earlySecret, pskSelected, pskSelectedIdentity,
 		msgClientHello, params, transcriptHasher, ciphersuite.Hash{})
 	if conn != nil {
@@ -160,7 +202,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	return conn, err
 }
 
-func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrPort,
+func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrPort, serverUsedHRR bool,
 	earlySecret ciphersuite.Hash, pskSelected bool, pskSelectedIdentity uint16,
 	msgClientHello handshake.MsgClientHello, params cookie.Params,
 	transcriptHasher hash.Hash, clientEarlyTrafficSecret ciphersuite.Hash) (*Connection, error) {
@@ -170,7 +212,7 @@ func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrP
 		conn.Lock()
 		if conn.stateID != smIDClosed {
 			defer conn.Unlock()
-			return conn, conn.onClientHello2Locked(t.opts, addr,
+			return conn, conn.onClientHello2Locked(t.opts, addr, serverUsedHRR,
 				earlySecret, pskSelected, pskSelectedIdentity,
 				msgClientHello, params, transcriptHasher, clientEarlyTrafficSecret)
 		}
@@ -185,7 +227,7 @@ func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrP
 	}
 	conn.Lock()
 	defer conn.Unlock()
-	return conn, conn.onClientHello2Locked(t.opts, addr,
+	return conn, conn.onClientHello2Locked(t.opts, addr, serverUsedHRR,
 		earlySecret, pskSelected, pskSelectedIdentity,
 		msgClientHello, params, transcriptHasher, clientEarlyTrafficSecret)
 }

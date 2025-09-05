@@ -236,6 +236,12 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	handshakeTranscriptHash.SetSum(hctx.transcriptHasher)
 	conn.keys.ComputeApplicationTrafficSecret(suite, true, hctx.masterSecret, handshakeTranscriptHash)
 
+	conn.keys.SendSymmetric = suite.ResetSymmetricKeys(conn.keys.SendSymmetric, conn.keys.SendApplicationTrafficSecret)
+	conn.keys.SendEpoch = 3
+	conn.keys.SendNextSeq = 0
+	// Though we have keys for epoch 3 now, from our user's POV, we are sending
+	// early data until we verify client's finished.
+
 	conn.stateID = smIDHandshakeServerExpectFinished
 	return nil
 }

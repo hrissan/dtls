@@ -38,9 +38,6 @@ func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handsha
 		panic("we must be able to generate new keys receive here")
 	}
 
-	conn.keys.SendSymmetric = suite.ResetSymmetricKeys(conn.keys.SendSymmetric, conn.keys.SendApplicationTrafficSecret)
-	conn.keys.SendEpoch = 3
-	conn.keys.SendNextSeq = 0
 	conn.hctx = nil
 	conn.debugPrintKeys()
 	// TODO - why wolf closes connection if we send application data immediately

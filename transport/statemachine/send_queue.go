@@ -62,8 +62,8 @@ func (sq *sendQueue) HasDataToSend() bool {
 	return sq.messageOffset < sq.messages.Len() && sq.sentRecords.Len() < sq.sentRecords.Cap(sq.sentRecordsStorage[:])
 }
 
-func (sq *sendQueue) ConstructDatagram(conn *Connection, opts *options.TransportOptions, datagram []byte) (int, error) {
-	var datagramSize int
+func (sq *sendQueue) ConstructDatagram(conn *Connection, opts *options.TransportOptions, datagram []byte) (
+	datagramSize int, endDatagramNow bool, err error) {
 	for {
 		if sq.messageOffset > sq.messages.Len() {
 			panic("invariant of send queue message offset violated")
@@ -75,40 +75,44 @@ func (sq *sendQueue) ConstructDatagram(conn *Connection, opts *options.Transport
 			break
 		}
 		outgoing := sq.messages.IndexRef(sq.messagesStorage[:], sq.messageOffset)
-		if outgoing.Msg.MsgType == handshake.MsgTypeClientHello || outgoing.Msg.MsgType == handshake.MsgTypeServerHello {
-			if conn.hctx == nil {
-				// We only can send that if we are still in handshake.
-				// If not, we simply pretend we sent it.
-				sq.fragmentOffset = outgoing.Msg.Len32()
-			}
-		}
 		fragmentOffset, fragmentLength := outgoing.Ass.GetFragmentFromOffset(sq.fragmentOffset)
 		if fragmentLength == 0 { // fully acked since we reset our iterator
 			sq.messageOffset++
 			sq.fragmentOffset = 0
-			return datagramSize, nil // uncomment to put ServerHello into separate datagram for wireshark
 			continue
 		}
-		recordSize, fragmentInfo, rn, err := conn.constructHandshakeRecord(
-			conn.hctx.SendSymmetricEpoch2, 2, &conn.hctx.SendNextSeqEpoch2,
-			opts, datagram[datagramSize:],
-			outgoing.Msg, fragmentOffset, fragmentLength)
+		var recordSize int
+		var fragmentInfo handshake.FragmentInfo
+		var rn record.Number
+		if outgoing.Msg.MsgType == handshake.MsgTypeClientHello || outgoing.Msg.MsgType == handshake.MsgTypeServerHello {
+			recordSize, fragmentInfo, rn, err = conn.constructHandshakePlaintextRecord(datagram[datagramSize:],
+				outgoing.Msg, fragmentOffset, fragmentLength)
+			endDatagramNow = true
+		} else {
+			recordSize, fragmentInfo, rn, err = conn.constructHandshakeEncryptedRecord(
+				conn.hctx.SendSymmetricEpoch2, 2, &conn.hctx.SendNextSeqEpoch2,
+				opts, datagram[datagramSize:],
+				outgoing.Msg, fragmentOffset, fragmentLength)
+		}
 		if err != nil {
-			return 0, err
+			return 0, false, err
 		}
 		if recordSize == 0 {
 			break
 		}
 		if fragmentInfo.FragmentLength == 0 {
-			panic("constructHandshakeRecord must not send empty fragments")
+			panic("constructHandshakeEncryptedRecord must not send empty fragments")
 		}
 		// Unfortunately, not in order because we have epoch 0 and need to resend ServerHello, so linear search
 		// limited to constants.MaxSendRecordsQueue due to check above
 		sq.sentRecords.PushBack(sq.sentRecordsStorage[:], record2Fragment{rn: rn, fragment: fragmentInfo})
 		datagramSize += recordSize
 		sq.fragmentOffset += fragmentInfo.FragmentLength
+		if endDatagramNow { // separate ClientHello/ServerHello into its own datagram
+			return datagramSize, true, nil
+		}
 	}
-	return datagramSize, nil
+	return datagramSize, false, nil
 }
 
 func findSentRecordIndex(sentRecords *circular.Buffer[record2Fragment], rn record.Number) *handshake.FragmentInfo {

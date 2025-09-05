@@ -91,10 +91,13 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	if hctx != nil {
 		// we decided to first send our messages, then acks.
 		// because message has a chance to ack the whole flight
-		if recordSize, err := hctx.sendQueue.ConstructDatagram(conn, opts, datagram[datagramSize:]); err != nil {
+		if recordSize, endDatagramNow, err := hctx.sendQueue.ConstructDatagram(conn, opts, datagram[datagramSize:]); err != nil {
 			return 0, false, err
 		} else {
 			datagramSize += recordSize
+			if endDatagramNow && recordSize != 0 {
+				return datagramSize, true, nil
+			}
 		}
 		//uncomment to separate datagram by record type
 		//if datagramSize != 0 {
@@ -111,7 +114,7 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 			MsgSeq:  conn.sendKeyUpdateMessageSeq,
 			Body:    msgBody,
 		}
-		recordSize, fragmentInfo, rn, err := conn.constructHandshakeRecord(
+		recordSize, fragmentInfo, rn, err := conn.constructHandshakeEncryptedRecord(
 			conn.keys.SendSymmetric, conn.keys.SendEpoch, &conn.keys.SendNextSeq,
 			opts, datagram[datagramSize:],
 			msg, 0, lenBody)
@@ -148,7 +151,7 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	if conn.keys.SendSymmetric == nil {
 		return datagramSize, conn.hasDataToSendLocked(), nil
 	}
-	earlyData := conn.keys.SendEpoch == 1
+	earlyData := !(conn.stateID == smIDHandshakeClientExpectFinishedAck || conn.stateID == smIDPostHandshake)
 	// If we remove "if" below, we put ack for client finished together with
 	// application data into the same datagram. Then wolfSSL_connect will return
 	// err = -441, Application data is available for reading

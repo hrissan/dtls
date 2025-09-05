@@ -18,7 +18,7 @@ import (
 	"github.com/hrissan/dtls/transport/options"
 )
 
-func (conn *Connection) constructHandshakeRecord(
+func (conn *Connection) constructHandshakeEncryptedRecord(
 	sendSymmetric ciphersuite.SymmetricKeys, sendEpoch uint16, sendNextSeq *uint64,
 	opts *options.TransportOptions, datagramLeft []byte,
 	handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32) (recordSize int,
@@ -40,24 +40,6 @@ func (conn *Connection) constructHandshakeRecord(
 		},
 		Body: handshakeMsg.Body,
 	}
-	if handshakeMsg.MsgType == handshake.MsgTypeClientHello || handshakeMsg.MsgType == handshake.MsgTypeServerHello {
-		remainingSpace := len(datagramLeft) - handshake.FragmentHeaderSize + record.PlaintextRecordHeaderSize
-		if remainingSpace <= 0 {
-			return
-		}
-		msg.Header.FragmentLength = min(maxFragmentLength, safecast.Cast[uint32](remainingSpace))
-		if msg.Header.FragmentLength <= constants.MinFragmentBodySize && msg.Header.FragmentLength != maxFragmentLength {
-			return // do not send tiny records at the end of datagram
-		}
-		da, rn, err := conn.constructPlaintextRecord(datagramLeft[:0], msg)
-		if len(da) != int(msg.Header.FragmentLength+handshake.FragmentHeaderSize+record.PlaintextRecordHeaderSize) { // safe if Header.FragmentLength is in spec
-			panic("plaintext handshake record construction length invariant failed")
-		}
-		if err != nil {
-			return 0, handshake.FragmentInfo{}, record.Number{}, err
-		}
-		return len(da), msg.Header.FragmentInfo, rn, nil
-	}
 	userPadding := rand.Intn(4) // TODO - remove
 	hdrSize, insideBody, ok := prepareProtect(sendSymmetric, datagramLeft, opts.Use8BitSeq, userPadding)
 	if !ok || len(insideBody) <= handshake.FragmentHeaderSize {
@@ -76,6 +58,44 @@ func (conn *Connection) constructHandshakeRecord(
 		return 0, handshake.FragmentInfo{}, record.Number{}, err
 	}
 	return recordSize, msg.Header.FragmentInfo, rn, nil
+}
+
+func (conn *Connection) constructHandshakePlaintextRecord(datagramLeft []byte,
+	handshakeMsg handshake.Message, fragmentOffset uint32, maxFragmentLength uint32) (recordSize int,
+	fragmentInfo handshake.FragmentInfo, rn record.Number, err error) {
+	// during fragmenting we always write header at the start of the message, and then part of the body
+	if fragmentOffset >= handshakeMsg.Len32() {
+		// >=, because when fragment offset reaches end, message offset is advanced, and fragment offset resets to 0
+		panic("invariant of send queue fragment offset violated")
+	}
+	msg := handshake.Fragment{
+		Header: handshake.FragmentHeader{
+			MsgType: handshakeMsg.MsgType,
+			Length:  handshakeMsg.Len32(),
+			FragmentInfo: handshake.FragmentInfo{
+				MsgSeq:         handshakeMsg.MsgSeq,
+				FragmentOffset: fragmentOffset,
+				FragmentLength: 0,
+			},
+		},
+		Body: handshakeMsg.Body,
+	}
+	remainingSpace := len(datagramLeft) - handshake.FragmentHeaderSize + record.PlaintextRecordHeaderSize
+	if remainingSpace <= 0 {
+		return
+	}
+	msg.Header.FragmentLength = min(maxFragmentLength, safecast.Cast[uint32](remainingSpace))
+	if msg.Header.FragmentLength <= constants.MinFragmentBodySize && msg.Header.FragmentLength != maxFragmentLength {
+		return // do not send tiny records at the end of datagram
+	}
+	da, rn, err := conn.constructPlaintextRecord(datagramLeft[:0], msg)
+	if len(da) != int(msg.Header.FragmentLength+handshake.FragmentHeaderSize+record.PlaintextRecordHeaderSize) { // safe if Header.FragmentLength is in spec
+		panic("plaintext handshake record construction length invariant failed")
+	}
+	if err != nil {
+		return 0, handshake.FragmentInfo{}, record.Number{}, err
+	}
+	return len(da), msg.Header.FragmentInfo, rn, nil
 }
 
 func (conn *Connection) constructPlaintextRecord(datagramLeft []byte, msg handshake.Fragment) ([]byte, record.Number, error) {

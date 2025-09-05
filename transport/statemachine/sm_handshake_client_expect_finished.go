@@ -43,11 +43,6 @@ func (*smHandshakeClientExpectFinished) OnFinished(conn *Connection, msg handsha
 		panic("we must be able to generate new keys receive here")
 	}
 
-	// TODO - standard must allow sending client "finished" flight with epoch 3. TODO - contact DTLS team?
-	// Otherwise lots of logic and 2 sets of sending keys are mandatory.
-	// Code below does not work with wolfssl, but works with our implementation.
-	// To make wolf happy, we'd have to put a copy of send keys for epoch 2 into hctx
-	// and use them from there.
 	conn.stateID = smIDHandshakeClientExpectFinishedAck
 	conn.keys.SendSymmetric = conn.keys.Suite().ResetSymmetricKeys(conn.keys.SendSymmetric, conn.keys.SendApplicationTrafficSecret)
 	conn.keys.SendEpoch = 3

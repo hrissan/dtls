@@ -55,11 +55,6 @@ type Connection struct {
 	stateID stateMachineStateID // index in global table
 	// intrusive, must not be changed except by sender, protected by sender mutex
 	inSenderQueue bool
-	// intrusive, must not be changed except by clock, protected by clock mutex
-	timerHeapIndex int
-	// time.Time object is larger and also has complicated comparison,
-	// which might be invalid as a heap predicate
-	fireTimeUnixNano int64
 }
 
 func (conn *Connection) Lock()   { conn.mu.Lock() }
@@ -210,7 +205,4 @@ func (conn *Connection) keyUpdateStart(updateRequested bool) error {
 	conn.nextMessageSeqSend++ // never due to check above
 	fmt.Printf("KeyUpdate started (updateRequested=%v), messageSeq: %d\n", updateRequested, conn.sendKeyUpdateMessageSeq)
 	return nil
-}
-
-func (conn *Connection) onTimer() {
 }

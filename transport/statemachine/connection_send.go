@@ -151,7 +151,7 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	if conn.keys.SendSymmetric == nil {
 		return datagramSize, conn.hasDataToSendLocked(), nil
 	}
-	earlyData := !(conn.stateID == smIDHandshakeClientExpectFinishedAck || conn.stateID == smIDPostHandshake)
+	lateData := conn.stateID == smIDHandshakeClientExpectFinishedAck || conn.stateID == smIDPostHandshake
 	// If we remove "if" below, we put ack for client finished together with
 	// application data into the same datagram. Then wolfSSL_connect will return
 	// err = -441, Application data is available for reading
@@ -164,7 +164,7 @@ func (conn *Connection) constructDatagramLocked(opts *options.TransportOptions, 
 	if !ok || len(insideBody) < constants.MinFragmentBodySize {
 		return datagramSize, true, nil
 	}
-	insideSize, send, wr, err := conn.handler.OnWriteRecordLocked(earlyData, insideBody)
+	insideSize, send, wr, err := conn.handler.OnWriteRecordLocked(!lateData, insideBody)
 	if err != nil {
 		return datagramSize, wr, err
 	}

@@ -41,10 +41,13 @@ type chacha20poly1305 struct {
 // TODO - move this file to tests too check we did not accidentally increased sizeof()
 
 func PrintSizeofInfo() {
+	var fireFunc func(timer *Timer)
 	keys_TLS_AES_128_GCM_SHA256 := unsafe.Sizeof(ciphersuite.SymmetricKeysAES{}) + unsafe.Sizeof(gcm{}) + unsafe.Sizeof(aesBlock{})
 	keys_TLS_CHACHA20_POLY1305_SHA256 := unsafe.Sizeof(ciphersuite.SymmetricKeysChaCha20Poly1305{}) + unsafe.Sizeof(chacha20poly1305{})
 	fmt.Printf(
 		`Sizeof(various objects):
+func()             %d
+Timer              %d
 hctx:              %d (during handshake only, +large buffers for message reassembly)
 Connection struct: %d (secrets + bookkeeping data, we add 3x size of keys, depending on ciphersuite)
 ----
@@ -59,6 +62,8 @@ Keys struct:       %d
 CHACHA20_POLY1305: %d
            Total:  %d
 `,
+		unsafe.Sizeof(fireFunc),
+		unsafe.Sizeof(Timer{}),
 		unsafe.Sizeof(handshakeContext{}),
 		unsafe.Sizeof(Connection{}),
 		unsafe.Sizeof(ciphersuite.SymmetricKeysAES{}),

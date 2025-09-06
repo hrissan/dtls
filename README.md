@@ -1,6 +1,6 @@
 # dtls
 
-Very much work in progress - this is only demo for now with no API.
+Very much work in progress
 
 # requirements
 
@@ -8,7 +8,7 @@ Very much work in progress - this is only demo for now with no API.
 
 DTLS 1.3 only, no support for older standards.
 
-Very few dependencies, ideally zero.
+Very few dependencies, ideally zero (the only dependency so far is golang.org/x/crypto/chacha20)
 
 Must interoperate with other known implementations.
 
@@ -26,32 +26,50 @@ Use standard Go crypto and crypto/x509, which we have no desire to reimplement.
 
 Code as simple and fast as possible, without resorting to dirty tricks.
 
-No unsafe code of our own (except in standard crypto, we do not control).
+No unsafe code of our own (except in dependencies we do not control).
 
-Must make zero allocations on the fast paths, almost zero allocations on slow paths (except in standard crypto, we do not control).
+Must make zero allocations on the fast paths, almost zero allocations on slow paths (except in dependencies we do not control).
 
 Must be fixed memory for most objects. Most objects allocated on heap must be recycled indefinitely. 
 
-Must use as little memory per established connection as possible (1.5 kilobytes). We need this implementation for mesh with at least 100K connections per service, so literally every byte counts.
+Must use as little memory per established connection as possible (700 bytes now for TLS_CHACHA20_POLY1305_SHA256). We need this implementation for mesh with at least 100K connections per service, so literally every byte counts.
 
-Must have separate memory limit for established connections.
+Must have separate memory limit for handshakes, which are larger (3000 bytes plus messages we are reassembling now per handshake).
 If the limit is reached, new handshakes cannot start.
+Handshakes which did not complete in reasonable time are cancelled to free memory for new handshakes.
 
-Note: We can save half memory for AES context by implementing "Plaintext Sequence Numbers" extension.
+Note: We can save half memory for AES contexts by implementing "Plaintext Sequence Numbers" extension.
 https://datatracker.ietf.org/doc/html/draft-pismenny-tls-dtls-plaintext-sequence-number-02
-
-Must have separate memory limit for handshake contexts.
-If the limit is reached, new handshakes cannot start (handshakes which did not complete in reasonable time are cancelled to free memory for new handshakes).
 
 Must implement some fairness, so one connection cannot easily dominate.
 
-Must offload heavy computations (ECC, etc.) to separate goroutines, so latency of established connections does not suffer too much.
+Must offload heavy computations (ECC, etc.) to separate goroutines, so latency of ECC does not affect established connections too much.
 
 Must have state machine/sans network core and fuzzing tests with packet drops/reordering.
 
-All parsers/incoming path must be fuzzed.
+All parsers/data structures/incoming paths must be fuzzed.
 
-## design
+# Implemented so far
+
+## Protocol features
+
+* 3 mandatory ciphers (TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256).
+
+* 1 of 2 mandatory key share groups (X25519). SECP256R1 is coming soon (TODO).
+
+* PSK-based auth (with ECDHE) on both server and client.
+
+## API features
+
+* Event-based API for very efficient servers and clients.
+
+* Golang-style standard API for not so efficient clients (for servers coming soon).
+
+* Early data support on both server and client (with API to decide which data can be sent early).
+
+* Application-Layer Protocol Negotiation Extension https://datatracker.ietf.org/doc/html/rfc7301
+
+# Overall design
 
 There is reading goroutine, writing goroutine, timers goroutine, and ECC offload goroutines. They communicate using mutexes, and wake each other with condvars and channels.
 
@@ -61,7 +79,7 @@ They never wait on something, while holding a mutex, and they do not wait each o
 
 We do not stick to golang's philosophy of communication using blocking channels, because it has a lot of drawbacks for the task we are solving.
 
-### reading goroutine
+## reading goroutine
 
 Reads packet into the single buffer it owns, parses inplace.
 
@@ -74,7 +92,9 @@ If heavy computations are required, instead of waking up sending goroutine,
 sets flag and wakes up computations goroutine,
 which makes computations first, then clears flag and wakes up sending goroutine.
 
-### writing goroutine
+Note: we should try using >1 reading goroutines
+
+## writing goroutine
 
 Maintains a round-robin queue of all connections (max size of the queue is equal to # of connections).
 Wakes up, pops a connection from the queue then asks it to generate a datagram.
@@ -82,20 +102,26 @@ Sends the datagram, then if connection state needs to send more datagrams, adds 
 
 Also has a separate queue of stateless responses. Mixes them in some ratio (1:1 for now) with datagrams created by connections.
 
-### computations goroutine
+Note: we should try using >1 writing goroutines
+
+## computations goroutine(s)
 
 Maintains a round-robin queue of all connections, which need heavy computations (max size of the queue is equal to # of handshakes).
 Pops a connection from the queue, then calls OnCompute function on the connection,
 which might change state and wake up sending goroutine or add connection back to the computations goroutine.
 
-### timers goroutine
+We support >1 computations goroutine from the start
 
-Maintains an intrusive heap of connections with timer set (max size of the queue is equal to # of handshakes).
+## timers goroutine
+
+Maintains an intrusive heap of timers set (max size of the queue is equal to # of handshakes).
 When timer expires, calls OnTimer function on connection,
 which might change state and wake up some other goroutine or set timer again.
 
 Connection must remember fire time under lock, because timers goroutine can call OnTimer even
 after timer is removed from heap.
+
+# References
 
 ## Links to other implementations
 
@@ -109,7 +135,7 @@ Advantages to Using TLS 1.3 https://www.wolfssl.com/docs/tls13/
 
 What's new in DTLS 1.3 https://www.wolfssl.com/whats-new-dtls-1-3/
 
-## References
+## Links to documents
 
 The Datagram Transport Layer Security (DTLS) Protocol Version 1.3 https://www.rfc-editor.org/rfc/rfc9147.html
 
@@ -175,24 +201,6 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 
 Actually, golang 24 built-in TLS 1.3 does not support external PSK, which we also need.
 
-# Implemented
-
-## Protocol features
-
-* 3 mandatory ciphers (TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256).
-
-* 1 of 2 mandatory key share groups (X25519). SECP256R1 is coming soon (TODO).
-
-* PSK-based auth (with ECDHE) on both server and client.
-
-## API features
-
-* Event-based API for very efficient servers and clients.
-
-* Golang-style standard API for not so efficient clients (for servers coming soon).
-
-* Early data support on both server and client (with API to decide which data can be sent early).
-
 # TODO list (not in particular order)
 
 * Better separate state machine from UDP
@@ -220,10 +228,6 @@ Actually, golang 24 built-in TLS 1.3 does not support external PSK, which we als
 * Integration tests against OpenSSL, BoringSSL, rusty-dtls, etc.
 
 * Support SNI extension
-
-* Support Application-Layer Protocol Negotiation Extension
-  https://datatracker.ietf.org/doc/html/rfc7301
-  Would be great to select our RPC protocol version, and do not invent our own header
 
 * Fuzz all data structures
 

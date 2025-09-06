@@ -8,10 +8,9 @@ import (
 
 	"github.com/hrissan/dtls"
 	"github.com/hrissan/dtls/cmd/chat"
+	"github.com/hrissan/dtls/dtlscore"
 	"github.com/hrissan/dtls/dtlsrand"
-	"github.com/hrissan/dtls/transport/options"
 	"github.com/hrissan/dtls/transport/sockets"
-	"github.com/hrissan/dtls/transport/statemachine"
 	"github.com/hrissan/dtls/transport/stats"
 )
 
@@ -19,19 +18,19 @@ func main() {
 	//if len(os.Args) != 2 {
 	//	fmt.Printf("usage test_client <chat_name>")
 	//}
-	statemachine.PrintSizeofInfo()
+	dtlscore.PrintSizeofInfo()
 
 	socket := sockets.OpenSocketMust("127.0.0.1:")
 
 	st := stats.NewStatsLogVerbose()
 	rnd := dtlsrand.CryptoRand()
-	opts := options.DefaultTransportOptions(false, rnd, st)
+	opts := dtlscore.DefaultTransportOptions(false, rnd, st)
 
 	opts.ALPN = [][]byte{[]byte("toyrpc/0.1"), []byte("toyrpc/0.2")}
 	opts.PSKClientIdentities = append(opts.PSKClientIdentities, []byte(chat.PSKClientIdentity))
 	opts.PSKAppendSecret = chat.PSKAppendSecret
 
-	t := statemachine.NewTransport(opts, nil)
+	t := dtlscore.NewTransport(opts, nil)
 	// client := chat.NewClient(t)
 
 	//peerAddr, err := netip.ParseAddrPort("127.0.0.1:11111")

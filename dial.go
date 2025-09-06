@@ -9,18 +9,18 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/hrissan/dtls/transport/statemachine"
+	"github.com/hrissan/dtls/dtlscore"
 )
 
-func Dial(t *statemachine.Transport, network, address string) (*Conn, error) {
+func Dial(t *dtlscore.Transport, network, address string) (*Conn, error) {
 	return DialTimeout(t, network, address, 0)
 }
 
-func DialTimeout(t *statemachine.Transport, network, address string, timeout time.Duration) (*Conn, error) {
+func DialTimeout(t *dtlscore.Transport, network, address string, timeout time.Duration) (*Conn, error) {
 	return DialTimeoutEarlyData(t, network, address, timeout, nil)
 }
 
-func DialTimeoutEarlyData(t *statemachine.Transport, network, address string, timeout time.Duration, earlyData []byte) (*Conn, error) {
+func DialTimeoutEarlyData(t *dtlscore.Transport, network, address string, timeout time.Duration, earlyData []byte) (*Conn, error) {
 	netipAddr, err := netip.ParseAddrPort(address)
 	if err != nil {
 		return nil, err

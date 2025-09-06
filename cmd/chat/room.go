@@ -8,11 +8,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hrissan/dtls/transport/statemachine"
+	"github.com/hrissan/dtls/dtlscore"
 )
 
 type Conn struct {
-	statemachine.Connection
+	dtlscore.Connection
 
 	chatRoom *Room
 
@@ -23,7 +23,7 @@ func (conn *Conn) OnConnectLocked() {
 	fmt.Printf("chat room OnConnectLocked from %q\n", conn.AddrLocked())
 }
 
-func (conn *Conn) OnHandshakeLocked(info statemachine.HandshakeInfo) {
+func (conn *Conn) OnHandshakeLocked(info dtlscore.HandshakeInfo) {
 	fmt.Printf("chat room OnHandshakeLocked from %q\n", conn.AddrLocked())
 	conn.chatRoom.mu.Lock()
 	defer conn.chatRoom.mu.Unlock()
@@ -74,7 +74,7 @@ func NewRoom() *Room {
 	return &Room{connections: map[*Conn]struct{}{}}
 }
 
-func (ch *Room) OnNewConnection() (*statemachine.Connection, statemachine.ConnectionHandler) {
+func (ch *Room) OnNewConnection() (*dtlscore.Connection, dtlscore.ConnectionHandler) {
 	conn := &Conn{chatRoom: ch}
 	return &conn.Connection, conn
 }

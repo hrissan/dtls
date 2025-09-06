@@ -8,8 +8,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/hrissan/dtls/dtlscore"
 	"github.com/hrissan/dtls/record"
-	"github.com/hrissan/dtls/transport/statemachine"
 )
 
 // toy implementation - not optimized at all, unlike core
@@ -18,7 +18,7 @@ import (
 const maxRecordsBuffer = 10
 
 type Conn struct {
-	tc         statemachine.Connection
+	tc         dtlscore.Connection
 	localAddr  net.Addr
 	remoteAddr net.Addr
 
@@ -128,7 +128,7 @@ func (c *Conn) closeLocked(err error) {
 	c.tc.SignalWriteable()
 }
 
-func (c *Conn) OnHandshakeLocked(info statemachine.HandshakeInfo) {
+func (c *Conn) OnHandshakeLocked(info dtlscore.HandshakeInfo) {
 	signalCond(c.condDial)
 }
 

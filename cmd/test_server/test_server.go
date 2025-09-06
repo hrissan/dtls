@@ -7,21 +7,20 @@ import (
 	"log"
 
 	"github.com/hrissan/dtls/cmd/chat"
+	"github.com/hrissan/dtls/dtlscore"
 	"github.com/hrissan/dtls/dtlsrand"
-	"github.com/hrissan/dtls/transport/options"
 	"github.com/hrissan/dtls/transport/sockets"
-	"github.com/hrissan/dtls/transport/statemachine"
 	"github.com/hrissan/dtls/transport/stats"
 )
 
 func main() {
-	statemachine.PrintSizeofInfo()
+	dtlscore.PrintSizeofInfo()
 
 	socket := sockets.OpenSocketMust("127.0.0.1:11111")
 
 	st := stats.NewStatsLogVerbose()
 	rnd := dtlsrand.CryptoRand()
-	opts := options.DefaultTransportOptions(true, rnd, st)
+	opts := dtlscore.DefaultTransportOptions(true, rnd, st)
 
 	opts.ALPN = [][]byte{[]byte("toyrpc/0.2"), []byte("toyrpc/0.3")}
 	opts.ServerDisableHRR = true
@@ -33,7 +32,7 @@ func main() {
 		log.Fatal(err)
 	}
 	room := chat.NewRoom()
-	t := statemachine.NewTransport(opts, room)
+	t := dtlscore.NewTransport(opts, room)
 
 	t.GoRunUDP(socket)
 }

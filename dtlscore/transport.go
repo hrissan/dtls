@@ -4,7 +4,6 @@
 package dtlscore
 
 import (
-	"net"
 	"net/netip"
 	"sync"
 
@@ -17,7 +16,7 @@ type Transport struct {
 	opts        *Options
 	handler     TransportHandler
 	cookieState cookie.CookieState
-	snd         *sender
+	snd         Sender
 
 	// Each connection is either
 	// 1. closed, not in map, in the pool
@@ -40,12 +39,12 @@ type Transport struct {
 	// TODO - limit on max number of parallel handshakes, clear items by LRU
 }
 
-func NewTransport(opts *Options, handler TransportHandler) *Transport {
+func NewTransport(opts *Options, snd Sender, handler TransportHandler) *Transport {
 	t := &Transport{
 		opts:    opts,
+		snd:     snd,
 		handler: handler,
 	}
-	t.snd = newSender(t)
 	t.cookieState.SetRand(opts.Rnd)
 	if opts.Preallocate {
 		t.connMap = make(map[netip.AddrPort]*Connection, opts.MaxConnections)
@@ -60,19 +59,6 @@ func NewTransport(opts *Options, handler TransportHandler) *Transport {
 
 func (t *Transport) Options() *Options {
 	return t.opts
-}
-
-// blocks until socket is closed by Shutdown()
-func (t *Transport) GoRunUDP(socket *net.UDPConn) {
-	ch := make(chan struct{}, 1)
-	go func() {
-		t.snd.GoRunUDP(socket)
-		// on shutdown, sender first sends all alerts, then exits goroutine
-		_ = socket.Close() // so receiver also exits
-		ch <- struct{}{}
-	}()
-	t.goRunReceiverUDP(socket)
-	<-ch
 }
 
 // send notify to all connections, close socket

@@ -9,14 +9,14 @@ import (
 	"github.com/hrissan/dtls/cmd/chat"
 	"github.com/hrissan/dtls/dtlscore"
 	"github.com/hrissan/dtls/dtlsrand"
-	"github.com/hrissan/dtls/transport/sockets"
+	"github.com/hrissan/dtls/dtlsudp"
 	"github.com/hrissan/dtls/transport/stats"
 )
 
 func main() {
 	dtlscore.PrintSizeofInfo()
 
-	socket := sockets.OpenSocketMust("127.0.0.1:11111")
+	socket := dtlsudp.OpenSocketMust("127.0.0.1:11111")
 
 	st := stats.NewStatsLogVerbose()
 	rnd := dtlsrand.CryptoRand()
@@ -32,7 +32,8 @@ func main() {
 		log.Fatal(err)
 	}
 	room := chat.NewRoom()
-	t := dtlscore.NewTransport(opts, room)
+	snd := dtlsudp.NewSender(opts)
+	t := dtlscore.NewTransport(opts, snd, room)
 
-	t.GoRunUDP(socket)
+	dtlsudp.GoRunUDP(t, opts, snd, socket)
 }

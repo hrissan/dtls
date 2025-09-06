@@ -64,6 +64,26 @@ func (conn *Connection) AddrLocked() netip.AddrPort {
 	return conn.addr
 }
 
+// sender interface, never call outside of sender statemachine
+func (conn *Connection) SenderRemoveFromQueue() {
+	// protected by sender's lock
+	conn.inSenderQueue = false
+}
+
+// sender interface, never call outside of sender statemachine
+func (conn *Connection) SenderAddToQueue() bool {
+	// protected by sender's lock
+	if conn.inSenderQueue {
+		return false
+	}
+	conn.inSenderQueue = true
+	return true
+}
+
+func (conn *Connection) SenderConstructDatagram(datagram []byte) (addr netip.AddrPort, datagramSize int, addToSendQueue bool) {
+	return conn.constructDatagram(conn.tr.opts, datagram)
+}
+
 // if we want some logic once during transition to shutdown, use returned value
 func (conn *Connection) ShutdownLocked(alert record.Alert) (switchedToShutdown bool) {
 	if conn.stateID == smIDClosed || conn.stateID == smIDShutdown {

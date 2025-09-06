@@ -10,7 +10,7 @@ import (
 	"github.com/hrissan/dtls/cmd/chat"
 	"github.com/hrissan/dtls/dtlscore"
 	"github.com/hrissan/dtls/dtlsrand"
-	"github.com/hrissan/dtls/transport/sockets"
+	"github.com/hrissan/dtls/dtlsudp"
 	"github.com/hrissan/dtls/transport/stats"
 )
 
@@ -20,7 +20,7 @@ func main() {
 	//}
 	dtlscore.PrintSizeofInfo()
 
-	socket := sockets.OpenSocketMust("127.0.0.1:")
+	socket := dtlsudp.OpenSocketMust("127.0.0.1:")
 
 	st := stats.NewStatsLogVerbose()
 	rnd := dtlsrand.CryptoRand()
@@ -30,7 +30,8 @@ func main() {
 	opts.PSKClientIdentities = append(opts.PSKClientIdentities, []byte(chat.PSKClientIdentity))
 	opts.PSKAppendSecret = chat.PSKAppendSecret
 
-	t := dtlscore.NewTransport(opts, nil)
+	snd := dtlsudp.NewSender(opts)
+	t := dtlscore.NewTransport(opts, snd, nil)
 	// client := chat.NewClient(t)
 
 	//peerAddr, err := netip.ParseAddrPort("127.0.0.1:11111")
@@ -55,5 +56,5 @@ func main() {
 		t.Shutdown()
 	}()
 
-	t.GoRunUDP(socket)
+	dtlsudp.GoRunUDP(t, opts, snd, socket)
 }

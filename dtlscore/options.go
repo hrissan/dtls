@@ -70,7 +70,7 @@ func DefaultTransportOptions(roleServer bool, rnd dtlsrand.Rand, stats stats.Sta
 		SocketReadErrorDelay:         50 * time.Millisecond,
 		SocketWriteErrorDelay:        5 * time.Millisecond,
 		CookieValidDuration:          120 * time.Second, // larger value for debug
-		MaxHelloRetryQueueSize:       10_000,
+		MaxHelloRetryQueueSize:       1_000,
 		MaxHandshakes:                1000,
 		MaxConnections:               100_000,
 		CIDLength:                    0,

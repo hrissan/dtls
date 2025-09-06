@@ -173,15 +173,35 @@ Adding TLS 1.3 seems easy, as TLS is DTLS without complicated datagram state mac
 
 This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GOST, etc.).
 
+Actually, golang 24 built-in TLS 1.3 does not support external PSK, which we also need.
+
+# Implemented
+
+## Protocol features
+
+* 3 mandatory ciphers (TLS_AES_128_GCM_SHA256, TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256).
+
+* 1 of 2 mandatory key share groups (X25519). SECP256R1 is coming soon (TODO).
+
+* PSK-based auth (with ECDHE) on both server and client.
+
+## API features
+
+* Event-based API for very efficient servers and clients.
+
+* Golang-style standard API for not so efficient clients (for servers coming soon).
+
+* Early data support on both server and client (with API to decide which data can be sent early).
+
 # TODO list (not in particular order)
 
-* event-based API for very efficient servers and clients
+* Better separate state machine from UDP
 
-* golang-style standard API for normal servers and clients
+* Separate connection multiplexing into separate component, so that golang-style client API connections can work without common transport object.
+
+* Certificate-based (mutual) auth (at least, partially - no callback for cert verification)
 
 * Support retransmissions, actually start/stop retransmission timers based on connection state
-
-* PSK handshake, client side.
 
 * (Not planned, we want forward secrecy) PSK-only key exchange mode.
 
@@ -190,8 +210,6 @@ This might be helpful if we ever need TLS with exotic cipher suites (ShangMi, GO
 * Harmonize errors. Before error is returned, log (rare) offending context (message/record data, etc.)
 
 * Process fatal errors to terminate connections.
-
-* Ciphersuite TLS_AES_256_GCM_SHA384, support hashes of different practical sizes (ideally without allocating memory)
 
 * Replay protection for plaintext records (?).
 

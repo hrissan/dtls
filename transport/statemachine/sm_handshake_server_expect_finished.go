@@ -38,12 +38,13 @@ func (*smHandshakeServerExpectFinished) OnFinished(conn *Connection, msg handsha
 		panic("we must be able to generate new keys receive here")
 	}
 
+	alpnSelected := conn.hctx.ALPNSelected
 	conn.hctx = nil
 	conn.debugPrintKeys()
 	// TODO - why wolf closes connection if we send application data immediately
 	// in the same datagram as ack. Reproduce on the latest version of us?
 	conn.stateID = smIDPostHandshake
-	conn.handler.OnHandshakeLocked()
+	conn.handler.OnHandshakeLocked(HandshakeInfo{ALPNSelected: alpnSelected})
 	conn.SignalWriteable()
 	return nil
 }

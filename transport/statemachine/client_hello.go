@@ -67,7 +67,7 @@ func GenerateStatelessHRR(params cookie.Params, datagram []byte, ck []byte) ([]b
 	return datagram, msgBody
 }
 
-func generateEncryptedExtensions() handshake.Message {
+func generateEncryptedExtensions(alpnSelected []byte) handshake.Message {
 	ee := handshake.ExtensionsSet{
 		SupportedGroupsSet: true,
 	}
@@ -75,6 +75,13 @@ func generateEncryptedExtensions() handshake.Message {
 	ee.SupportedGroups.SECP384R1 = true
 	ee.SupportedGroups.SECP512R1 = true
 	ee.SupportedGroups.X25519 = true
+
+	if len(alpnSelected) != 0 {
+		ee.ALPNSet = true
+		if err := ee.ALPN.AddProtocol(alpnSelected); err != nil {
+			panic("we must be able to add protocol here")
+		}
+	}
 
 	messageBody := ee.Write(nil, false, false, false, nil) // TODO - reuse message bodies in a rope
 	return handshake.Message{
@@ -124,7 +131,7 @@ func generateServerCertificateVerify(opts *options.TransportOptions, conn *Conne
 }
 
 func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, addr netip.AddrPort, serverUsedHRR bool,
-	earlySecret ciphersuite.Hash, pskSelected bool, pskSelectedIdentity uint16,
+	earlySecret ciphersuite.Hash, pskSelected bool, pskSelectedIdentity uint16, alpnSelected []byte,
 	msgClientHello handshake.MsgClientHello, params cookie.Params,
 	transcriptHasher hash.Hash, clientEarlyTrafficSecret ciphersuite.Hash) error {
 
@@ -146,6 +153,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 	hctx := newHandshakeContext(transcriptHasher)
 	conn.hctx = hctx
 	hctx.serverUsedHRR = serverUsedHRR // we do not use it anywhere for now, but set anyway
+	hctx.ALPNSelected = alpnSelected
 
 	suite := conn.keys.Suite()
 
@@ -211,7 +219,7 @@ func (conn *Connection) onClientHello2Locked(opts *options.TransportOptions, add
 		conn.keys.ComputeHandshakeKeys(suite, true, hctx.earlySecret, sharedSecret, handshakeTranscriptHash)
 	hctx.SendSymmetricEpoch2 = suite.ResetSymmetricKeys(hctx.SendSymmetricEpoch2, hctx.handshakeTrafficSecretSend)
 	conn.debugPrintKeys()
-	if err := hctx.PushMessage(conn, generateEncryptedExtensions()); err != nil {
+	if err := hctx.PushMessage(conn, generateEncryptedExtensions(hctx.ALPNSelected)); err != nil {
 		return err
 	}
 

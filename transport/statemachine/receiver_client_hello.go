@@ -46,6 +46,11 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	if msgClientHello.Extensions.CookieSet && msg.MsgSeq != 1 {
 		return conn, dtlserrors.ErrClientHelloUnsupportedParams
 	}
+	_, alpnSelected := t.opts.FindALPN(msgClientHello.Extensions.ALPN.GetProtocols())
+	if !t.opts.ALPNContinueOnMismatch && len(alpnSelected) == 0 {
+		return conn, dtlserrors.ErrALPNNoCompatibleProtocol
+	}
+
 	// ClientHello is stateless, so we cannot check record sequence number.
 	// If client follows protocol and sends the same client hello,
 	// we will reply with the same server hello.
@@ -98,7 +103,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 			clientEarlyTrafficSecret := keys.DeriveSecret(hmacEarlySecret, "c e traffic", params.TranscriptHash)
 
 			conn, err = t.finishReceivedClientHello(conn, addr, false,
-				earlySecret, pskSelected, pskSelectedIdentity,
+				earlySecret, pskSelected, pskSelectedIdentity, alpnSelected,
 				msgClientHello, params, transcriptHasher, clientEarlyTrafficSecret)
 			if conn != nil {
 				t.snd.RegisterConnectionForSend(conn)
@@ -194,7 +199,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 	}
 	// we should check all parameters above, so that we do not create connection for unsupported params
 	conn, err = t.finishReceivedClientHello(conn, addr, true,
-		earlySecret, pskSelected, pskSelectedIdentity,
+		earlySecret, pskSelected, pskSelectedIdentity, alpnSelected,
 		msgClientHello, params, transcriptHasher, ciphersuite.Hash{})
 	if conn != nil {
 		t.snd.RegisterConnectionForSend(conn)
@@ -203,7 +208,7 @@ func (t *Transport) receivedClientHello(conn *Connection, msg handshake.Message,
 }
 
 func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrPort, serverUsedHRR bool,
-	earlySecret ciphersuite.Hash, pskSelected bool, pskSelectedIdentity uint16,
+	earlySecret ciphersuite.Hash, pskSelected bool, pskSelectedIdentity uint16, alpnSelected []byte,
 	msgClientHello handshake.MsgClientHello, params cookie.Params,
 	transcriptHasher hash.Hash, clientEarlyTrafficSecret ciphersuite.Hash) (*Connection, error) {
 	if conn != nil {
@@ -213,7 +218,7 @@ func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrP
 		if conn.stateID != smIDClosed {
 			defer conn.Unlock()
 			return conn, conn.onClientHello2Locked(t.opts, addr, serverUsedHRR,
-				earlySecret, pskSelected, pskSelectedIdentity,
+				earlySecret, pskSelected, pskSelectedIdentity, alpnSelected,
 				msgClientHello, params, transcriptHasher, clientEarlyTrafficSecret)
 		}
 		conn.Unlock()
@@ -228,7 +233,7 @@ func (t *Transport) finishReceivedClientHello(conn *Connection, addr netip.AddrP
 	conn.Lock()
 	defer conn.Unlock()
 	return conn, conn.onClientHello2Locked(t.opts, addr, serverUsedHRR,
-		earlySecret, pskSelected, pskSelectedIdentity,
+		earlySecret, pskSelected, pskSelectedIdentity, alpnSelected,
 		msgClientHello, params, transcriptHasher, clientEarlyTrafficSecret)
 }
 

@@ -52,6 +52,8 @@ func (hctx *handshakeContext) generateClientHello(conn *Connection, setEpoch1Key
 		clientHello.Extensions.PskExchangeModesSet = true
 		clientHello.Extensions.PskExchangeModes.ECDHE = true
 
+		clientHello.Extensions.EarlyDataSet = true
+
 		for _, name := range opts.PSKClientIdentities {
 			identity := handshake.PSKIdentity{
 				Identity:            name,
@@ -62,7 +64,6 @@ func (hctx *handshakeContext) generateClientHello(conn *Connection, setEpoch1Key
 				panic("error adding client PSK identity: " + err.Error()) // TODO - return error
 			}
 		}
-		clientHello.Extensions.EarlyDataSet = true
 	}
 
 	// We'd like to postpone ECC until HRR, but wolfssl requires key_share in the first client_hello
@@ -95,6 +96,15 @@ func (hctx *handshakeContext) generateClientHello(conn *Connection, setEpoch1Key
 	if setCookie {
 		clientHello.Extensions.CookieSet = true
 		clientHello.Extensions.Cookie = ck
+	}
+
+	if len(opts.ALPN) != 0 {
+		clientHello.Extensions.ALPNSet = true
+		for _, name := range opts.ALPN {
+			if err := clientHello.Extensions.ALPN.AddProtocol(name); err != nil {
+				panic("error adding client ALPN protocol: " + err.Error()) // TODO - return error
+			}
+		}
 	}
 
 	var bindersListLength int

@@ -23,6 +23,7 @@ func main() {
 	rnd := dtlsrand.CryptoRand()
 	opts := options.DefaultTransportOptions(true, rnd, st)
 
+	opts.ALPN = [][]byte{[]byte("toyrpc/0.2"), []byte("toyrpc/0.3")}
 	opts.ServerDisableHRR = true
 	opts.PSKAppendSecret = chat.PSKAppendSecret
 

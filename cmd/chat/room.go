@@ -23,7 +23,7 @@ func (conn *Conn) OnConnectLocked() {
 	fmt.Printf("chat room OnConnectLocked from %q\n", conn.AddrLocked())
 }
 
-func (conn *Conn) OnHandshakeLocked() {
+func (conn *Conn) OnHandshakeLocked(info statemachine.HandshakeInfo) {
 	fmt.Printf("chat room OnHandshakeLocked from %q\n", conn.AddrLocked())
 	conn.chatRoom.mu.Lock()
 	defer conn.chatRoom.mu.Unlock()

@@ -45,6 +45,7 @@ type handshakeContext struct {
 
 	pskSelected   bool // we must adapt our state machine to it
 	serverUsedHRR bool // we must store this to validate state transition
+	ALPNSelected  []byte
 
 	// We need more than 1 message, otherwise we will lose them, while
 	// handshake is in a state of waiting finish of offloaded calculations.

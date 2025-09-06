@@ -15,6 +15,7 @@ import (
 const (
 	EXTENSION_SUPPORTED_GROUPS      = 0x000a
 	EXTENSION_SIGNATURE_ALGORITHMS  = 0x000d
+	EXTENSION_ALPN                  = 0x0010
 	EXTENSION_ENCRYPT_THEN_MAC      = 0x0016
 	EXTENSION_PRE_SHARED_KEY        = 0x0029
 	EXTENSION_EARLY_DATA            = 0x002a
@@ -38,6 +39,9 @@ type ExtensionsSet struct {
 	EarlyDataSet           bool
 	EarlyDataMaxSize       uint32
 	EncryptThenMacSet      bool
+
+	ALPNSet bool
+	ALPN    ALPN
 
 	CookieSet bool // we do not play with nil values
 	Cookie    []byte
@@ -82,6 +86,11 @@ func (msg *ExtensionsSet) parseInside(body []byte, isClientHello bool, isNewSess
 				return err
 			}
 			msg.SignatureAlgorithmsSet = true
+		case EXTENSION_ALPN:
+			if err := msg.ALPN.Parse(extensionBody, isServerHello); err != nil {
+				return err
+			}
+			msg.ALPNSet = true
 		case EXTENSION_EARLY_DATA: // [rfc8446:4.2.10]
 			if isNewSessionTicket {
 				if len(extensionBody) != 4 {
@@ -162,6 +171,12 @@ func (msg *ExtensionsSet) WriteInside(body []byte, isNewSessionTicket bool, isSe
 		body = binary.BigEndian.AppendUint16(body, EXTENSION_SIGNATURE_ALGORITHMS)
 		body, mark = format.MarkUint16Offset(body)
 		body = msg.SignatureAlgorithms.Write(body)
+		format.FillUint16Offset(body, mark)
+	}
+	if msg.ALPNSet {
+		body = binary.BigEndian.AppendUint16(body, EXTENSION_ALPN)
+		body, mark = format.MarkUint16Offset(body)
+		body = msg.ALPN.Write(body, isServerHello)
 		format.FillUint16Offset(body, mark)
 	}
 	if msg.EarlyDataSet {

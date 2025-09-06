@@ -43,9 +43,10 @@ func (conn *Connection) receivedEncryptedAckLocked(opts *options.TransportOption
 			panic("unexpected key set at client finished ack")
 		}
 		conn.removeOldReceiveKeys() // [2] [3] -> [3] [.]
-		conn.hctx = nil             // TODO - reuse into pool
-		conn.handler.OnHandshakeLocked()
+		alpnSelected := conn.hctx.ALPNSelected
+		conn.hctx = nil // TODO - reuse into pool
 		conn.stateID = smIDPostHandshake
+		conn.handler.OnHandshakeLocked(HandshakeInfo{ALPNSelected: alpnSelected})
 		conn.SignalWriteable()
 	}
 	return nil // ack occupies full record

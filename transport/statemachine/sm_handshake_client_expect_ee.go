@@ -4,6 +4,7 @@
 package statemachine
 
 import (
+	"github.com/hrissan/dtls/dtlserrors"
 	"github.com/hrissan/dtls/handshake"
 )
 
@@ -14,6 +15,10 @@ type smHandshakeClientExpectEE struct {
 func (*smHandshakeClientExpectEE) OnEncryptedExtensions(conn *Connection, msg handshake.Message, msgParsed handshake.ExtensionsSet) error {
 	hctx := conn.hctx
 	hctx.receivedNextFlight(conn)
+	_, hctx.ALPNSelected = conn.tr.opts.FindALPN(msgParsed.ALPN.GetProtocols())
+	if !conn.tr.opts.ALPNContinueOnMismatch && len(hctx.ALPNSelected) == 0 {
+		return dtlserrors.ErrALPNNoCompatibleProtocol
+	}
 	if conn.hctx.pskSelected {
 		conn.stateID = smIDHandshakeClientExpectFinished
 	} else {

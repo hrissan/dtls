@@ -3,8 +3,10 @@
 
 package constants
 
-// Limited as a protection against too much work for signature checking
+// Limited also as a protection against too much work for signature checking
 const MaxCertificateChainLength = 16
+
+const MaxALPNProtocolsLength = 16
 
 const MaxOutgoingHRRDatagramLength = 512
 

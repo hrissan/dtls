@@ -27,6 +27,7 @@ func main() {
 	rnd := dtlsrand.CryptoRand()
 	opts := options.DefaultTransportOptions(false, rnd, st)
 
+	opts.ALPN = [][]byte{[]byte("toyrpc/0.1"), []byte("toyrpc/0.2")}
 	opts.PSKClientIdentities = append(opts.PSKClientIdentities, []byte(chat.PSKClientIdentity))
 	opts.PSKAppendSecret = chat.PSKAppendSecret
 

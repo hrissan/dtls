@@ -27,7 +27,7 @@ type ConnectionHandler interface {
 	// If StartConnection fails immediately, you receive OnDisconnectLocked before it returns.
 	// Other handler methods might also be called before StartConnection finishes.
 	OnConnectLocked()
-	OnHandshakeLocked()
+	OnHandshakeLocked(info HandshakeInfo)
 
 	// application must remove connection from all data structures.
 	// connection will be reused immediately after method returns
@@ -48,6 +48,10 @@ type ConnectionHandler interface {
 	// bytes are guaranteed to be valid only during the call.
 	// if application returns error, connection close will be initiated, expect OnDisconnect in the near future.
 	OnReadRecordLocked(earlyData bool, recordBody []byte) error
+}
+
+type HandshakeInfo struct {
+	ALPNSelected []byte
 }
 
 type TransportHandler interface {

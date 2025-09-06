@@ -41,6 +41,10 @@ type TransportOptions struct {
 
 	ServerCertificate tls.Certificate // some shortcut
 
+	// application-layer protocol negotiation
+	ALPN                   [][]byte
+	ALPNContinueOnMismatch bool
+
 	// Must be set to enable early data.
 	ServerDisableHRR    bool
 	PSKClientIdentities [][]byte
@@ -105,4 +109,15 @@ func (opts *TransportOptions) Validate() error {
 		return fmt.Errorf("CookieValidDuration (%v) should be at least %v", opts.CookieValidDuration, time.Second)
 	}
 	return nil
+}
+
+func (opts *TransportOptions) FindALPN(protocols [][]byte) (int, []byte) {
+	for _, p := range protocols {
+		for i, n := range opts.ALPN {
+			if string(p) == string(n) {
+				return i, n
+			}
+		}
+	}
+	return -1, nil
 }

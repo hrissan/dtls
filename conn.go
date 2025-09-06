@@ -128,7 +128,7 @@ func (c *Conn) closeLocked(err error) {
 	c.tc.SignalWriteable()
 }
 
-func (c *Conn) OnHandshakeLocked() {
+func (c *Conn) OnHandshakeLocked(info statemachine.HandshakeInfo) {
 	signalCond(c.condDial)
 }
 

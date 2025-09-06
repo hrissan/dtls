@@ -80,7 +80,7 @@ var ErrCertificateVerifyMessageParsing = NewWarning(-509, "CertificateVerify han
 var ErrFinishedMessageParsing = NewWarning(-510, "Finished handshake message failed to parse")
 var ErrKeyUpdateMessageParsing = NewWarning(-511, "KeyUpdate handshake message failed to parse")
 
-var ErrUnexpectedMessage = NewWarning(-507, "unexpeted message")
+var ErrUnexpectedMessage = NewWarning(-507, "unexpected message")
 
 var ErrCertificateChainEmpty = NewWarning(-512, "certificate chain is empty")
 var ErrCertificateLoadError = NewWarning(-513, "certificate load error")
@@ -130,6 +130,8 @@ var ErrPskKeyRequiresPskModes = NewWarning(-705, "pre_shared_key requires psk_ke
 var ErrServerHRRMustContainCookie = errors.New("server HelloRetryRequest must contain valid cookie")
 var ErrServerHRRMustHaveMsgSeq0 = errors.New("server HelloRetryRequest must have message seq 0")
 var ErrServerMustNotSendPSKModes = NewWarning(-705, "server must not send psk_key_exchange_modes")
+
+var ErrALPNNoCompatibleProtocol = NewFatal(-750, "no compatible ALPN protocol")
 
 var ErrClientHelloCookieInvalid = NewWarning(-705, "ClientHello cookie failed validation")
 var ErrClientHelloCookieAge = NewWarning(-706, "ClientHello cookie expired")
